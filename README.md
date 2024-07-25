@@ -16,7 +16,7 @@ And the rest of the repository consists of files and folders representing additi
 - mc
 - sudo
 
-### Add sudoers
+## Add sudoers
 
 ```
 adduser <username> sudo
