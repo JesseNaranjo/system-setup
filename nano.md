@@ -14,3 +14,4 @@ set indicator
 set minibar
 set constantshow
 ```
+(consider adding to root user as well, maybe a symlink)
