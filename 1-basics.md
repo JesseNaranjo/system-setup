@@ -1,6 +1,7 @@
 ## Install Packages
 
 - aptitude
+- curl
 - htop
 - mc
 - sudo
