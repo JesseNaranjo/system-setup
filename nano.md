@@ -1,6 +1,6 @@
 ## Default options
 
-Create `.nanorc` in the home folder, if it doesn't already exist.
+Create `/etc/nanorc` or `.nanorc` in the home folder, if it doesn't already exist.
 
 ```
 set linenumbers
@@ -14,4 +14,4 @@ set indicator
 set minibar
 set constantshow
 ```
-(consider adding to root user as well, maybe a symlink)
+(consider adding to root user as well, if you went the home folder route)
