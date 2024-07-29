@@ -20,4 +20,4 @@ Add:
 ```
 export CLICOLOR=YES
 ```
-(`dircolors` is specific to GNU coreutils and it's typically included on non-embedded Linux, but not in other unix systems)
+(`dircolors` is specific to GNU coreutils and it's typically included on non-embedded Linux distributions, but may not be included by default in all unix flavors)
