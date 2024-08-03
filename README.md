@@ -1,6 +1,6 @@
 ## Readme
 
-This repository contains a (hopefully) updated list of (personal) Debian preferences and scripts that I use regularly when setting up new installs.
+This repository contains a (hopefully) updated list of (personal) OS preferences and scripts that I use regularly when setting up new installs. This will include a lot for everything - Linux, macOS, Windows, etc.
 
 ### Repo structure
 
