@@ -1,6 +1,6 @@
 ## Default options
 
-Depending on your OS, these may need to be done in **one** of several files:
+Depending on your OS and shell flavor, these may need to be done in **one** of several files:
 - `~/.bashrc`
 - `~/.zshrc` (macOS)
 
@@ -8,7 +8,7 @@ Depending on your OS, these may need to be done in **one** of several files:
 
 Add:
 ```
-alias ls="ls -ahl"
+alias ls="ls -AhHl"
 ```
 (make sure this doesn't override other `ls` aliases)
 
