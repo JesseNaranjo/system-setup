@@ -1,6 +1,7 @@
 ## htop options
 
-Display options
+### Display options
+
 - Tree View (F5) - *will sort in groups, rather than across all processes*
 - Shadow other users' processes
 - Highlight program "basename"
@@ -10,7 +11,8 @@ Display options
 - Highlight new and old processes
 - [3] Highlight time
 
-Header layout
+### Header layout
+
 - 2 columns 33/67
 - Column 1
   - Date and Time [Text]
