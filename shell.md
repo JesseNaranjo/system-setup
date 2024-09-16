@@ -16,7 +16,7 @@ alias ls="ls -AhHl"
 - `H` - displays symlink targets
 - `l` - (lowercase L) displays listing in long format (one per line)
 
-## Terminal colors (macOS)
+## terminal colors (macOS)
 
 Since macOS is based on FreeBSD and FreeBSD doesn't have `dircolors`, we have to set a different setting.
 
