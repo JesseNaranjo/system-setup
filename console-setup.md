@@ -3,7 +3,7 @@
 Ensure the following packages are installed:
 - `console-setup`
 
-### Console font size
+### console font size
 
 Change:
 ```
