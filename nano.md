@@ -1,4 +1,4 @@
-## Default options
+## nano options
 
 Create `/etc/nanorc` or `.nanorc` in the home folder, if it doesn't already exist.
 
