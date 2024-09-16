@@ -1,4 +1,4 @@
-## Visual Studio Code config
+## visual studio code config
 
 ```
 {
