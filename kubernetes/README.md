@@ -1,6 +1,6 @@
-## Readme
+## readme
 
-### Prerequisites
+### prerequisites
 
 1. Install `gpg`
    - This must be installed before adding the Kubernetes package repositories.
@@ -13,7 +13,7 @@
    - This will download the public signing key for the package repositories listed above.
    - And also add the package repositories to the deb sources.
 
-### Install k8s
+### install k8s
 
 I used a few different sources to get the right combination of install that work for me. I chose to **not** use Kubernete's install script available in their docs. Source links are down below.
 
@@ -23,10 +23,10 @@ Credit:
 - https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
 - https://www.webhi.com/how-to/setup-configure-kubernetes-on-ubuntu-debian-and-centos-rhel/
 
-### Install cri-o
+### install cri-o
 
 1. Install `cri-o
 
-### Configure k8s
+### configure k8s
 
 If your install is to have k8s always running, then you must permanently disable swap. This is typically disabled in `/etc/fstab`, `systemd.swap`, etc.
