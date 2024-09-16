@@ -1,4 +1,4 @@
-## Readme
+## readme
 
 This repository contains a (hopefully) updated list of (personal) OS preferences and scripts that I use regularly when setting up new installs. This will include a lot for everything - Linux, macOS, Windows, etc.
 
