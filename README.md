@@ -2,13 +2,13 @@
 
 This repository contains a (hopefully) updated list of (personal) OS preferences and scripts that I use regularly when setting up new installs. This will include a lot for everything - Linux, macOS, Windows, etc.
 
-### Repo structure
+### repo structure
 
 This readme file will contain the primary set of packages / components that I install and a high level record of setting changes.
 
 And the rest of the repository consists of files and folders representing additional tools that don't always get installed or configured.
 
-## Install Packages
+## install packages
 
 - aptitude
 - curl
@@ -16,14 +16,14 @@ And the rest of the repository consists of files and folders representing additi
 - mc
 - sudo
 
-## Add sudoers
+## add sudoers
 
 ```
 adduser <username> sudo
 ```
 (may require log out and back in)
 
-## Update `/etc/issue`
+## update `/etc/issue`
 
 I recommend leaving the existing contents in place. This content typically describes the installed system and version.
 
