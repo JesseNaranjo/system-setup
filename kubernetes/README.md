@@ -9,7 +9,7 @@
    - Note that this script will add repositories for:
      - Kubernetes
      - CRI-O
-4. Run `update-k8s-repos.sh` with elevated privileges (`sudo` or `su`)
+4. Run `update-k8s-repos.sh`<sup>1</sup>
    - This will download the public signing key for the package repositories listed above.
    - And also add the package repositories to the deb sources.
 
@@ -18,7 +18,8 @@
 I used a few different sources to get the right combination of install that work for me. I chose to **not** use Kubernete's install script available in their docs. Source links are down below.
 
 1. Install `kubeadm`, `kubectl`, and `kubelet` packages
-2. Start `kubelet` using `systemctl enable --now kubelet`
+2. Start `kubelet` using `systemctl enable kubelet.service --now`<sup>1</sup>
+   - Alternatively, skip this step and use `start-k8s.sh`<sup>1</sup>
 
 Credit:
 - https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
@@ -27,7 +28,8 @@ Credit:
 ## install cri-o
 
 1. Install `cri-o`
-2. Start `crio` using `systemctl start crio.service`
+2. Start `crio` using `systemctl enable crio.service --now`<sup>1</sup>
+   - Alternatively, skip this step and use `start-k8s.sh`<sup>1</sup>
 
 ## configure network policy
 
@@ -47,3 +49,7 @@ Credit:
 ## configure k8s
 
 If your install is to have k8s always running, then you must permanently disable swap. This is typically disabled in `/etc/fstab`, `systemd.swap`, etc.
+
+## notes
+
+<sup>1</sup> Running this command requires elevated privileges (`sudo` or `su`).
