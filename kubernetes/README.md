@@ -1,4 +1,4 @@
-## readme
+## Readme
 
 ### prerequisites
 
@@ -37,6 +37,7 @@ Steps:
 Recommendations:
 - Calico for small-scale pods, easy entry-level effort
   - YAML file should be available at https://github.com/projectcalico/calico/tree/master/manifests
+  - https://docs.tigera.io/calico/latest/getting-started/kubernetes/self-managed-onprem/onpremises
 - Cilium for large-scale pods, steep learning curve, uses eBPF
 - Popular addons: https://kubernetes.io/docs/concepts/cluster-administration/addons/
 
