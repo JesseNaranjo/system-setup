@@ -18,6 +18,7 @@
 I used a few different sources to get the right combination of install that work for me. I chose to **not** use Kubernete's install script available in their docs. Source links are down below.
 
 1. Install `kubeadm`, `kubectl`, and `kubelet` packages
+2. Start `kubelet` using `systemctl enable --now kubelet`
 
 Credit:
 - https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
@@ -25,7 +26,22 @@ Credit:
 
 ### install cri-o
 
-1. Install `cri-o
+1. Install `cri-o`
+2. Start `crio` using `systemctl start crio.service`
+
+### configure network policy
+
+Steps:
+1. `kubectl apply -f <add-on.yaml>` (add-on.yaml can be a URL)
+
+Recommendations:
+- Calico for small-scale pods, easy entry-level effort
+  - YAML file should be available at https://github.com/projectcalico/calico/tree/master/manifests
+- Cilium for large-scale pods, steep learning curve, uses eBPF
+- Popular addons: https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+Credit:
+- https://www.reddit.com/r/kubernetes/comments/1110k8p/suggestions_for_k8s_cni/
 
 ### configure k8s
 
