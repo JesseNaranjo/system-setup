@@ -31,10 +31,20 @@ Credit:
 2. Start `crio` using `systemctl enable crio.service --now`<sup>1</sup>
    - Alternatively, skip this step and use `start-k8s.sh`<sup>1</sup>
 
+## initialize control-plane node
+
+1. `kubeadm init --pod-network-cidr=<cidr>`<sup>1</sup>
+   - Example of a `<cidr>` is `192.168.0.0/16`
+   - This can be reset using `kubeadm reset` - more info here:
+     - https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#tear-down
+     - https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#clean-up-the-control-plane
+2. Save the `kubeadm join` command from the `kubeadm init` output - this is the command to join additional nodes to your cluster
+   - More info: https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#tear-down
+
 ## configure network policy
 
 Steps:
-1. `kubectl apply -f <add-on.yaml>` (add-on.yaml can be a URL)
+1. `kubectl apply -f <add-on.yaml>` (add-on.yaml can be a local file or a URL)
 
 Recommendations:
 - Calico for small-scale pods, easy entry-level effort
