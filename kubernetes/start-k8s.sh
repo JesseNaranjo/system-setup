@@ -1,10 +1,41 @@
 #! /bin/bash
 
+
+echo_internal() {
+	printf "\n$1\n"
+}
+
+
 # Pre-start config
-sudo swapoff -a
-sudo sysctl net.ipv4.conf.all.forwarding=1
 
-# Start crio first
-sudo systemctl start crio kubelet
+echo_internal "Turning off swap..."
+(
+	set -x
+	sudo swapoff -a
+)
 
-sudo systemctl status kubelet crio
+echo_internal "Setting IP forwarding..."
+(
+	set -x
+	sudo sysctl net.ipv4.conf.all.forwarding=1
+)
+
+
+# Enable crio + kubelet
+
+echo_internal "Enabling cri-o and kubelet services..."
+(
+	set -x
+	sudo systemctl enable crio.service kubelet.service
+)
+
+
+# Start cri-o first, then kubelet
+
+echo_internal "Starting cri-o and kubetlet services..."
+(
+	set -x
+
+	sudo systemctl start crio.service kubelet.service
+	sudo systemctl status kubelet.service crio.service
+)
