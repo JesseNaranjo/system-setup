@@ -22,11 +22,6 @@ Install packages:
 - `kubectl`
 - `kubelet`
 
-Start `kubelet` using:
-```
-systemctl enable kubelet.service --now
-```
-
 Credit:
 - I used a few different sources to get the right combination of install that work for me. I chose to **not** use Kubernete's install script available in their docs. Source links are down below.
 - https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
@@ -37,10 +32,13 @@ Credit:
 Install package:
 - `cri-o`
 
-Start `crio` using:
+## start everything
+
 ```
-systemctl enable crio.service --now
+./start-k8s.sh
 ```
+- This script will ensure all pre-checks are done (such as swapoff, IP forwarding, etc.)
+- And then the script will enable and run all services - kubelet and crio
 
 ## initialize control-plane node
 
@@ -79,6 +77,11 @@ If you want the control-plane node to run pods or your install is a single node,
 ```
 kubectl taint nodes --all node-role.kubernetes.io/control-plane-
 ```
+
+## other packages to install
+
+- Metrics Server - https://github.com/kubernetes-sigs/metrics-server
+- Kubernetes Dashboard - https://github.com/kubernetes/dashboard
 
 ## notes
 
