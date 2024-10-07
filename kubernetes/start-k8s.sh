@@ -30,12 +30,22 @@ echo_internal "Enabling cri-o and kubelet services..."
 )
 
 
-# Start cri-o first, then kubelet
+# Start cri-o + kubelet
 
 echo_internal "Starting cri-o and kubetlet services..."
 (
 	set -x
-
 	sudo systemctl start crio.service kubelet.service
-	sudo systemctl status kubelet.service crio.service
+)
+
+echo_internal ""
+SYSCTL_STATUS_OUTPUT=$(
+	systemctl status crio.service kubelet.service
+)
+echo -e "${SYSCTL_STATUS_OUTPUT}"
+
+echo_internal ""
+(
+	set -x
+	kubectl get pods --all-namespaces
 )
