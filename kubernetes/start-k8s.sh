@@ -47,5 +47,5 @@ echo -e "${SYSCTL_STATUS_OUTPUT}"
 echo_internal ""
 (
 	set -x
-	kubectl get pods --all-namespaces
+	kubectl get all --all-namespaces -o wide
 )
