@@ -80,8 +80,13 @@ kubectl taint nodes --all node-role.kubernetes.io/control-plane-
 
 ## other packages to install
 
-- Metrics Server - https://github.com/kubernetes-sigs/metrics-server
-- Kubernetes Dashboard - https://github.com/kubernetes/dashboard
+- Helm - https://helm.sh/docs/intro/install/ (see install-update-helm.sh)
+- Metrics Server
+  - https://github.com/kubernetes-sigs/metrics-server
+  - https://artifacthub.io/packages/helm/metrics-server/metrics-server
+- Kubernetes Dashboard
+  - https://github.com/kubernetes/dashboard
+  - https://artifacthub.io/packages/helm/k8s-dashboard/kubernetes-dashboard
 
 ## notes
 
