@@ -11,3 +11,5 @@ Most default installs will not include dkms
   2. Continue
   3. Enter Password (from the `mokutil --import` command)
   4. Reboot
+
+Most steps taken from https://wiki.debian.org/SecureBoot#DKMS_and_secure_boot.
