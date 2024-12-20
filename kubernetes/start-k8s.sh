@@ -45,6 +45,7 @@ SYSCTL_STATUS_OUTPUT=$(
 echo -e "${SYSCTL_STATUS_OUTPUT}"
 
 echo_internal ""
+sleep 5s
 (
 	set -x
 	kubectl get all --all-namespaces
