@@ -15,6 +15,10 @@ Run `update-k8s-repos.sh`<sup>1</sup>
 - This will download the public signing key for the package repositories listed above.
 - And also add the package repositories to the deb sources.
 
+Configure `KUBE_EDITOR`
+- Add `export KUBE_EDITOR="/usr/bin/nano"` in `~/.bashrc`, `~/.zshrc`, `~/.profile`, etc. (only in one place)
+- *Use your favorite editor in place of nano*
+
 ## install k8s
 
 Install packages:
