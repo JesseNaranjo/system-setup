@@ -40,7 +40,7 @@ echo_internal "Starting cri-o and kubetlet services..."
 
 echo_internal ""
 SYSCTL_STATUS_OUTPUT=$(
-	systemctl status crio.service kubelet.service
+	sudo systemctl status crio.service kubelet.service
 )
 echo -e "${SYSCTL_STATUS_OUTPUT}"
 
