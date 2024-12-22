@@ -32,6 +32,6 @@ echo_internal "Disabling IP forwarding..."
 
 echo_internal ""
 SYSCTL_STATUS_OUTPUT=$(
-	systemctl status crio.service kubelet.service
+	sudo systemctl status crio.service kubelet.service
 )
 echo "${SYSCTL_STATUS_OUTPUT}"
