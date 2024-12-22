@@ -52,9 +52,8 @@ kubeadm init --pod-network-cidr=<cidr>
 - Example of a `<cidr>` is `192.168.0.0/16`
 - Save the `kubeadm join` command from the `kubeadm init` output - this is the command to join additional nodes to your cluster
   - More info: https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#tear-down
-- This can be reset using `kubeadm reset` - more info here:
-  - https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#tear-down
-  - https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#clean-up-the-control-plane
+- This can be reset using `kubeadm reset` (alternatively, see [cleanup](#cleanup) section below)
+  - More info: https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#remove-the-node
 
 ## configure network policy
 
@@ -91,6 +90,28 @@ kubectl taint nodes --all node-role.kubernetes.io/control-plane-
 - Kubernetes Dashboard
   - https://github.com/kubernetes/dashboard
   - https://artifacthub.io/packages/helm/k8s-dashboard/kubernetes-dashboard
+
+## cleanup
+
+### remove node
+Cleanly shutdown and drain all containers/pods from the node:
+```
+kubectl drain <node name> --delete-emptydir-data --force --ignore-daemonsets
+```
+
+### reset kubernetes setup<sup>1</sup>
+```
+kubeadm reset
+```
+
+### clean up the rest of the configs<sup>1</sup>
+```
+iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X
+ipvsadm -C
+```
+
+References:
+- https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#tear-down
 
 ## notes
 
