@@ -44,7 +44,9 @@ Install package:
 - This script will ensure all pre-checks are done (such as swapoff, IP forwarding, etc.)
 - And then the script will enable and run all services - kubelet and crio
 
-## initialize control-plane node
+## initialize control-plane node (not an additional node)
+
+The control-plane is the primary node that coordinates and manages all nodes. If you're setting up an additional node (not a control-plane), then skip this section.
 
 ```
 kubeadm init --pod-network-cidr=<cidr>
@@ -55,7 +57,24 @@ kubeadm init --pod-network-cidr=<cidr>
 - This can be reset using `kubeadm reset` (alternatively, see [cleanup](#cleanup) section below)
   - More info: https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#remove-the-node
 
-## configure network policy
+## initialize / join additional nodes
+
+Run the `kubeadm join` command that you saved from the `kubeadm init` output. The command<sup>1</sup> generally looks like this:
+```
+kubeadm join xxx.xxx.xxx.xxx:6443 --token abcdef.ghijklmnopqrstuv --discovery-token-ca-cert-hash sha256:01234567890abcdef0123456789abcdef0123456789abcdef0123456789abcde
+```
+
+If you get authentication errors, e.g. the token is invalid, first check if the token still exists using this command<sup>1</sup>:
+```
+kubeadm token list
+```
+
+If the token doesn't exist, you can create one using this command<sup>1</sup>:
+```
+kubeadm token create
+```
+
+## configure network policy (optional)
 
 ```
 kubectl apply -f <add-on.yaml>
@@ -73,9 +92,11 @@ Credit:
 ## configure k8s
 
 ### always running
+
 If your install is to have k8s always running, then you must permanently disable swap. This is typically disabled in `/etc/fstab`, `systemd.swap`, etc.
 
 ### control-plane node as worker node (aka, single node)
+
 If you want the control-plane node to run pods or your install is a single node, then you must execute the following command:
 ```
 kubectl taint nodes --all node-role.kubernetes.io/control-plane-
@@ -94,17 +115,20 @@ kubectl taint nodes --all node-role.kubernetes.io/control-plane-
 ## cleanup
 
 ### remove node
+
 Cleanly shutdown and drain all containers/pods from the node:
 ```
 kubectl drain <node name> --delete-emptydir-data --force --ignore-daemonsets
 ```
 
 ### reset kubernetes setup<sup>1</sup>
+
 ```
 kubeadm reset
 ```
 
 ### clean up the rest of the configs<sup>1</sup>
+
 ```
 iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X
 ipvsadm -C
