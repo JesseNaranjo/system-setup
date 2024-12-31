@@ -5,3 +5,7 @@
 - Install `nvidia-driver` and `firmware-misc-nonfree` packages
 
 Steps borrowed from https://wiki.debian.org/NvidiaGraphicsDrivers.
+
+## additional driver configuration
+
+- https://download.nvidia.com/XFree86/Linux-x86_64/460.32.03/README/powermanagement.html#PreserveAllVide719f0
