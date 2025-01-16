@@ -1,4 +1,4 @@
-curl --remote-name-all\
+curl --remote-name-all --remote-time\
 		https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes/install-update-helm.sh\
 		https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes/start-k8s.sh\
 		https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes/stop-k8s.sh\
