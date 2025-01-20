@@ -17,6 +17,14 @@ alias ls="ls -AFHhl"
 - `h` - human readable sizes (e.g., 10K, 10M, etc.)
 - `l` - (lowercase L) displays listing in long format (one per line)
 
+## Sort directories first (`ls`)
+
+Add:
+```
+alias ls="ls --group-directories-first -AFHhl"
+```
+(does not work on macOS as of Jan 2025)
+
 ## terminal colors (macOS)
 
 Since macOS is based on FreeBSD and FreeBSD doesn't have `dircolors`, we have to set a different setting.
