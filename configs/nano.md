@@ -1,6 +1,6 @@
 ## nano options
 
-Create `/etc/nanorc` or `.nanorc` in the home folder, if it doesn't already exist.
+Create `/etc/nanorc` or `~/.nanorc`, if it doesn't already exist.
 
 ```
 set linenumbers
