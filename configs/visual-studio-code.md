@@ -1,6 +1,6 @@
-## visual studio code config
+## visual studio code options
 
-```
+```json
 {
     "telemetry.telemetryLevel": "off",
 
