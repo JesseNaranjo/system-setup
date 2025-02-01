@@ -2,16 +2,16 @@
 
 Create `/etc/nanorc` or `~/.nanorc`, if it doesn't already exist.
 
+**Warning:** do not blindly overwrite `/etc/nanorc` if you go that route!
+
 ```
-set linenumbers
-set tabsize 2
 set autoindent
-
-set multibuffer
-
-set mouse
-set indicator
-set minibar
 set constantshow
+set indicator
+set linenumbers
+set minibar
+set mouse
+set multibuffer
+set tabsize 2
 ```
 (consider adding to root user as well, if you went the home folder route)
