@@ -11,11 +11,11 @@ lxc.cgroup2.devices.allow = c 195:* rwm
 lxc.cgroup2.devices.allow = c 234:* rwm
 
 # Pass through device files
-lxc.mount.entry = /dev/nvidia0 dev/nvidia0 none bind,optional,create=file
-lxc.mount.entry = /dev/nvidiactl dev/nvidiactl none bind,optional,create=file
-lxc.mount.entry = /dev/nvidia-modeset dev/nvidia-modeset none bind,optional,create=file
-lxc.mount.entry = /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=file
-lxc.mount.entry = /dev/nvidia-uvm-tools dev/nvidia-uvm-tools none bind,optional,create=file
+lxc.mount.entry = /dev/nvidia0           dev/nvidia0           none  bind,optional,create=file
+lxc.mount.entry = /dev/nvidiactl         dev/nvidiactl         none  bind,optional,create=file
+lxc.mount.entry = /dev/nvidia-modeset    dev/nvidia-modeset    none  bind,optional,create=file
+lxc.mount.entry = /dev/nvidia-uvm        dev/nvidia-uvm        none  bind,optional,create=file
+lxc.mount.entry = /dev/nvidia-uvm-tools  dev/nvidia-uvm-tools  none  bind,optional,create=file
 ```
 
 You can find the numbers to use for `lxc.cgroup2.devices.allow` using `ls -l /dev/nvidia*`. Sample output:
