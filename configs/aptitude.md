@@ -1,4 +1,4 @@
-## aptitude options
+# aptitude options
 
 - Advance to the next item after changing the state of a package
 - Remove obsolete package files after downloading new package lists
