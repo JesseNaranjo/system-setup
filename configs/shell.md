@@ -7,7 +7,7 @@ Depending on your OS and shell flavor, these may need to be done in **one** of s
 ## safety first
 
 Add:
-```
+```bash
 # Some more alias to avoid making mistakes:
 alias rm='rm -v' # -i
 alias cp='cp -aiv'
@@ -20,7 +20,7 @@ alias mv='mv -iv'
 ## `ls`
 
 Add:
-```
+```bash
 alias ls="ls -AFHhl"
 ```
 (make sure this doesn't override other `ls` aliases)
@@ -33,7 +33,7 @@ alias ls="ls -AFHhl"
 ## Sort directories first (`ls`)
 
 Add:
-```
+```bash
 alias ls="ls --group-directories-first -AFHhl"
 ```
 (does not work on macOS as of Jan 2025)
@@ -43,13 +43,13 @@ alias ls="ls --group-directories-first -AFHhl"
 Since macOS is based on FreeBSD and FreeBSD doesn't have `dircolors`, we have to set a different setting.
 
 Add:
-```
+```bash
 export CLICOLOR=YES
 ```
 (`dircolors` is specific to GNU coreutils and it's typically included on non-embedded Linux distributions, but may not be included by default in all unix flavors)
 
 Alternatively, add:
-```
+```bash
 alias ls="ls -AFGHhl"
 ```
 - `G` - displays color (**macOS only**, equivalent to `CLICOLOR=YES`)
