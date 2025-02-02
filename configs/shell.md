@@ -1,10 +1,23 @@
-## runtime config options
+# config locations
 
 Depending on your OS and shell flavor, these may need to be done in **one** of several files:
 - `~/.bashrc`
 - `~/.zshrc` (macOS)
 
-### `ls`
+## safety first
+
+Add:
+```
+# Some more alias to avoid making mistakes:
+alias rm='rm -v' # -i
+alias cp='cp -aiv'
+alias mv='mv -iv'
+```
+- `-a` - `cp` only, copy file attributes, ctime, and mtime
+- `-i` - interactive, any overwrites will ask for confirmation
+- `-v` - verbose, show all actions taken
+
+## `ls`
 
 Add:
 ```
