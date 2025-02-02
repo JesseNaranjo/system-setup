@@ -30,6 +30,6 @@ crw-rw-rw- 1 root root  234,   1 Feb  2 08:16 /dev/nvidia-uvm-tools
 
 YMMV, but I had to comment out the inclusion of `userns.conf` near the top when running an unpriviledge container:
 ```shell
-#lxc.include = /usr/share/lxc/config/nesting.conf
+#lxc.include = /usr/share/lxc/config/userns.conf
 ```
 (leaving this line in caused the container's `systemd-networkd` to fail and not get a network connection, and stopping the container took a long time)
