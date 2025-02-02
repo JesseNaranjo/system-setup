@@ -4,7 +4,7 @@ Create `/etc/screenrc` or `~/.screenrc`, if it doesn't already exist.
 
 **Warning:** do not blindly overwrite `/etc/screenrc` if you go that route!
 
-```
+```bash
 mousetrack on
 scrollback 9999
 startup_message off
