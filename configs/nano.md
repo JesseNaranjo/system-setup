@@ -1,4 +1,4 @@
-## nano options
+# nano options
 
 Create `/etc/nanorc` or `~/.nanorc`, if it doesn't already exist.
 
