@@ -4,7 +4,7 @@ Create `/etc/nanorc` or `~/.nanorc`, if it doesn't already exist.
 
 **Warning:** do not blindly overwrite `/etc/nanorc` if you go that route!
 
-```
+```shell
 set autoindent
 set constantshow
 set indicator
