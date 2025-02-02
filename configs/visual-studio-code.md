@@ -1,4 +1,4 @@
-## visual studio code options
+# visual studio code options
 
 ```json
 {
