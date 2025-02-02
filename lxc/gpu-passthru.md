@@ -1,4 +1,6 @@
-## gpu passthru
+# gpu passthru
+
+## update container config
 
 After creating the container, edit the container file config located at `/var/lib/lxc/<container-name>/config`.
 
@@ -33,3 +35,11 @@ YMMV, but I had to comment out the inclusion of `userns.conf` near the top when 
 #lxc.include = /usr/share/lxc/config/userns.conf
 ```
 (leaving this line in caused the container's `systemd-networkd` to fail and not get a network connection, and stopping the container took a long time)
+
+## install drivers in container
+
+Packages needed for NVIDIA:
+- `nvidia-driver`
+- `nvidia-smi`
+- `libcuda1`
+- (no need to install all recommended packages, just dependencies)
