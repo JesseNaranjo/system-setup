@@ -1,4 +1,4 @@
-# config locations
+# shell config
 
 Depending on your OS and shell flavor, these may need to be done in **one** of several files:
 - `~/.bashrc`
