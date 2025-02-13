@@ -1,3 +1,10 @@
+## gnome dconf
+
+Use `dconf dump /` to export the current configuration.
+
+And use `dconf load / < [file.ini]` to load the file back in.
+
+```ini
 [org/gnome/calculator]
 button-mode='advanced'
 number-format='automatic'
@@ -69,7 +76,7 @@ sleep-inactive-ac-type='nothing'
 sleep-inactive-battery-type='nothing'
 
 [org/gnome/shell]
-enabled-extensions=['places-menu@gnome-shell-extensions.gcampax.github.com', 'drive-menu@gnome-shell-extensions.gcampax.github.com', 'dash-to-dock@micxgx.gmail.com']
+enabled-extensions=['places-menu@gnome-shell-extensions.gcampax.github.com', 'dash-to-dock@micxgx.gmail.com']
 
 [org/gnome/shell/extensions/dash-to-dock]
 apply-custom-theme=true
@@ -98,6 +105,10 @@ toggle-message-tray=@as []
 [org/gnome/shell/world-clocks]
 locations=@av []
 
+[org/gnome/software]
+allow-updates=false
+download-updates=false
+
 [org/gnome/system/location]
 enabled=false
 
@@ -115,3 +126,4 @@ visible-name='Default'
 [org/gtk/gtk4/settings/file-chooser]
 show-hidden=true
 sort-directories-first=true
+```
