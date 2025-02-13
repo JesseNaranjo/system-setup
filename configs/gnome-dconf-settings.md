@@ -1,9 +1,10 @@
-## gnome dconf
+# gnome dconf
 
 Use `dconf dump /` to export the current configuration.
 
-And use `dconf load / < [file.ini]` to load the file back in.
+And use `dconf load / < dconf-settings.ini` to load the file back in.
 
+## dconf-settings.ini
 ```ini
 [org/gnome/calculator]
 button-mode='advanced'
