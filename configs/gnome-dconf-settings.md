@@ -33,7 +33,7 @@ autorun-x-content-open-folder=@as []
 autorun-x-content-start-app=['x-content/ostree-repository']
 
 [org/gnome/desktop/peripherals/mouse]
-speed=-0.15
+speed=0.6
 
 [org/gnome/desktop/peripherals/touchpad]
 natural-scroll=false
