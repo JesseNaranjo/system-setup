@@ -4,35 +4,33 @@ if [[ ! -f ~/.screenrc-ollama || $1 == '--overwrite' ]]
 then
   cat <<EOF > ~/.screenrc-ollama
 
-  # Create a new screen session
-  screen -t 'LLM Screens'
-
   # Split screen into two columns
   split -v
 
-  # Left column: horizontal split for top-left and bottom-right screens
+  # Left column:
+  #  - Horizontal split for top and bottom-left screens
+  screen -t "shell"
   split
   focus down
-  screen
+  screen -t "shell"
 
-  # Move to the top-right pane and run nvtop
+  # Right column:
+  #  - Top-right: nvtop
   focus right
   screen nvtop
-
-  # Right column: horizontal split (2 screens)
+  #  - Middle: htop
   split
   focus down
   screen htop
-
-  # Right column: horizontal split (3 screens)
+  #  - Bottom: ollama serve
   split
   focus down
   screen ollama serve
 
   # Move top-left
-  focus left
-  focus up
-  stuff "ollama list | sort\n"
+  focus top
+  sleep 1
+  stuff "clear; ollama list | { IFS= read -r header; print -r $ header; sort -k1,1 }\n"
 
   # Move bottom-left
   focus down
