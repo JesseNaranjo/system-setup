@@ -15,3 +15,4 @@ GRUB_DISABLE_RECOVERY=true
 - This will ensure that the distribution title includes the text "(CLI)"
 - It will ensure the system boots into the CLI / terminal only, instead of the graphical interface (by using `systemd.unit=multi-user.target`)
 - And it will not include the default recovery entries (because they will already be part of the default menus)
+3. Run `update-grub`
