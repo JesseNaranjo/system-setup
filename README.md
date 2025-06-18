@@ -14,6 +14,7 @@ And the rest of the repository consists of files and folders representing additi
 - curl
 - htop
 - mc
+- screen
 - sudo
 
 ## add sudoers
