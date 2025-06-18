@@ -8,10 +8,11 @@ Depending on your OS and shell flavor, these may need to be done in **one** of s
 
 Add:
 ```bash
-# Some more alias to avoid making mistakes:
-alias rm='rm -v' # -i
+# Some more aliases to avoid some mistakes:
 alias cp='cp -aiv'
+alias mkdir='mkdir -v'
 alias mv='mv -iv'
+alias rm='rm -v' # -i
 ```
 - `-a` - `cp` only, copy file attributes, ctime, and mtime
 - `-i` - interactive, any overwrites will ask for confirmation
