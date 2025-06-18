@@ -12,6 +12,6 @@ set linenumbers
 set minibar
 set mouse
 set multibuffer
-set tabsize 2
+set tabsize 4
 ```
 (consider adding to root user as well, if you went the home folder route)
