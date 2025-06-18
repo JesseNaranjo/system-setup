@@ -16,3 +16,8 @@ GRUB_DISABLE_RECOVERY=true
 - It will ensure the system boots into the CLI / terminal only, instead of the graphical interface (by using `systemd.unit=multi-user.target`)
 - And it will not include the default recovery entries (because they will already be part of the default menus)
 3. Run `update-grub`
+
+Note: you can start the Graphical interface using the following command:
+```
+systemctl isolate graphical.target
+```
