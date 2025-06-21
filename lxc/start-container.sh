@@ -12,7 +12,7 @@ CONTAINER_NAME=$1
 ## No touchy
 ## =========
 
-echo "Starting LXC ${CONTAINER_NAME}..."
+echo "Starting LXC $CONTAINER_NAME..."
 lxc-unpriv-start --name ${CONTAINER_NAME}
 
 x=3; while  [ $x -gt 0 ]; do echo "Attaching in $(( x-- ))..."; sleep 1s; done
