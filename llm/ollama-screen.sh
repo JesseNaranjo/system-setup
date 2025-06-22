@@ -2,7 +2,7 @@
 
 if [[ ! -f ~/.screenrc-ollama || $1 == '--overwrite' ]]
 then
-  cat <<EOF > ~/.screenrc-ollama
+  cat <<'EOF' > ~/.screenrc-ollama
 
   # Split screen into two columns
   split -v
@@ -30,7 +30,7 @@ then
   # Move top-left
   focus top
   sleep 1
-  stuff "clear; ollama list | { IFS= read -r header; print -r $ header; sort -k1,1 }\n"
+  stuff "clear; ollama ps; ollama list | { IFS= read -r header; print -r \$header; sort -k1,1 }\n"
 
   # Move bottom-left
   focus down
