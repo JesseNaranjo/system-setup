@@ -28,9 +28,10 @@ alias chown='chown -vv'
 
 Add:
 ```bash
-alias ls="ls -AFHhl"
+alias ls="ls --color=auto -AFHhl"
 ```
 (make sure this doesn't override other `ls` aliases)
+- `--color=auto` - GNU coreutils only (e.g., macOS zsh likely won't support this)
 - `A` - almost-all (simply excludes . and ..)
 - `F` - append indicator to each entry (`*` = executable, `/` = directory, `@` = symlink, etc.)
 - `H` - displays symlink targets
@@ -41,7 +42,7 @@ alias ls="ls -AFHhl"
 
 Add:
 ```bash
-alias ls="ls --group-directories-first -AFHhl"
+alias ls="ls --color=auto --group-directories-first -AFHhl"
 ```
 (does not work on macOS as of Jan 2025)
 
