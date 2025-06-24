@@ -8,15 +8,21 @@ Depending on your OS and shell flavor, these may need to be done in **one** of s
 
 Add:
 ```bash
-# Some more aliases to avoid some mistakes:
+# Aliases to help avoid some mistakes:
 alias cp='cp -aiv'
 alias mkdir='mkdir -v'
 alias mv='mv -iv'
-alias rm='rm -v' # -i
+alias rm='rm -Iv'
+
+alias chmod='chmod -vv'
+alias chown='chown -vv'
 ```
 - `-a` - `cp` only, copy file attributes, ctime, and mtime
 - `-i` - interactive, any overwrites will ask for confirmation
+- `-I` - interactive when removing 3+ files
 - `-v` - verbose, show all actions taken
+- `-vv` - `chmod` and `chown` only, verbose output even when no changes are made
+  - macOS / zsh doesn't output when no changes are made even with `-vv`
 
 ## `ls`
 
