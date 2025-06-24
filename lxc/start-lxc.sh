@@ -15,7 +15,11 @@ CONTAINER_NAME=$1
 echo "Starting LXC $CONTAINER_NAME..."
 lxc-unpriv-start --name ${CONTAINER_NAME}
 
+echo ""
 x=3; while  [ $x -gt 0 ]; do echo "Attaching in $(( x-- ))..."; sleep 1s; done
 
+echo ""
 lxc-ls --fancy
+
+echo ""
 lxc-unpriv-attach --name ${CONTAINER_NAME}
