@@ -64,5 +64,10 @@ make raspi_3_bookworm.img
 ```
 this results in a ready-to-go `img` file that can be written directly to a dis.
 
+### 3. copy image to drive
+
+```bash
+dd if=orange_rpi3_bookworm.img of=/dev/mmcblk0 bs=64K oflag=dsync status=progressm
+```
 
 Source: https://salsa.debian.org/raspi-team/image-specs/-/tree/master?ref_type=heads
