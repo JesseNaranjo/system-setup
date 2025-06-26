@@ -3,6 +3,7 @@
 Packages needed:
 - build-essentials
 - dosfstools
+- f2fs-tools (because the primary drive filesystem is set to f2fs)
 - git (optional, if you want to manually download the source)
 - time
 - vmdb2
