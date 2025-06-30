@@ -19,7 +19,7 @@ set tabsize 4
 ```
 (consider adding to root user as well, if you went the home folder route)
 
-# homebrew nano
+## homebrew nano
 
 By default, nano looks for syntax definitions at `/usr/share/nano/*.nanorc`. When installed using Homebrew, the install path is different and you must add:
 
