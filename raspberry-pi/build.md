@@ -10,7 +10,7 @@ Packages needed:
 
 <sup>(all others should be automatically installed as dependencies)</sup>
 
-### image naming convention
+## image naming convention
 
 The naming convention is important because this is how `make` understands what needs to be built.
 
@@ -32,7 +32,7 @@ make raspi_3_bookworm.img
 ```
 will generate a disk image that can be flashed directly to an SD card or USB drive. This image will boot directly into Debian Bookworm.
 
-### 1. build a custom image
+## 1. build a custom image
 
 The following call will result into a single `yaml` file,
 ```bash
@@ -57,7 +57,7 @@ Build the image,
 vmdb2 -v --output orange_rpi3_bookworm.img --rootfs-tarball orange_rpi3_bookworm.tar.gz --log orange_rpi3_bookworm.log orange_rpi3_bookworm.yaml
 ```
 
-### 2. build a standard image
+## 2. build a standard image
 
 Building standard images is a little easier. Simply structure the raspi file name correctly and,
 ```bash
@@ -65,7 +65,7 @@ make raspi_3_bookworm.img
 ```
 this results in a ready-to-go `img` file that can be written directly to a dis.
 
-### 3. copy image to drive
+## 3. copy image to drive
 
 ```bash
 dd if=orange_rpi3_bookworm.img of=/dev/mmcblk0 bs=64K oflag=dsync status=progressm
