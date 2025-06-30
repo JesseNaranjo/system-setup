@@ -1,4 +1,4 @@
-## build raspberry pi (RPi) OS images
+# build raspberry pi (RPi) OS images
 
 Packages needed:
 - build-essentials
@@ -71,4 +71,4 @@ this results in a ready-to-go `img` file that can be written directly to a dis.
 dd if=orange_rpi3_bookworm.img of=/dev/mmcblk0 bs=64K oflag=dsync status=progressm
 ```
 
-Source: https://salsa.debian.org/raspi-team/image-specs/-/tree/master?ref_type=heads
+<sup>Source: https://salsa.debian.org/raspi-team/image-specs/-/tree/master?ref_type=heads</sup>
