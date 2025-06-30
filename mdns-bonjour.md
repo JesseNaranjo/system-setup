@@ -1,6 +1,6 @@
-## Useful commands
+# Useful commands
 
-### Discover services supported by the local device
+## Discover services supported by the local device
 
 Command: `dns-sd -B _services._dns-sd._udp`
 
@@ -23,7 +23,7 @@ Timestamp     A/R    Flags  if Domain               Service Type         Instanc
 10:19:29.955  Add        2  15 .                    _tcp.local.          _hap
 ```
 
-### Discover devices that support the specified type (e.g., "_companion-link")
+## Discover devices that support the specified type (e.g., "_companion-link")
 
 Command: `dns-sd -B _companion-link._tcp`
 
