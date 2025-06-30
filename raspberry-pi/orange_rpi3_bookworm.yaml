@@ -4,7 +4,7 @@
 
 steps:
   - mkimg: "{{ output }}"
-    size: 2500M
+    size: 2000M
 
   - mklabel: msdos
     device: "{{ output }}"
@@ -13,12 +13,12 @@ steps:
     fs-type: 'fat32'
     device: "{{ output }}"
     start: 4MiB
-    end: 512MiB
+    end: 128MiB
     tag: tag-firmware
 
   - mkpart: primary
     device: "{{ output }}"
-    start: 512MiB
+    start: 128MiB
     end: 100%
     tag: tag-root
 
