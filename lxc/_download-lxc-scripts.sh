@@ -1,10 +1,11 @@
 #!/bin/bash
 
 if [[ $updated -eq 0 || -z $updated ]]; then
-	TEMP_SCRIPT_FILE=/tmp/_download-lxc-scripts.sh
+	SCRIPT_FILE=_download-lxc-scripts.sh
+	TEMP_SCRIPT_FILE=/tmp/$SCRIPT_FILE
 
 	rm $TEMP_SCRIPT_FILE
-	curl --header 'Cache-Control: no-cache' --output $TEMP_SCRIPT_FILE https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/lxc/_download-lxc-scripts.sh
+	curl --header 'Cache-Control: no-cache' --output $TEMP_SCRIPT_FILE https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/lxc/$SCRIPT_FILE
 
 	LINE_COLOR='\033[1;30m'
 	CODE_COLOR='\033[40m'
