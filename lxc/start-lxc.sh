@@ -22,4 +22,4 @@ echo ""
 lxc-ls --fancy
 
 echo ""
-lxc-unpriv-attach --name ${CONTAINER_NAME}
+lxc-unpriv-attach --name ${CONTAINER_NAME} --set-var HOME=/root
