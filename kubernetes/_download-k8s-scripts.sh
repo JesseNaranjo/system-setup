@@ -1,16 +1,20 @@
 #!/bin/bash
 
 if [[ $updated -eq 0 || -z $updated ]]; then
-	TEMP_SCRIPT_FILE=/tmp/_download-k8s-scripts.sh
+	SCRIPT_FILE=_download-k8s-scripts.sh
+	TEMP_SCRIPT_FILE=/tmp/$SCRIPT_FILE
 
 	rm $TEMP_SCRIPT_FILE
-	curl --header 'Cache-Control: no-cache' --output $TEMP_SCRIPT_FILE https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes/_download-k8s-scripts.sh
+	curl --header 'Cache-Control: no-cache' --output $TEMP_SCRIPT_FILE https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes/$SCRIPT_FILE
 
-	RED='\033[1;31m'
-	NC='\033[0m'
-	echo -e "\n${RED}------------------------------------------------------------------------------------------"
+	LINE_COLOR='\033[1;30m'
+	CODE_COLOR='\033[40m'
+	RESET_COLOR='\033[0m'
+	echo -e "${LINE_COLOR}-------------------------------------------------- CODE --------------------------------------------------${RESET_COLOR}${CODE_COLOR}"
 	cat $TEMP_SCRIPT_FILE
-	echo -e "------------------------------------------------------------------------------------------${NC}\n"
+		echo -e "${RESET_COLOR}${LINE_COLOR}--------------------------------------------- ^ CODE / DIFF v --------------------------------------------${RESET_COLOR}"
+	diff --color ${BASH_SOURCE[0]} $TEMP_SCRIPT_FILE
+	echo -e "${LINE_COLOR}-------------------------------------------------- DIFF --------------------------------------------------${RESET_COLOR}\n"
 
 	read -p "This file will be executed. Does this look safe to run?: (y/n [n]) " continueExec
 	if [[ $continueExec == [Yy] ]]; then
@@ -24,7 +28,7 @@ if [[ $updated -eq 0 || -z $updated ]]; then
 	exit 0
 fi
 
-curl --remote-name-all --remote-time\
+curl --header 'Cache-Control: no-cache' --remote-name-all --remote-time\
 	https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes/install-update-helm.sh\
 	https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes/start-k8s.sh\
 	https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes/stop-k8s.sh\
