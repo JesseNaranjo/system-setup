@@ -6,7 +6,7 @@ if [[ $updated -eq 0 || -z $updated ]]; then
 	rm $TEMP_SCRIPT_FILE
 	curl --header 'Cache-Control: no-cache' --output $TEMP_SCRIPT_FILE https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/lxc/_download-lxc-scripts.sh
 
-	LINE_COLOR='\033[1;30m\033[100m'
+	LINE_COLOR='\033[1;30m'
 	CODE_COLOR='\033[40m'
 	RESET_COLOR='\033[0m'
 	echo -e "${LINE_COLOR}-------------------------------------------------- CODE --------------------------------------------------${RESET_COLOR}${CODE_COLOR}"
