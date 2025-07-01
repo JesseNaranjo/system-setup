@@ -21,7 +21,9 @@ if [[ $updated -eq 0 || -z $updated ]]; then
 
 	if [[ $continueExec == [Yy] ]]; then
 		chmod +x $TEMP_SCRIPT_FILE
-		$(export updated=1; $TEMP_SCRIPT_FILE)
+		export updated=1
+		$TEMP_SCRIPT_FILE
+		unset updated
 		mv $TEMP_SCRIPT_FILE ${BASH_SOURCE[0]}
 	else
 		rm $TEMP_SCRIPT_FILE
