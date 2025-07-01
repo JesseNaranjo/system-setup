@@ -39,6 +39,8 @@ curl --header 'Cache-Control: no-cache' --remote-name-all --remote-time\
 	https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/lxc/start-lxc.sh\
 	https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/lxc/stop-lxc.sh
 
+echo ""
+
 chmod -vv +x\
 	create-priv-lxc.sh\
 	restart-lxc.sh\
