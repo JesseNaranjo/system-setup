@@ -27,4 +27,4 @@ lxc-ls --fancy
 # - And even though inside the container you may be root,
 # - the env variables are not setup correctly (for example, check $HOME without the --set-var argument)
 echo ""
-lxc-unpriv-attach --name ${CONTAINER_NAME} --set-var HOME=/root
+lxc-unpriv-attach --name ${CONTAINER_NAME} --set-var HOME=/root -- /bin/bash -l
