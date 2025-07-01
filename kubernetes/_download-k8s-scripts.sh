@@ -38,6 +38,8 @@ curl --header 'Cache-Control: no-cache' --remote-name-all --remote-time\
 	https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes/stop-k8s.sh\
 	https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes/update-k8s-repos.sh
 
+echo ""
+
 chmod -vv +x\
 	install-update-helm.sh\
 	start-k8s.sh\
