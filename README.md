@@ -30,8 +30,8 @@ I recommend leaving the existing contents in place. This content typically descr
 
 Add the following, where `<iface>` represents the interface name:
 ```
-\4{<iface>}
-\6{<iface>}
+wire: \4{<iface>0} / \6{<iface>0}
+wifi: \4{<iface>1} / \6{<iface>1}
 ```
 (leave the curly braces in!)
 
@@ -39,8 +39,8 @@ Example from Debian 12 (include additional blank lines for better visibility):
 ```
 Debian GNU/Linux 12 \n \1
 
-\4{eth0}
-\6{eth0}
+wire: \4{eth0} / \6{eth0}
+wifi: \4{wlan0} / \6{wlan0{
 
 
 ```
