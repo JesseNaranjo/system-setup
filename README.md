@@ -40,7 +40,7 @@ Example from Debian 12 (include additional blank lines for better visibility):
 Debian GNU/Linux 12 \n \1
 
 wire: \4{eth0} / \6{eth0}
-wifi: \4{wlan0} / \6{wlan0{
+wifi: \4{wlan0} / \6{wlan0}
 
 
 ```
