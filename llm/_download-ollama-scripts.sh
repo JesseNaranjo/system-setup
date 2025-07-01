@@ -1,16 +1,20 @@
 #!/bin/bash
 
 if [[ $updated -eq 0 || -z $updated ]]; then
-	TEMP_SCRIPT_FILE=/tmp/_download-ollama-scripts.sh
+	SCRIPT_FILE=_download-ollama-scripts.sh
+	TEMP_SCRIPT_FILE=/tmp/$SCRIPT_FILE
 
 	rm $TEMP_SCRIPT_FILE
-	curl --header 'Cache-Control: no-cache' --output $TEMP_SCRIPT_FILE https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/llm/_download-ollama-scripts.sh
+	curl --header 'Cache-Control: no-cache' --output $TEMP_SCRIPT_FILE https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/llm/$SCRIPT_FILE
 
-	RED='\033[1;31m'
-	NC='\033[0m'
-	echo -e "\n${RED}------------------------------------------------------------------------------------------"
+	LINE_COLOR='\033[1;30m'
+	CODE_COLOR='\033[40m'
+	RESET_COLOR='\033[0m'
+	echo -e "${LINE_COLOR}-------------------------------------------------- CODE --------------------------------------------------${RESET_COLOR}${CODE_COLOR}"
 	cat $TEMP_SCRIPT_FILE
-	echo -e "------------------------------------------------------------------------------------------${NC}\n"
+		echo -e "${RESET_COLOR}${LINE_COLOR}--------------------------------------------- ^ CODE / DIFF v --------------------------------------------${RESET_COLOR}"
+	diff --color ${BASH_SOURCE[0]} $TEMP_SCRIPT_FILE
+	echo -e "${LINE_COLOR}-------------------------------------------------- DIFF --------------------------------------------------${RESET_COLOR}\n"
 
 	read -p "This file will be executed. Does this look safe to run?: (y/n [n]) " continueExec
 	if [[ $continueExec == [Yy] ]]; then
