@@ -27,7 +27,7 @@ if [[ $updated -eq 0 || -z $updated ]]; then
 	exit 0
 fi
 
-curl --remote-name-all --remote-time\
+curl --header 'Cache-Control: no-cache' --remote-name-all --remote-time\
 	https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/lxc/create-priv-lxc.sh\
 	https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/lxc/restart-lxc.sh\
 	https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/lxc/setup-lxc.sh\
