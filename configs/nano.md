@@ -15,6 +15,7 @@ set mouse
 set multibuffer
 set nonewlines
 set smarthome
+set softwrap
 set tabsize 4
 ```
 (consider adding to root user as well, if you went the home folder route)
