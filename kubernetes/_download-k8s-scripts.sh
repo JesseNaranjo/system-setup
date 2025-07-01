@@ -17,6 +17,8 @@ if [[ $updated -eq 0 || -z $updated ]]; then
 	echo -e "${LINE_COLOR}-------------------------------------------------- DIFF --------------------------------------------------${RESET_COLOR}\n"
 
 	read -p "This file will be executed. Does this look safe to run?: (y/n [n]) " continueExec
+	echo ""
+
 	if [[ $continueExec == [Yy] ]]; then
 		chmod +x $TEMP_SCRIPT_FILE
 		$(export updated=1; $TEMP_SCRIPT_FILE)
