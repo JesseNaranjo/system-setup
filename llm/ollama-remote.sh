@@ -1,8 +1,8 @@
 #! /bin/bash
 
-if [[ ! -f ~/.screenrc-ollama-rmt || $1 == '--overwrite' ]]
+if [[ ! -f .screenrc-ollama-rmt || $1 == '--overwrite' ]]
 then
-  cat <<'EOF' > ~/.screenrc-ollama-rmt
+  cat <<'EOF' > .screenrc-ollama-rmt
 
   # Split screen into two columns
   split -v
@@ -34,4 +34,4 @@ then
 EOF
 fi
 
-screen -Uamc ~/.screenrc-ollama-rmt
+screen -Uamc .screenrc-ollama-rmt -T $TERM
