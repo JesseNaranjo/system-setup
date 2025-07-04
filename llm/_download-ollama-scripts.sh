@@ -64,6 +64,7 @@ for fname in "${FILES[@]}"; do
 
 		read -rp "→ Overwrite local ${fname} with remote copy? [y/N] " continueOverwrite
 		if [[ $continueOverwrite =~ ^[Yy]$ ]]; then
+			chmod +x $tmp
 			mv "${tmp}" "${fname}"
 			echo "  ↺ Replaced ${fname}"
 		else
