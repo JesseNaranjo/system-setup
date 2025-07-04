@@ -11,6 +11,7 @@ then
   #  - Horizontal split for top and bottom-left screens
   screen -t "shell"
   split
+  resize 35%
   focus down
   screen -t "shell"
 
