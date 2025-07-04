@@ -28,7 +28,7 @@ then
   focus left
   focus down
   focus down
-  sleep 1
+  sleep 3
   stuff "clear; ollama ps; ollama list | { IFS= read -r header; print -r \$header; sort -k1,1 }\n"
 
 EOF
