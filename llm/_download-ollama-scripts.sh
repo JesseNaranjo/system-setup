@@ -63,6 +63,10 @@ for fname in "${FILES[@]}"; do
 		continue
 	fi
 
+	if [[ ! -f "${fname}" ]]; then
+		touch "${fname}"
+	fi
+
 	if diff -u "${fname}" "${tmp}" > /dev/null 2>&1; then
 		echo "  ✓ ${fname} is already up-to-date"
 	else
