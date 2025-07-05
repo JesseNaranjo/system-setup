@@ -24,7 +24,7 @@ if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
 	echo -e "${LINE_COLOR}╭───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╮${RESET_COLOR}${CODE_COLOR}"
 	cat "${TEMP_SCRIPT_FILE}"
 
-	if diff -u "${fname}" "${tmp}" > /dev/null 2>&1; then
+	if diff -u "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
 		echo -e "${RESET_COLOR}${LINE_COLOR}╰────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╯${RESET_COLOR}"
 	else
 		echo -e "${RESET_COLOR}${LINE_COLOR}╰────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${RESET_COLOR}"
