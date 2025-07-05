@@ -15,10 +15,10 @@ CONTAINER_NAME=$1
 echo "Starting LXC $CONTAINER_NAME..."
 lxc-unpriv-start --name ${CONTAINER_NAME}
 
-echo ""
+echo
 x=3; while  [ $x -gt 0 ]; do echo "Attaching in $(( x-- ))..."; sleep 1s; done
 
-echo ""
+echo
 lxc-ls --fancy
 
 # lxc-unpriv-attach reuses the calling environment in the container
@@ -26,5 +26,5 @@ lxc-ls --fancy
 # - that it's running as the user that attached into the lxc.
 # - And even though inside the container you may be root,
 # - the env variables are not setup correctly (for example, check $HOME without the --set-var argument)
-echo ""
+echo
 lxc-unpriv-attach --name ${CONTAINER_NAME} --set-var HOME=/root -- /bin/bash -l
