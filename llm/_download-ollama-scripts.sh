@@ -29,10 +29,10 @@ if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
 			echo -e "${RESET_COLOR}${LINE_COLOR}╰────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${RESET_COLOR}"
 			diff -u --color "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" || true
 			echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${RESET_COLOR}"; echo
-	
+
 			read -p "→ Overwrite and run ${SCRIPT_FILE}?: [y/N] " continueExec
 			echo
-	
+
 			if [[ $continueExec == [Yy] ]]; then
 				chmod +x $TEMP_SCRIPT_FILE
 				export scriptUpdated=1
