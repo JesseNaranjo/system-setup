@@ -26,7 +26,7 @@ ID_NO=${2:-100000}
 if [[ ! -f /etc/lxc/default.conf.original ]] then
 	echo "Backing up /etc/lxc/default.conf as default.conf.original..."
 	sudo cp -av /etc/lxc/default.conf /etc/lxc/default.conf.original
-	echo ""
+	echo
 fi
 
 
@@ -37,7 +37,7 @@ VETH_ENTRY="$LIMITED_USER veth lxcbr0 10"
 if ! grep -q "$VETH_ENTRY" /etc/lxc/lxc-usernet; then
 	echo "Adding \"$VETH_ENTRY\" to /etc/lxc/lxc-usernet..."
 	echo "$VETH_ENTRY" | sudo tee -a /etc/lxc/lxc-usernet > /dev/null
-	echo ""
+	echo
 fi
 
 
@@ -48,13 +48,13 @@ SUB_ENTRY="$LIMITED_USER:$ID_NO:65535"
 if ! grep -q "$SUB_ENTRY" /etc/subuid; then
 	echo "Adding \"$SUB_ENTRY\" to /etc/subuid..."
 	echo "$SUB_ENTRY" | sudo tee -a /etc/subuid > /dev/null
-	echo ""
+	echo
 fi
 
 if ! grep -q "$SUB_ENTRY" /etc/subgid; then
 	echo "Adding \"$SUB_ENTRY\" to /etc/subgid..."
 	echo "$SUB_ENTRY" | sudo tee -a /etc/subgid > /dev/null
-	echo ""
+	echo
 fi
 
 
@@ -70,7 +70,7 @@ if [[ "$USER_NAMESPACE_ENABLED" -eq 0 ]]; then
 	echo "kernel.unprivileged_userns_clone = 1" | sudo tee /etc/sysctl.d/99-lxc.conf
 	sudo sysctl --system # reload all sysctl settings
 fi
-echo ""
+echo
 
 
 # Prepare ${LIMITED_USER}'s default LXC configuration
@@ -96,7 +96,7 @@ lxc.net.0.link = lxcbr0
 lxc.net.0.flags = up
 EOF
 
-echo ""
+echo
 
 sudo chmod -v +x "$LIMITED_USER_HOME"
 if [[ -d "$LIMITED_USER_HOME/.local" ]]; then
