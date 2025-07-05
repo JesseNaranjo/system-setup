@@ -18,33 +18,35 @@ if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
 	TEMP_SCRIPT_FILE="$(mktemp)"
 	trap 'rm -f "${TEMP_SCRIPT_FILE}"' RETURN     # ensure cleanup even on exit/interrupt
 
+	echo "▶ Fetching ${REMOTE_BASE}/${SCRIPT_FILE}..."
 	# -H header, -o file path, -f fail-on-HTTP-error, -s silent, -S show errors, -L follow redirects
-	curl -H 'Cache-Control: no-cache' -o "${TEMP_SCRIPT_FILE}" -fsSL "${REMOTE_BASE}/${SCRIPT_FILE}"
-
-	echo -e "${LINE_COLOR}╭───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╮${RESET_COLOR}${CODE_COLOR}"
-	cat "${TEMP_SCRIPT_FILE}"
-
-	if diff -u "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
-		echo -e "${RESET_COLOR}${LINE_COLOR}╰────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╯${RESET_COLOR}"
-	else
-		echo -e "${RESET_COLOR}${LINE_COLOR}╰────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${RESET_COLOR}"
-		diff -u --color "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" || true
-		echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${RESET_COLOR}"; echo
-
-		read -p "→ Overwrite and run ${SCRIPT_FILE}?: [y/N] " continueExec
-		echo
-
-		if [[ $continueExec == [Yy] ]]; then
-			chmod +x $TEMP_SCRIPT_FILE
-			export scriptUpdated=1
-			$TEMP_SCRIPT_FILE
-			unset scriptUpdated
-			mv $TEMP_SCRIPT_FILE ${BASH_SOURCE[0]}
+	if curl -H 'Cache-Control: no-cache' -o "${TEMP_SCRIPT_FILE}" -fsSL "${REMOTE_BASE}/${SCRIPT_FILE}"; then
+		if diff -u "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
+			echo "  ✓ ${SCRIPT_FILE} is already up-to-date"
 		else
-			rm -f $TEMP_SCRIPT_FILE
+			echo -e "${LINE_COLOR}╭───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╮${RESET_COLOR}${CODE_COLOR}"
+			cat "${TEMP_SCRIPT_FILE}"
+			echo -e "${RESET_COLOR}${LINE_COLOR}╰────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${RESET_COLOR}"
+			diff -u --color "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" || true
+			echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${RESET_COLOR}"; echo
+	
+			read -p "→ Overwrite and run ${SCRIPT_FILE}?: [y/N] " continueExec
+			echo
+	
+			if [[ $continueExec == [Yy] ]]; then
+				chmod +x $TEMP_SCRIPT_FILE
+				export scriptUpdated=1
+				$TEMP_SCRIPT_FILE
+				unset scriptUpdated
+				mv $TEMP_SCRIPT_FILE ${BASH_SOURCE[0]}
+				exit 0
+			else
+				rm -f $TEMP_SCRIPT_FILE
+				echo "→ Running local unmodified copy..."
+			fi
 		fi
-
-		exit 0
+	else
+		echo "  ✖ Download failed — skipping $SCRIPT_FILE"
 	fi
 fi
 
