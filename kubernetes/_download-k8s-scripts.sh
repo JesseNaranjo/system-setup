@@ -1,47 +1,83 @@
 #!/bin/bash
 
-if [[ $updated -eq 0 || -z $updated ]]; then
-	SCRIPT_FILE=_download-k8s-scripts.sh
-	TEMP_SCRIPT_FILE=/tmp/$SCRIPT_FILE
+set -o pipefail     # propagate pipeline errors
+#set -eo pipefail    # fail fast, propagate pipeline errors
+#set -euo pipefail   # fail fast, fail on unset vars, propagate pipeline errors
 
-	rm $TEMP_SCRIPT_FILE
-	curl --header 'Cache-Control: no-cache' --output $TEMP_SCRIPT_FILE https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes/$SCRIPT_FILE
 
-	LINE_COLOR='\033[0;33m'
-	CODE_COLOR='\033[40m'
-	RESET_COLOR='\033[0m'
-	echo -e "${LINE_COLOR}-------------------------------------------------- CODE --------------------------------------------------${RESET_COLOR}${CODE_COLOR}"
-	cat $TEMP_SCRIPT_FILE
-		echo -e "${RESET_COLOR}${LINE_COLOR}--------------------------------------------- ^ CODE / DIFF v --------------------------------------------${RESET_COLOR}"
-	diff --color ${BASH_SOURCE[0]} $TEMP_SCRIPT_FILE
-	echo -e "${LINE_COLOR}-------------------------------------------------- DIFF --------------------------------------------------${RESET_COLOR}\n"
+REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes"
+FILES=( "install-update-helm.sh" "start-k8s.sh" "stop-k8s.sh" "update-k8s-repos.sh" )
 
-	read -p "This file will be executed. Does this look safe to run?: (y/n [n]) " continueExec
-	echo ""
+LINE_COLOR="\033[0;33m"
+CODE_COLOR="\033[40m"
+RESET_COLOR="\033[0m"
 
-	if [[ $continueExec == [Yy] ]]; then
-		chmod +x $TEMP_SCRIPT_FILE
-		export updated=1
-		$TEMP_SCRIPT_FILE
-		unset updated
-		mv $TEMP_SCRIPT_FILE ${BASH_SOURCE[0]}
+
+if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
+	SCRIPT_FILE="_download-k8s-scripts.sh"
+	TEMP_SCRIPT_FILE="$(mktemp)"
+	trap 'rm -f "${TEMP_SCRIPT_FILE}"' RETURN     # ensure cleanup even on exit/interrupt
+
+	echo "▶ Fetching ${REMOTE_BASE}/${SCRIPT_FILE}..."
+	# -H header, -o file path, -f fail-on-HTTP-error, -s silent, -S show errors, -L follow redirects
+	if curl -H 'Cache-Control: no-cache' -o "${TEMP_SCRIPT_FILE}" -fsSL "${REMOTE_BASE}/${SCRIPT_FILE}"; then
+		if diff -u "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
+			echo "  ✓ ${SCRIPT_FILE} is already up-to-date"
+		else
+			echo -e "${LINE_COLOR}╭───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╮${RESET_COLOR}${CODE_COLOR}"
+			cat "${TEMP_SCRIPT_FILE}"
+			echo -e "${RESET_COLOR}${LINE_COLOR}╰────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${RESET_COLOR}"
+			diff -u --color "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" || true
+			echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${RESET_COLOR}"; echo
+
+			read -p "→ Overwrite and run ${SCRIPT_FILE}?: [y/N] " continueExec
+			echo
+
+			if [[ $continueExec == [Yy] ]]; then
+				chmod +x $TEMP_SCRIPT_FILE
+				export scriptUpdated=1
+				$TEMP_SCRIPT_FILE
+				unset scriptUpdated
+				mv $TEMP_SCRIPT_FILE ${BASH_SOURCE[0]}
+				exit 0
+			else
+				rm -f $TEMP_SCRIPT_FILE
+				echo "→ Running local unmodified copy..."
+			fi
+		fi
 	else
-		rm $TEMP_SCRIPT_FILE
+		echo "  ✖ Download failed — skipping $SCRIPT_FILE"
+		echo "  → Running local unmodified copy..."
 	fi
-
-	exit 0
 fi
 
-curl --header 'Cache-Control: no-cache' --remote-name-all --remote-time\
-	https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes/install-update-helm.sh\
-	https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes/start-k8s.sh\
-	https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes/stop-k8s.sh\
-	https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes/update-k8s-repos.sh
 
-echo ""
+for fname in "${FILES[@]}"; do
+	tmp="$(mktemp)"                 # secure, race-free temp file :contentReference[oaicite:0]{index=0}
+	trap 'rm -f "${tmp}"' RETURN    # ensure cleanup even on exit/interrupt
 
-chmod -vv +x\
-	install-update-helm.sh\
-	start-k8s.sh\
-	stop-k8s.sh\
-	update-k8s-repos.sh
+	echo "▶ Fetching ${REMOTE_BASE}/${fname}..."
+	# -H header, -o file path, -f fail-on-HTTP-error, -s silent, -S show errors, -L follow redirects
+	if ! curl -H 'Cache-Control: no-cache' -o "${tmp}" -fsSL "${REMOTE_BASE}/${fname}"; then
+		echo "  ✖ Download failed — skipping $fname"
+		continue
+	fi
+
+	if diff -u "${fname}" "${tmp}" > /dev/null 2>&1; then
+		echo "  ✓ ${fname} is already up-to-date"
+	else
+		echo; echo -e "${LINE_COLOR}╭────────────────────────────────────────────────── Δ detected in ${fname} ──────────────────────────────────────────────────╮${RESET_COLOR}"
+		diff -u --color "${fname}" "${tmp}" || true
+		echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${fname} ─────────────────────────────────────────────────────────╯${RESET_COLOR}"
+
+		read -rp "→ Overwrite local ${fname} with remote copy? [y/N] " continueOverwrite
+		if [[ $continueOverwrite =~ ^[Yy]$ ]]; then
+			chmod +x $tmp
+			mv "${tmp}" "${fname}"
+			echo "  ↺ Replaced ${fname}"
+		else
+			echo "  ◼ Skipped ${fname}"
+			rm -f "${tmp}"
+		fi
+	fi
+done
