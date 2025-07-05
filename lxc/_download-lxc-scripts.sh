@@ -14,7 +14,7 @@ RESET_COLOR="\033[0m"
 
 
 if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
-	SCRIPT_FILE="_download-ollama-scripts.sh"
+	SCRIPT_FILE="_download-lxc-scripts.sh"
 	TEMP_SCRIPT_FILE="$(mktemp)"
 	trap 'rm -f "${TEMP_SCRIPT_FILE}"' RETURN     # ensure cleanup even on exit/interrupt
 
