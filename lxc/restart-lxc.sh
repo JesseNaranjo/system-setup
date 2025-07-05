@@ -14,5 +14,5 @@ CONTAINER_NAME=$1
 
 ./stop-lxc.sh ${CONTAINER_NAME}
 sleep 1s
-echo ""
+echo
 ./start-lxc.sh ${CONTAINER_NAME}
