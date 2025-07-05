@@ -47,6 +47,7 @@ if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
 		fi
 	else
 		echo "  ✖ Download failed — skipping $SCRIPT_FILE"
+		echo "  → Running local unmodified copy..."
 	fi
 fi
 
