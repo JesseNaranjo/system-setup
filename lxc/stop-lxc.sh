@@ -17,5 +17,5 @@ lxc-stop --name ${CONTAINER_NAME}
 
 sleep 1s
 
-echo ""
+echo
 lxc-ls --fancy
