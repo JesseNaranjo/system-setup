@@ -23,24 +23,29 @@ if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
 
 	echo -e "${LINE_COLOR}╭───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╮${RESET_COLOR}${CODE_COLOR}"
 	cat "${TEMP_SCRIPT_FILE}"
-	echo -e "${RESET_COLOR}${LINE_COLOR}╰────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${RESET_COLOR}"
-	diff -u --color "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" || true
-	echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${RESET_COLOR}"; echo
 
-	read -p "→ Overwrite and run ${SCRIPT_FILE}?: [y/N] " continueExec
-	echo
-
-	if [[ $continueExec == [Yy] ]]; then
-		chmod +x $TEMP_SCRIPT_FILE
-		export scriptUpdated=1
-		$TEMP_SCRIPT_FILE
-		unset scriptUpdated
-		mv $TEMP_SCRIPT_FILE ${BASH_SOURCE[0]}
+	if diff -u "${fname}" "${tmp}" > /dev/null 2>&1; then
+		echo -e "${RESET_COLOR}${LINE_COLOR}╰────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╯${RESET_COLOR}"
 	else
-		rm -f $TEMP_SCRIPT_FILE
-	fi
+		echo -e "${RESET_COLOR}${LINE_COLOR}╰────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${RESET_COLOR}"
+		diff -u --color "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" || true
+		echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${RESET_COLOR}"; echo
 
-	exit 0
+		read -p "→ Overwrite and run ${SCRIPT_FILE}?: [y/N] " continueExec
+		echo
+
+		if [[ $continueExec == [Yy] ]]; then
+			chmod +x $TEMP_SCRIPT_FILE
+			export scriptUpdated=1
+			$TEMP_SCRIPT_FILE
+			unset scriptUpdated
+			mv $TEMP_SCRIPT_FILE ${BASH_SOURCE[0]}
+		else
+			rm -f $TEMP_SCRIPT_FILE
+		fi
+
+		exit 0
+	fi
 fi
 
 
