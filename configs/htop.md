@@ -3,12 +3,11 @@
 ## Display options
 
 - Tree View (F5) - *will sort in groups, rather than across all processes*
-- Shadow other users' processes
-- Highlight program "basename"
-- Shadow distribution path prefixes
-- Update process names on every refresh
-- Also show CPU temperature
-- Highlight new and old processes
+- [x] Shadow other users' processes
+- [x] Highlight program "basename"
+- [x] Update process names on every refresh
+- [x] Also show CPU temperature
+- [x] Highlight new and old processes
 - [3] Highlight time
 
 ## Header layout
