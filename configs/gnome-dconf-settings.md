@@ -71,6 +71,9 @@ num-workspaces=1
 dynamic-workspaces=false
 workspaces-only-onprimary=false
 
+[org/gnome/nautilus/icon-view]
+captions=['type', 'size', 'none']
+
 [org/gnome/settings-daemon/plugins/power]
 power-button-action='nothing'
 sleep-inactive-ac-type='nothing'
