@@ -4,7 +4,7 @@
 ## Input parameters
 ## ================
 
-if (( EUID != 0 )); then
+if [[ $EUID != 0 ]]; then
 	echo "This script requires root privileges (e.g., using su or sudo)."
 	exit 1  # Exit with an error code if not root
 fi
