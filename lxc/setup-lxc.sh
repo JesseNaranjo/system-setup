@@ -4,8 +4,13 @@
 ## Input parameters
 ## ================
 
+if (( EUID != 0 )); then
+	echo "This script requires root privileges (e.g., using su or sudo)."
+	exit 1  # Exit with an error code if not root
+fi
+
 if [[ $# -eq 0 || -z ${1-} ]]; then
-	printf 'Usage:  %s <username> [sid]\n' "${0##*/}" >&2
+	printf 'Usage:  %s <username> [sid:100000]\n' "${0##*/}" >&2
 	exit 64  # 64 - EX_USAGE (sysexits.h)
 fi
 LIMITED_USER=$1
@@ -25,7 +30,7 @@ ID_NO=${2:-100000}
 
 if [[ ! -f /etc/lxc/default.conf.original ]] then
 	echo "Backing up /etc/lxc/default.conf as default.conf.original..."
-	sudo cp -av /etc/lxc/default.conf /etc/lxc/default.conf.original
+	cp -av /etc/lxc/default.conf /etc/lxc/default.conf.original
 	echo
 fi
 
@@ -36,7 +41,7 @@ VETH_ENTRY="$LIMITED_USER veth lxcbr0 10"
 
 if ! grep -q "$VETH_ENTRY" /etc/lxc/lxc-usernet; then
 	echo "Adding \"$VETH_ENTRY\" to /etc/lxc/lxc-usernet..."
-	echo "$VETH_ENTRY" | sudo tee -a /etc/lxc/lxc-usernet > /dev/null
+	echo "$VETH_ENTRY" | tee -a /etc/lxc/lxc-usernet > /dev/null
 	echo
 fi
 
@@ -47,13 +52,13 @@ SUB_ENTRY="$LIMITED_USER:$ID_NO:65535"
 
 if ! grep -q "$SUB_ENTRY" /etc/subuid; then
 	echo "Adding \"$SUB_ENTRY\" to /etc/subuid..."
-	echo "$SUB_ENTRY" | sudo tee -a /etc/subuid > /dev/null
+	echo "$SUB_ENTRY" | tee -a /etc/subuid > /dev/null
 	echo
 fi
 
 if ! grep -q "$SUB_ENTRY" /etc/subgid; then
 	echo "Adding \"$SUB_ENTRY\" to /etc/subgid..."
-	echo "$SUB_ENTRY" | sudo tee -a /etc/subgid > /dev/null
+	echo "$SUB_ENTRY" | tee -a /etc/subgid > /dev/null
 	echo
 fi
 
@@ -61,14 +66,14 @@ fi
 # Output value confirming if user-namespace supposed is enabled
 
 echo "Verifying user-namespace is enabled..."
-USER_NAMESPACE_ENABLED=$(sudo sysctl -n kernel.unprivileged_userns_clone)
-sudo sysctl kernel.unprivileged_userns_clone
+USER_NAMESPACE_ENABLED=$(sysctl -n kernel.unprivileged_userns_clone)
+sysctl kernel.unprivileged_userns_clone
 
 if [[ "$USER_NAMESPACE_ENABLED" -eq 0 ]]; then
 	echo "- User-namespace not enabled, enabling permanently..."
-	sudo sysctl -w kernel.unprivileged_userns_clone=1
-	echo "kernel.unprivileged_userns_clone = 1" | sudo tee /etc/sysctl.d/99-lxc.conf
-	sudo sysctl --system # reload all sysctl settings
+	sysctl -w kernel.unprivileged_userns_clone=1
+	echo "kernel.unprivileged_userns_clone = 1" | tee /etc/sysctl.d/99-lxc.conf
+	sysctl --system # reload all sysctl settings
 fi
 echo
 
@@ -80,9 +85,9 @@ LIMITED_USER_CONFIG_LXC="$LIMITED_USER_HOME/.config/lxc"
 
 echo "Creating user's default LXC config..."
 echo "$LIMITED_USER_CONFIG_LXC/default.conf"
-sudo mkdir -p "$LIMITED_USER_CONFIG_LXC"
+mkdir -p "$LIMITED_USER_CONFIG_LXC"
 
-sudo tee "$LIMITED_USER_CONFIG_LXC/default.conf" > /dev/null <<EOF
+tee "$LIMITED_USER_CONFIG_LXC/default.conf" > /dev/null <<EOF
 # ID Map must match range found in /etc/subuid and /etc/subgid for "$LIMITED_USER"
 lxc.idmap = u 0 $ID_NO 65535
 lxc.idmap = g 0 $ID_NO 65535
@@ -98,15 +103,15 @@ EOF
 
 echo
 
-sudo chmod -v +x "$LIMITED_USER_HOME"
+chmod -v +x "$LIMITED_USER_HOME"
 if [[ -d "$LIMITED_USER_HOME/.local" ]]; then
-	sudo chmod -v +x "$LIMITED_USER_HOME/.local"
+	chmod -v +x "$LIMITED_USER_HOME/.local"
 	if [[ -d "$LIMITED_USER_HOME/.local/share" ]]; then
-		sudo chmod -v +x "$LIMITED_USER_HOME/.local/share"
+		chmod -v +x "$LIMITED_USER_HOME/.local/share"
 		if [[ -d "$LIMITED_USER_HOME/.local/share/lxc" ]]; then
-			sudo chmod -v +x "$LIMITED_USER_HOME/.local/share/lxc"
+			chmod -v +x "$LIMITED_USER_HOME/.local/share/lxc"
 		fi
 	fi
 fi
-sudo chown -v ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_LXC"
-sudo chown -v ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_LXC/default.conf"
+chown -v ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_LXC"
+chown -v ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_LXC/default.conf"
