@@ -3,7 +3,6 @@
 ## Display options
 
 - Tree View (F5) - *will sort in groups, rather than across all processes*
-- [x] Shadow other users' processes
 - [x] Highlight program "basename"
 - [x] Update process names on every refresh
 - [x] Also show CPU temperature
@@ -19,6 +18,7 @@
   - Uptime [Text]
   - Task counter [Text]
   - Load average [Text]
+  - Disk IO [Text]
 - Column 2
   - CPUs (1/1) [Bar]
   - Memory & Swap [Bar] ("Combined memory and swap usage")
