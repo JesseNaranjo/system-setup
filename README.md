@@ -11,6 +11,7 @@ And the rest of the repository consists of files and folders representing additi
 ## install packages
 
 - aptitude
+- ca-certificates
 - curl
 - htop
 - mc
