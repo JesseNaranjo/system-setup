@@ -11,15 +11,19 @@
 
 ## Header layout
 
-- 2 columns 33/67
+<img width="786" height="121" alt="image" src="https://github.com/user-attachments/assets/881a5287-0275-4d72-8dc2-dc088100f1d8" />
+
+- 2 columns 50/50
 - Column 1
   - Date and Time [Text]
   - Hostname [Text]
   - Uptime [Text]
+  - Systemd state [Text]
+  - Blank [Text]
+  - Disk IO [Text]
+  - Network IO [Text]
+- Column 2
   - Task counter [Text]
   - Load average [Text]
-  - Disk IO [Text]
-- Column 2
   - CPUs (1/1) [Bar]
   - Memory & Swap [Bar] ("Combined memory and swap usage")
-  - Network IO [Text]
