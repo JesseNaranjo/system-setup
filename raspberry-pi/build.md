@@ -67,8 +67,27 @@ this results in a ready-to-go `img` file that can be written directly to a dis.
 
 ## 3. copy image to drive
 
+Make sure `of` targets the device and not a partition, such as `/dev/mmcblk0` or `/dev/sdX`.
+
 ```bash
 dd if=orange_rpi3_bookworm.img of=/dev/mmcblk0 bs=64K oflag=dsync status=progressm
 ```
 
-<sup>Source: https://salsa.debian.org/raspi-team/image-specs/-/tree/master?ref_type=heads</sup>
+## 4. resize root partition
+
+Use `parted`, `fdisk`, or your favorite partition manager. Below we use `parted`.
+
+```bash
+parted /dev/mmcblk0         # (or /dev/sdX)
+print free                  # note the amount of space left
+resizepart Y -1s            # Y = Number from print free, -1s represents the very last sector
+quit
+```
+
+Then, use `resize.f2fs` to make the file system recognize the partition size.
+
+```bash
+resize.f2fs /dev/mmcblk0p2  # (or /dev/sdX2)
+```
+
+<sup>Source (for steps 1-3): https://salsa.debian.org/raspi-team/image-specs/-/tree/master?ref_type=heads</sup>
