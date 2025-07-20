@@ -91,3 +91,9 @@ resize.f2fs /dev/mmcblk0p2  # (or /dev/sdX2)
 ```
 
 <sup>Source (for steps 1-3): https://salsa.debian.org/raspi-team/image-specs/-/tree/master?ref_type=heads</sup>
+
+## Post-boot
+
+Things to consider:
+- This install uses `iwd` and `iwctl` - more info here: https://wiki.debian.org/WiFi/HowToUse#IWCtl
+- Enable swap file: https://wiki.debian.org/Swap
