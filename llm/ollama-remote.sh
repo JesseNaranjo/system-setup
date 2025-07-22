@@ -1,8 +1,10 @@
-#! /bin/bash
+#!/bin/bash
 
-if [[ ! -f .screenrc-ollama-rmt || $1 == '--overwrite' ]]
+SCREEN_DOTFILE=".screenrc-ollama-rmt"
+
+if [[ ! -f $SCREEN_DOTFILE || $1 == '--overwrite' ]]
 then
-  cat <<'EOF' > .screenrc-ollama-rmt
+  cat <<'EOF' > $SCREEN_DOTFILE
 
   # Split screen into two columns
   split -v
@@ -33,4 +35,4 @@ then
 EOF
 fi
 
-screen -Uamc .screenrc-ollama-rmt -T $TERM
+screen -Uamc $SCREEN_DOTFILE -T $TERM
