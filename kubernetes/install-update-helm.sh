@@ -1,3 +1,5 @@
+#!/bin/bash
+
 INSTALL_SCRIPT_PATH=$(mktemp)
 
 echo "Downloading script to $INSTALL_SCRIPT_PATH..."
