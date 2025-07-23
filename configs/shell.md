@@ -17,6 +17,7 @@ alias rm='rm -Iv'
 alias chmod='chmod -vv'
 alias chown='chown -vv'
 
+alias lxc-ls='lxc-ls -f'
 alias lsblk='lsblk -o "NAME,FSTYPE,FSVER,LABEL,FSAVAIL,SIZE,FSUSE%,MOUNTPOINTS,UUID"'
 ```
 - `-a` - `cp` only, copy file attributes, ctime, and mtime
