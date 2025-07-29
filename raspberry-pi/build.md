@@ -67,10 +67,11 @@ this results in a ready-to-go `img` file that can be written directly to a dis.
 
 ## 3. copy image to drive
 
-Make sure `of` targets the device and not a partition, such as `/dev/mmcblk0` or `/dev/sdX`.
+Make sure `of` targets the device and not a partition, such as `/dev/mmcblkX` or `/dev/sdX`.
 
 ```bash
-dd if=orange_rpi3_bookworm.img of=/dev/mmcblk0 bs=64K oflag=dsync status=progressm
+#                                       v-- typically mmcblkX or sdX
+dd if=orange_rpi3_bookworm.img of=/dev/<device> bs=64K oflag=dsync status=progressm
 ```
 
 ## 4. resize root partition
@@ -78,16 +79,26 @@ dd if=orange_rpi3_bookworm.img of=/dev/mmcblk0 bs=64K oflag=dsync status=progres
 Use `parted`, `fdisk`, or your favorite partition manager. Below we use `parted`.
 
 ```bash
-parted /dev/mmcblk0         # (or /dev/sdX)
-print free                  # note the amount of space left
-resizepart Y -1s            # Y = Number from print free, -1s represents the very last sector
+parted /dev/<device>        #  (typically mmcblkX or sdX)
+
+print free                  #  note the amount of space left
+## Sample Output:
+#  Number  Start   End     Size    Type     File system  Flags
+#          32.3kB  4194kB  4162kB           Free Space
+#   1      4194kB  537MB   533MB   primary  fat16        lba
+#   2      537MB   2621MB  2085MB  primary  f2fs
+#          2621MB  7969MB  5348MB           Free Space
+
+resizepart <Number> -1s     #  <Number> = Number from print free output
+                            #  -1s represents the very last sector
+
 quit
 ```
 
 Then, use `resize.f2fs` to make the file system recognize the partition size.
 
 ```bash
-resize.f2fs /dev/mmcblk0p2  # (or /dev/sdX2)
+resize.f2fs /dev/<device>   #  (typically mmcblkXp2 or sdX2)
 ```
 
 <sup>Source (for steps 1-3): https://salsa.debian.org/raspi-team/image-specs/-/tree/master?ref_type=heads</sup>
