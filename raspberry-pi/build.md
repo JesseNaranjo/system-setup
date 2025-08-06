@@ -105,6 +105,29 @@ resize.f2fs /dev/<device>   #  (typically mmcblkXp2 or sdX2)
 
 ## Post-boot
 
-Things to consider:
+Things to keep in mind:
 - This install uses `iwd` and `iwctl` - more info here: https://wiki.debian.org/WiFi/HowToUse#IWCtl
+  - Edit `/etc/iwd/main.conf` and set (uncomment) `EnableNetworkConfiguration` (otherwise, the interface won't get an IP)
+    ```bash
+    [General]
+    EnableNetworkConfiguration=true
+    ```
+  - Ensure `iwd` and `systemd-resolved` services are enabled and running (using `systemctl`)
+  - Then:
+    ```bash
+    iwctl
+    > station list
+    > station <device> scan
+    > station <device> get-networks
+    > station <device> connect <ssid>
+    ```
 - Enable swap file: https://wiki.debian.org/Swap
+  ```bash
+  dd if=/dev/zero of=/var/swapfile bs=1024 count=SIZE    #   <2GB RAM: 2x RAM or equal to RAM for hibernation.
+                                                         #  2-8GB RAM: Equal to RAM or 2x RAM for hibernation. 
+                                                         # 8-64GB RAM: At least 4GB, or 1.5x RAM for hibernation. 
+                                                         #  >64GB RAM: Minimum 4GB, hibernation not recommended.
+  chmod 600 /var/swapfile
+  mkswap /var/swapfile
+  swapon /var/swapfile
+  ```
