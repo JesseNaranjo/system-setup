@@ -131,3 +131,7 @@ Things to keep in mind:
   mkswap /var/swapfile
   swapon /var/swapfile
   ```
+  ```bash
+  # /etc/fstab
+  /var/swapfile       none    swap    sw      0       0
+  ```
