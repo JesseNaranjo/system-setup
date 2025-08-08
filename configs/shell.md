@@ -77,9 +77,9 @@ alias lxc-ls='lxc-ls -f'
 ## `7z` compression helpers
 
 ```
-alias 7z-great="7z a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on -mmt"
-alias 7z-ultra="7z a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt"
-alias 7z-max="7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt"
+alias 7z-good="7z a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on -mmt"
+alias 7z-great="7z a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt"
+alias 7z-ultra="7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt"
 ```
 
 <sup>Note: keep in mind that 7-zip on macOS (installed via Homebrew) is called using `7zz` (rather than `7z`).</sup>
@@ -88,7 +88,7 @@ alias 7z-max="7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt"
 | - | - | - |
 | `-m0=lzma2` | LZMA2 handles mixed data well and multithreads cleanly. | Slightly slower to decompress than plain LZMA. |
 | `-mx=9` | Turns on “Ultra” profile: larger dictionary, more passes, bt4 match-finder by default. | Steeper CPU usage; only \~1–3 % extra ratio compared to `-mx=7`. |
-| `-md=256m` <sup>(great)</sup><br>`-md=512m` <sup>(ultra)</sup><br>`-md=1536m` <sup>(max)</sup> | Dictionary the compressor uses to find repeated chunks. Bigger = better until it’s ≈ biggest individual file. Needs the **same RAM to *decompress***. 32-bit 7-Zip can only handle 128 MiB. | 1.5 GiB encode RAM + 1.5 GiB decode RAM; on low-RAM systems extraction can fail. |
+| `-md=256m` <sup>(good)</sup><br>`-md=512m` <sup>(great)</sup><br>`-md=1536m` <sup>(ultra)</sup> | Dictionary the compressor uses to find repeated chunks. Bigger = better until it’s ≈ biggest individual file. Needs the **same RAM to *decompress***. 32-bit 7-Zip can only handle 128 MiB. | 1.5 GiB encode RAM + 1.5 GiB decode RAM; on low-RAM systems extraction can fail. |
 | `-mfb=273` | “Fast bytes” – how far encoder scans for a match. Max value gives slight gains for highly repetitive data. | Increases encode time a bit. |
 | `-mmf=bt4` | Deep binary-tree search gives best ratio. (`bt2/3` and hash-chain variants are faster but looser.) | Slowest search algorithm. |
 | `-ms=on`<br>`-ms=4g`<br>`-ms=32g` | Solid archives treat many files as one stream so the dictionary works across file boundaries. Massive win on lots of small/text files. | One changed file → you must repack almost the whole archive; random extraction can be slow. |
