@@ -74,7 +74,7 @@ alias lsblk='lsblk -o "NAME,FSTYPE,FSVER,LABEL,FSAVAIL,SIZE,FSUSE%,MOUNTPOINTS,U
 alias lxc-ls='lxc-ls -f'
 ```
 
-## `7z-compress`
+## `7z` compression helpers
 
 ```
 alias 7z-ultra="7z a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt"
