@@ -81,6 +81,8 @@ alias 7z-ultra="7z a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt
 alias 7z-ultra-max="7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt"
 ```
 
+<sup>Note: keep in mind that 7-zip on macOS (installed via Homebrew) is called using `7zz` (rather than `7z`).</sup>
+
 | Switch | Effect | Trade-offs |
 | - | - | - |
 | `-m0=lzma2` | LZMA2 handles mixed data well and multithreads cleanly. | Slightly slower to decompress than plain LZMA. |
