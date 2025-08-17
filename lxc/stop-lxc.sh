@@ -2,9 +2,6 @@
 
 set -euo pipefail
 
-## No touchy
-## =========
-
 if [[ $# -eq 0 || -z ${1-} ]]; then
 	# No LXCs specified, so stop all running LXCs
 	lxc-ls --running
@@ -12,7 +9,6 @@ if [[ $# -eq 0 || -z ${1-} ]]; then
 else
 	RUNNING=$@
 fi
-
 
 for lxcName in "${RUNNING[@]}"; do
 	echo; echo "Stopping LXC ${lxcName}..."
