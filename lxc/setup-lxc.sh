@@ -1,5 +1,6 @@
 #!/bin/bash
 
+set -euo pipefail
 
 ## Input parameters
 ## ================
