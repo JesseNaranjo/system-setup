@@ -1,11 +1,15 @@
 #!/bin/bash
 
+echo "USING PRIVILEGED CONTAINERS IS UNSAFE"
+
 ## Input parameters
+## ================
 
 CONTAINER_NAME=$1
 ID_NO=${2:-100000}
 
 ## No touchy
+## =========
 
 SUB_ENTRY="root:${ID_NO}:65536"
 
