@@ -82,7 +82,8 @@ echo
 # Prepare ${LIMITED_USER}'s default LXC configuration
 
 LIMITED_USER_HOME="/home/$LIMITED_USER"
-LIMITED_USER_CONFIG_LXC="$LIMITED_USER_HOME/.config/lxc"
+LIMITED_USER_CONFIG="$LIMITED_USER_HOME/.config"
+LIMITED_USER_CONFIG_LXC="$LIMITED_USER_CONFIG/lxc"
 
 echo "Creating user's default LXC config..."
 echo "$LIMITED_USER_CONFIG_LXC/default.conf"
@@ -114,5 +115,7 @@ if [[ -d "$LIMITED_USER_HOME/.local" ]]; then
 		fi
 	fi
 fi
+
+chown -v ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG"
 chown -v ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_LXC"
 chown -v ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_LXC/default.conf"
