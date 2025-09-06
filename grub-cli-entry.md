@@ -20,3 +20,16 @@ Note: you can start the Graphical interface using the following command:
 ```
 systemctl isolate graphical.target
 ```
+
+## screen blanking (turn off screen)
+
+Below are the steps if you only want the tty / console to go blank after some time.
+
+1. Edit `/etc/grub.d/10_linux` (or whichever script file is the one that boots into the tty / console)
+2. Add a section at the top with the following lines:
+   ```
+   ### CUSTOM OVERRIDES
+   GRUB_CMDLINE_LINUX="${GRUB_CMDLINE_LINUX} consoleblank=300"
+   ### END
+   ```
+3. Run `update-grub`
