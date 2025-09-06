@@ -77,9 +77,9 @@ alias lxc-ls='lxc-ls -f'
 ## `7z` compression helpers
 
 ```
-alias 7z-ultra1="7z a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on -mmt"
-alias 7z-ultra2="7z a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt"
-alias 7z-ultra3="7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt"
+alias 7z-ultra1='7z a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on -mmt'
+alias 7z-ultra2='7z a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt'
+alias 7z-ultra3='7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt'
 ```
 
 <sup>Note: keep in mind that 7-zip on macOS (installed via Homebrew) is called using `7zz` (rather than `7z`).</sup>
