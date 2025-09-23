@@ -95,7 +95,7 @@ mirror_git_and_lfs() {
   if command -v git-lfs >/dev/null 2>&1; then
     say "Pushing LFS objects for ${name}"
     (cd "$gd" && git lfs fetch --all >/dev/null 2>&1 || true)
-    (cd "$gd" && git lfs push --all "$https_dst" >/dev/null 2>&1 || true)
+    (cd "$gd" && git lfs push --all "$https_dst" || true)
   fi
   rm -rf "$gd"
 }
@@ -112,7 +112,7 @@ copy_wiki() {
     gh repo edit "${DST_ORG}/${name}" --enable-wiki >/dev/null || true
     rm -rf "$wd"
     git clone --bare "$src_wiki" "$wd" >/dev/null 2>&1 || { warn "wiki clone failed for ${name}"; return; }
-    git --git-dir="$wd" push --mirror "$dst_wiki" >/dev/null 2>&1 || warn "wiki push failed for ${name}"
+    git --git-dir="$wd" push --mirror "$dst_wiki" || warn "wiki push failed for ${name}"
     rm -rf "$wd"
   else
     warn "No wiki detected for ${name}"
