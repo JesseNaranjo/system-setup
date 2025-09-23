@@ -119,3 +119,35 @@ fi
 chown -v ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG"
 chown -v ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_LXC"
 chown -v ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_LXC/default.conf"
+
+# Prepare systemd lxc-start@.service
+
+LIMITED_USER_CONFIG_SYSTEMD="$LIMITED_USER_CONFIG/systemd"
+LIMITED_USER_CONFIG_SYSTEMD_USER="$LIMITED_USER_CONFIG_SYSTEMD/user"
+
+echo "Creating user's systemd service..."
+echo "$LIMITED_USER_CONFIG_SYSTEMD_USER/lxc-start@.service"
+mkdir -p "$LIMITED_USER_CONFIG_SYSTEMD_USER"
+
+tee "$LIMITED_USER_CONFIG_SYSTEMD_USER/lxc-bg-start@.service" > /dev/null <<EOF
+[Unit]
+Description=LXC Container %i
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/lxc-start -n %i
+ExecStop=/usr/bin/lxc-stop -n %i
+RemainAfterExit=yes
+
+[Install]
+WantedBy=default.target
+EOF
+
+echo
+
+echo "Enabling user's systemd services lingering..."
+loginctl enable-linger ${LIMITED_USER}
+
+chown -v ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_SYSTEMD"
+chown -v ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_SYSTEMD_USER"
+chown -v ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_SYSTEMD_USER/lxc-bg-start@.service"
