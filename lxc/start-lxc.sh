@@ -12,7 +12,8 @@ fi
 
 for lxcName in "$@"; do
 	echo; echo "Starting LXC ${lxcName}..."
-	lxc-unpriv-start --name "${lxcName}"
+	# lxc-unpriv-start --name "${lxcName}"
+	systemctl --user start "lxc-bg-start@${lxcName}.service"
 	sleep 1s
 done
 
