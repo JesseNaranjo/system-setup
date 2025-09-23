@@ -17,6 +17,8 @@ for lxcName in "${RUNNING[@]}"; do
 	echo; echo "Stopping LXC ${lxcName}..."
 	lxc-stop --name "${lxcName}"
 	sleep 1s
+	systemctl --user stop "lxc-bg-start@${lxcName}.service"
+	sleep 1s
 done
 
 echo
