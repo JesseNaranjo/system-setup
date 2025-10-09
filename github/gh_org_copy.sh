@@ -44,9 +44,10 @@ fi
 GH_TOKEN="$(gh auth token)"
 
 # --- Helpers --------------------------------------------------------------------
+sayHeader() { printf "\n\033[1;34m[%s] %s\033[0m\n" "$(date +'%H:%M:%S')" "$*"; }
 say() { printf "\n\033[1;34m==> %s\033[0m\n" "$*"; }
-warn() { printf "\033[1;33m[warn]\033[0m %s\n" "$*"; }
-err() { printf "\033[1;31m[err]\033[0m  %s\n" "$*"; }
+warn() { printf "\n\033[1;33m[warn]\033[0m %s\n" "$*"; }
+err() { printf "\n\033[1;31m[err]\033[0m  %s\n" "$*"; }
 
 # gh api wrapper with light throttling for mutating calls
 gh_post() { sleep "$THROTTLE"; gh api "$@"; }
@@ -66,7 +67,7 @@ create_dest_repo() {
   say "Creating ${DST_ORG}/${name} (${visibility})"
   gh repo create "${DST_ORG}/${name}" "--${visibility}" >/dev/null
   # enable Discussions up front
-  gh repo edit  "${DST_ORG}/${name}" --enable-discussions >/dev/null || true
+  gh repo edit  "${DST_ORG}/${name}" --enable-discussions --default-branch development >/dev/null || true
   echo "$visibility"
 }
 
@@ -79,7 +80,7 @@ mirror_git_and_lfs() {
 
   rm -rf "$gd"
   say "Cloning (mirror) ${SRC_ORG}/${name}"
-  git clone --mirror "$https_src" "$gd" >/dev/null 2>&1
+  git clone --mirror "$https_src" "$gd"
 
   # Strip PR/remote/replace/original namespaces so push won’t be rejected
   say "Stripping read-only ref namespaces"
@@ -94,7 +95,7 @@ mirror_git_and_lfs() {
 
   if command -v git-lfs >/dev/null 2>&1; then
     say "Pushing LFS objects for ${name}"
-    (cd "$gd" && git lfs fetch --all >/dev/null 2>&1 || true)
+    (cd "$gd" && git lfs fetch --all || true)
     (cd "$gd" && git lfs push --all "$https_dst" || true)
   fi
   rm -rf "$gd"
@@ -168,38 +169,36 @@ dest_milestone_number_by_title() {
     #--jq ".[] | select(.title==\"$title\") | .number" | head -n1
 }
 
-# Create issue in destination; returns NEW_ISSUE_NUMBER via echo
-#create_issue_in_dest() {
-#  local name="$1" title="$2" body="$3" labels_json="$4" milestone_title="$5" state="$6"
-#  local json=$(jq -n \
-#      --arg t "$title" \
-#      --arg b "$body" \
-#      --argjson lbls "$labels_json" \
-#      --arg ms "$milestone_title" \
-#      '{title:$t, body:$b, labels:$lbls}
-#       + ( ($ms|length)>0
-#           ? { milestone: (env.MSNUM|tonumber) }
-#           : {} )')
-#  local msnum=""
-#  if [[ -n "$milestone_title" ]]; then
-#    export MSNUM="$(dest_milestone_number_by_title "$name" "$milestone_title" || true)"
-#    [[ -n "$MSNUM" ]] || unset MSNUM
-#  fi
+# Return the number of an existing *issue* (not PR) with the exact title in DEST,
+# or "" if none. Handles pagination and empty pages without jq errors.
+exists_issue_number_by_title() {
+  local repo="$1" title="$2" created="$3"
 
-#  local resp
-#  resp="$(echo "$json" | gh_post -X POST "/repos/${DST_ORG}/${name}/issues" --input -)"
-#  local newnum; newnum="$(echo "$resp" | jq -r '.number')"
+  # List all issues (state=all), paginate, and filter:
+  # - .[]? : safe iterate (no error on null)
+  # - exclude PRs: select(has("pull_request")|not)
+  # - exact title match (case-sensitive)
+  gh api --paginate "/repos/${DST_ORG}/${repo}/issues?state=all&per_page=100" 2>/dev/null \
+  | jq -r --arg t "$title" --arg d "$created" '
+      .[]?                                                              # tolerate empty/null arrays
+      | select(has("pull_request")|not)                                 # only real issues
+      | select(.title == $t and (.created_at|split("T")[0]) == $d)      # exact title match
+      | .number
+    ' | head -n1
+}
 
-#  # Close it if source was closed
-#  if [[ "$state" == "closed" ]]; then
-#    gh_post -X PATCH "/repos/${DST_ORG}/${name}/issues/${newnum}" -f state=closed >/dev/null
-#  fi
-
-#  echo "$newnum"
-#}
 # Create issue in destination; echoes NEW_ISSUE_NUMBER
 create_issue_in_dest() {
-  local name="$1" title="$2" body="$3" labels_json="$4" milestone_title="$5" state="$6"
+  local name="$1" title="$2" body="$3" labels_json="$4" milestone_title="$5" state="$6" created="$7"
+
+  # Idempotency: skip if exact title exists already
+  local existing
+  existing="$(exists_issue_number_by_title "$name" "$title" "$created" || true)"
+  if [[ -n "$existing" ]]; then
+    say "Issue already exists in ${DST_ORG}/${name} with same title, skipping (##${existing})"
+    echo "" # signal "skipped" to caller
+    return 0
+  fi
 
   # Resolve milestone number in DEST (if any)
   local msnum=""
@@ -251,33 +250,61 @@ post_issue_comment() {
 copy_issues() {
   local name="$1"
   say "Copying issues for ${name}"
-  gh api --paginate "/repos/${SRC_ORG}/${name}/issues?state=all&per_page=100" \
-    --jq '.[] | select(has("pull_request")|not) | @base64' \
-  | while read -r row; do
-      _j() { echo "$row" | base64 --decode | jq -r "$1"; }
-      local NUM=$(_j '.number')
-      local TITLE=$(_j '.title')
-      local BODY=$(_j '.body // ""')
-      local URL=$(_j '.html_url')
-      local STATE=$(_j '.state')
-      local AUTHOR=$(_j '.user.login')
-      local CREATED=$(_j '.created_at')
-      local MIL_TITLE=$(_j '.milestone.title // ""')
-      local LABELS_JSON=$(_j '[.labels[].name]')
 
-      local NEWBODY="(Copied from ${URL}\nOriginal author: @${AUTHOR} • Opened: ${CREATED})\n\n${BODY}"
-      local NEWNUM
-      NEWNUM="$(create_issue_in_dest "$name" "$TITLE" "$NEWBODY" "$LABELS_JSON" "$MIL_TITLE" "$STATE")"
+  # Page through all issues from SOURCE (includes PRs; we filter those out)
+  gh api --paginate "/repos/${SRC_ORG}/${name}/issues?state=all&per_page=100" 2>/dev/null \
+  | jq -c '
+      .[]?                                         # tolerate empty/null pages
+      | select(has("pull_request")|not)            # exclude PRs
+      | {
+          number, title,
+          body: (.body // ""),
+          html_url, state,
+          author: (.user.login // "unknown"),
+          created_at,
+          milestone_title: (.milestone.title // ""),
+          labels: ((.labels // []) | map(.name))   # always an array
+        }
+    ' \
+  | while IFS= read -r row; do
+      # extract fields
+      local NUM TITLE BODY URL STATE AUTHOR CREATED MIL_TITLE
+      local LABELS_JSON
 
-      # Comments
-      gh api --paginate "/repos/${SRC_ORG}/${name}/issues/${NUM}/comments?per_page=100" \
-        --jq '.[] | @base64' \
-      | while read -r crow; do
-          _k() { echo "$crow" | base64 --decode | jq -r "$1"; }
-          local CAUTH=$(_k '.user.login')
-          local CDATE=$(_k '.created_at')
-          local CBODY=$(_k '.body // ""')
-          local CMT="**(Original comment by @${CAUTH} on ${CDATE})**\n\n${CBODY}"
+      TITLE=$(jq -r '.title'        <<<"$row")
+      BODY=$(jq  -r '.body'         <<<"$row")
+      URL=$(jq   -r '.html_url'     <<<"$row")
+      STATE=$(jq -r '.state'        <<<"$row")
+      AUTHOR=$(jq -r '.author'      <<<"$row")
+      CREATED=$(jq -r '.created_at' <<<"$row")
+      MIL_TITLE=$(jq -r '.milestone_title' <<<"$row")
+      LABELS_JSON=$(jq -c '.labels' <<<"$row")     # already a JSON array
+
+      # normalize labels again just in case
+      [[ -z "$LABELS_JSON" || "$LABELS_JSON" == "null" ]] && LABELS_JSON='[]'
+
+      local NEWBODY NEWNUM
+      NEWBODY="(Copied from ${URL}\nOriginal author: @${AUTHOR} • Opened: ${CREATED})\n\n${BODY}"
+
+      # create issue (function returns "" if duplicate title exists)
+      NEWNUM="$(create_issue_in_dest "$name" "$TITLE" "$NEWBODY" "$LABELS_JSON" "$MIL_TITLE" "$STATE" "$CREATED")"
+
+      # If we skipped (duplicate), don't try to post comments
+      if [[ -z "$NEWNUM" ]]; then
+        continue
+      fi
+
+      # Copy comments for this issue
+      local num
+      num=$(jq -r '.number' <<<"$row")
+      gh api --paginate "/repos/${SRC_ORG}/${name}/issues/${num}/comments?per_page=100" 2>/dev/null \
+      | jq -c '.[]? | {author:(.user.login // "unknown"), created_at, body:(.body // "")}' \
+      | while IFS= read -r crow; do
+          local CAUTH CDATE CBODY CMT
+          CAUTH=$(jq -r '.author'      <<<"$crow")
+          CDATE=$(jq -r '.created_at'  <<<"$crow")
+          CBODY=$(jq -r '.body'        <<<"$crow")
+          CMT="**(Original comment by @${CAUTH} on ${CDATE})**\n\n${CBODY}"
           post_issue_comment "$name" "$NEWNUM" "$CMT"
         done
     done
@@ -300,6 +327,7 @@ copy_prs_as_archival_issues() {
       local BODY=$(_j '.body // ""')
       local URL=$(_j '.html_url')
       local STATE=$(_j '.state')
+      local CREATED=$(_j '.created_at')
       local MRGD=$(_j '.merged_at // ""')
       local USER=$(_j '.user.login')
       local BASE=$(_j '.base.ref')
@@ -309,8 +337,14 @@ copy_prs_as_archival_issues() {
       local HEADER="**Archived Pull Request** — copied from ${URL}\n\n- Original author: @${USER}\n- State: ${STATE}\n- Merged at: ${MRGD}\n- Base: \`${BASE}\`\n- Head: \`${HEAD}\`\n"
       local IBODY="${HEADER}\n---\n${BODY}"
       local LABELS_JSON="$(jq -cn --arg a "$LABEL_ARCHIVED_PR" '[$a]')"
+
       local NEWNUM
-      NEWNUM="$(create_issue_in_dest "$name" "$ITITLE" "$IBODY" "$LABELS_JSON" "" "$STATE")"
+      NEWNUM="$(create_issue_in_dest "$name" "$ITITLE" "$IBODY" "$LABELS_JSON" "" "$STATE" "$CREATED")"
+
+      # If skipped (duplicate archival issue already exists), do NOT add comments again
+      if [[ -z "$NEWNUM" ]]; then
+        continue;
+      fi
 
       #say "Processing PR # ${PRNUM}"
 
@@ -440,7 +474,7 @@ gh api --paginate "/orgs/${SRC_ORG}/repos?per_page=100" \
     ARCH=$(_j '.archived')
     HAS_WIKI=$(_j '.has_wiki')
 
-    say "Processing repo: ${NAME}"
+    sayHeader "Processing repo: ${NAME}"
     create_dest_repo "$NAME" "$VIS" >/dev/null
 
     mirror_git_and_lfs "$NAME"
