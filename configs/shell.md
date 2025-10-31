@@ -21,7 +21,7 @@ alias lsblk='lsblk -o "NAME,FSTYPE,FSVER,LABEL,FSAVAIL,SIZE,FSUSE%,MOUNTPOINTS,U
 alias lxc-ls='lxc-ls -f'
 alias screen="screen -T $TERM"
 
-# `7z` compression helpers
+# 7z compression helpers
 alias 7z-ultra1='7z a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on -mmt'
 alias 7z-ultra2='7z a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt'
 alias 7z-ultra3='7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt'
