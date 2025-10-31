@@ -48,7 +48,7 @@ The script checks for and optionally installs:
 - **nano** - text editor
 - **screen** - terminal multiplexer
 - **htop** - interactive process viewer
-- **p7zip-full** - 7-Zip compression utility
+- **7zip** - 7-Zip compression utility
 - **openssh-server** - SSH server
 
 ## What Gets Configured

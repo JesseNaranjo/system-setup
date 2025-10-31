@@ -140,7 +140,7 @@ check_and_install_packages() {
             ["nano"]="nano"
             ["screen"]="screen"
             ["htop"]="htop"
-            ["7zip"]="p7zip-full"
+            ["7zip"]="7zip"
             ["openssh-server"]="openssh-server"
         )
         
