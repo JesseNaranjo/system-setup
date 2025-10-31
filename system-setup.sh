@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 
-# setup-configs.sh - Configure nano, screen, and shell settings
+# system-setup.sh - System configuration and package management
 # Implements configurations from nano.md, screen-gnu.md, and shell.md
 #
-# Usage: ./setup-configs.sh
+# Usage: ./system-setup.sh
 #
-# This script configures:
-# - nano editor with sensible defaults and syntax highlighting
-# - GNU screen with scrollback and mouse support
-# - Shell aliases for safety and convenience (supports bash/zsh)
+# This script:
+# - Checks and optionally installs required packages (nano, screen, htop, 7zip, openssh-server)
+# - Configures nano editor with sensible defaults and syntax highlighting
+# - Configures GNU screen with scrollback and mouse support
+# - Configures shell aliases for safety and convenience (supports bash/zsh)
 #
 # The script automatically detects Linux vs macOS and configures appropriately.
 # It provides options for user-specific or system-wide installation.
@@ -23,8 +24,10 @@ readonly YELLOW='\033[1;33m'
 readonly BLUE='\033[0;34m'
 readonly NC='\033[0m' # No Color
 
-# Global variable to track backed up files (simpler approach)
+# Global variables
 BACKED_UP_FILES=""
+NANO_INSTALLED=false
+SCREEN_INSTALLED=false
 
 # Detect OS
 detect_os() {
@@ -52,6 +55,134 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Check if a package is installed on macOS (brew)
+is_brew_package_installed() {
+    local package="$1"
+    brew list "$package" &>/dev/null
+}
+
+# Check if a package is installed on Linux (apt)
+is_apt_package_installed() {
+    local package="$1"
+    dpkg -l "$package" 2>/dev/null | grep -q "^ii"
+}
+
+# Check and optionally install packages
+check_and_install_packages() {
+    local os="$1"
+    local packages_to_install=()
+    
+    print_info "Checking for required packages..."
+    echo ""
+    
+    if [[ "$os" == "macos" ]]; then
+        # Check if brew is installed
+        if ! command -v brew &>/dev/null; then
+            print_error "Homebrew is not installed. Please install it from https://brew.sh"
+            return 1
+        fi
+        
+        # Define packages to check for macOS
+        declare -A packages=(
+            ["nano"]="nano"
+            ["screen"]="screen"
+            ["htop"]="htop"
+            ["sevenzip"]="p7zip"
+        )
+        
+        # Check each package
+        for display_name in "${!packages[@]}"; do
+            package="${packages[$display_name]}"
+            if is_brew_package_installed "$package"; then
+                print_success "$display_name is already installed"
+                if [[ "$display_name" == "nano" ]]; then
+                    NANO_INSTALLED=true
+                elif [[ "$display_name" == "screen" ]]; then
+                    SCREEN_INSTALLED=true
+                fi
+            else
+                print_warning "$display_name is not installed"
+                read -p "Would you like to install $display_name? (y/N): " -r
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    packages_to_install+=("$package")
+                    if [[ "$display_name" == "nano" ]]; then
+                        NANO_INSTALLED=true
+                    elif [[ "$display_name" == "screen" ]]; then
+                        SCREEN_INSTALLED=true
+                    fi
+                fi
+            fi
+        done
+        
+        # Install all selected packages at once
+        if [[ ${#packages_to_install[@]} -gt 0 ]]; then
+            echo ""
+            print_info "Installing packages: ${packages_to_install[*]}"
+            if brew install "${packages_to_install[@]}"; then
+                print_success "All packages installed successfully"
+            else
+                print_error "Failed to install some packages"
+                return 1
+            fi
+        fi
+        
+    elif [[ "$os" == "linux" ]]; then
+        # Check if apt is available
+        if ! command -v apt &>/dev/null; then
+            print_error "apt package manager not found. This script requires apt (Debian/Ubuntu-based systems)"
+            return 1
+        fi
+        
+        # Define packages to check for Linux
+        declare -A packages=(
+            ["nano"]="nano"
+            ["screen"]="screen"
+            ["htop"]="htop"
+            ["7zip"]="p7zip-full"
+            ["openssh-server"]="openssh-server"
+        )
+        
+        # Check each package
+        for display_name in "${!packages[@]}"; do
+            package="${packages[$display_name]}"
+            if is_apt_package_installed "$package"; then
+                print_success "$display_name is already installed"
+                if [[ "$display_name" == "nano" ]]; then
+                    NANO_INSTALLED=true
+                elif [[ "$display_name" == "screen" ]]; then
+                    SCREEN_INSTALLED=true
+                fi
+            else
+                print_warning "$display_name is not installed"
+                read -p "Would you like to install $display_name? (y/N): " -r
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    packages_to_install+=("$package")
+                    if [[ "$display_name" == "nano" ]]; then
+                        NANO_INSTALLED=true
+                    elif [[ "$display_name" == "screen" ]]; then
+                        SCREEN_INSTALLED=true
+                    fi
+                fi
+            fi
+        done
+        
+        # Install all selected packages at once
+        if [[ ${#packages_to_install[@]} -gt 0 ]]; then
+            echo ""
+            print_info "Installing packages: ${packages_to_install[*]}"
+            if sudo apt update && sudo apt install -y "${packages_to_install[@]}"; then
+                print_success "All packages installed successfully"
+            else
+                print_error "Failed to install some packages"
+                return 1
+            fi
+        fi
+    fi
+    
+    echo ""
+    return 0
 }
 
 # Backup file if it exists (only once per session)
@@ -448,8 +579,8 @@ configure_shell() {
 
 # Main function
 main() {
-    print_info "System Configuration Setup Script (Idempotent Mode)"
-    print_info "==================================================="
+    print_info "System Setup and Configuration Script (Idempotent Mode)"
+    print_info "======================================================="
     
     local os
     os=$(detect_os)
@@ -460,20 +591,38 @@ main() {
         exit 1
     fi
     
+    # Check and install packages
+    echo ""
+    print_info "Step 1: Package Management"
+    print_info "---------------------------"
+    if ! check_and_install_packages "$os"; then
+        print_error "Package management failed. Continuing with configuration for installed packages..."
+    fi
+    
     # Get user preferences
     echo ""
+    print_info "Step 2: Configuration"
+    print_info "---------------------"
     print_info "This script will configure:"
-    echo "  - nano editor settings"
-    echo "  - GNU screen settings"
-    echo "  - Shell aliases and configurations"
+    if [[ "$NANO_INSTALLED" == true ]]; then
+        echo "  ✓ nano editor settings"
+    else
+        echo "  ✗ nano editor (not installed, will be skipped)"
+    fi
+    if [[ "$SCREEN_INSTALLED" == true ]]; then
+        echo "  ✓ GNU screen settings"
+    else
+        echo "  ✗ GNU screen (not installed, will be skipped)"
+    fi
+    echo "  ✓ Shell aliases and configurations"
     echo ""
     print_info "The script will only add or update configurations that are missing or different."
     print_info "Existing configurations matching the desired values will be left unchanged."
     echo ""
     
-    read -p "Continue? (y/N): " -r
+    read -p "Continue with configuration? (y/N): " -r
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        print_info "Setup cancelled."
+        print_info "Configuration cancelled."
         exit 0
     fi
     
@@ -498,14 +647,26 @@ main() {
     
     # Configure each component
     echo ""
-    configure_nano "$os" "$scope"
-    echo ""
-    configure_screen "$os" "$scope"
-    echo ""
+    if [[ "$NANO_INSTALLED" == true ]]; then
+        configure_nano "$os" "$scope"
+        echo ""
+    else
+        print_info "Skipping nano configuration (not installed)"
+        echo ""
+    fi
+    
+    if [[ "$SCREEN_INSTALLED" == true ]]; then
+        configure_screen "$os" "$scope"
+        echo ""
+    else
+        print_info "Skipping screen configuration (not installed)"
+        echo ""
+    fi
+    
     configure_shell "$os" "$scope"
     
     echo ""
-    print_success "Configuration setup complete!"
+    print_success "Setup complete!"
     print_info "The script made only necessary changes to bring your configuration up to date."
     print_info "You may need to restart your terminal or source your shell configuration file for all changes to take effect."
 }
