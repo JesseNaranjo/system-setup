@@ -34,13 +34,15 @@ The script will:
 ### nano Editor
 - Sensible defaults (line numbers, mouse support, syntax highlighting, etc.)
 - macOS: Includes homebrew syntax definitions path
-- Files: `~/.nanorc` or `/etc/nanorc`
+- **User scope**: `~/.nanorc`
+- **System scope**: `/etc/nanorc`
 
 ### GNU Screen
 - Startup message disabled
 - Scrollback buffer set to 9999 lines
 - Mouse tracking enabled
-- Files: `~/.screenrc` or `/etc/screenrc`
+- **User scope**: `~/.screenrc`
+- **System scope**: `/etc/screenrc`
 
 ### Shell Aliases
 - Safety aliases for `cp`, `mv`, `rm`, `chmod`, `chown`
@@ -48,7 +50,8 @@ The script will:
 - Utility aliases for `lsblk`, `lxc-ls`, and 7z compression
 - Linux: Uses GNU coreutils options
 - macOS: Uses BSD-compatible options and `zsh` configuration
-- Files: `~/.bashrc` (Linux) or `~/.zshrc` (macOS)
+- **User scope**: Current user's `~/.bashrc` (Linux) or `~/.zshrc` (macOS)
+- **System scope**: All users in `/home/` - iterates over each user's `.bashrc` or `.zshrc`
 
 ## Requirements
 

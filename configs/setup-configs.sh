@@ -303,24 +303,34 @@ configure_screen() {
     print_success "GNU screen configuration completed for $config_file"
 }
 
-# Configure shell
-configure_shell() {
+# Configure shell for a specific user
+configure_shell_for_user() {
     local os="$1"
-    
-    print_info "Configuring shell aliases..."
+    local home_dir="$2"
+    local username="$3"
     
     # Determine shell config file
     local shell_config
     if [[ "$os" == "macos" ]]; then
-        shell_config="$HOME/.zshrc"
+        shell_config="${home_dir}/.zshrc"
     else
-        shell_config="$HOME/.bashrc"
+        shell_config="${home_dir}/.bashrc"
+    fi
+    
+    # Skip if home directory doesn't exist or is not accessible
+    if [[ ! -d "$home_dir" ]]; then
+        print_warning "Home directory $home_dir does not exist, skipping user $username"
+        return 0
     fi
     
     # Create config file if it doesn't exist
     if [[ ! -f "$shell_config" ]]; then
-        print_info "Creating new shell configuration file: $shell_config"
+        print_info "Creating new shell configuration file: $shell_config (user: $username)"
         touch "$shell_config"
+        # Set proper ownership if running as root
+        if [[ $EUID -eq 0 ]] && [[ "$username" != "root" ]]; then
+            chown "$username:$username" "$shell_config" 2>/dev/null || true
+        fi
     fi
     
     # Add configuration header if file is empty or doesn't have our header
@@ -391,8 +401,49 @@ configure_shell() {
         add_alias_if_needed "$shell_config" "7z-ultra3" "7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 3"
     fi
     
-    print_success "Shell configuration completed for $shell_config"
-    print_info "Note: You may need to run 'source $shell_config' or restart your terminal for changes to take effect."
+    print_success "Shell configuration completed for $shell_config (user: $username)"
+}
+
+# Configure shell
+configure_shell() {
+    local os="$1"
+    local scope="$2"  # "user" or "system"
+    
+    print_info "Configuring shell aliases..."
+    
+    if [[ "$scope" == "system" ]]; then
+        # System-wide configuration: iterate over all users in /home/
+        if [[ ! -d "/home" ]]; then
+            print_warning "/home directory does not exist, cannot configure system-wide"
+            return 1
+        fi
+        
+        print_info "Configuring shell for all users in /home/..."
+        
+        # Find all user home directories in /home
+        local user_count=0
+        for user_home in /home/*; do
+            if [[ -d "$user_home" ]]; then
+                local username
+                username=$(basename "$user_home")
+                print_info "Processing user: $username"
+                configure_shell_for_user "$os" "$user_home" "$username"
+                ((user_count++))
+            fi
+        done
+        
+        if [[ $user_count -eq 0 ]]; then
+            print_warning "No user directories found in /home/"
+        else
+            print_success "Configured shell for $user_count user(s)"
+        fi
+    else
+        # User-specific configuration: configure for current user only
+        print_info "Configuring shell for current user..."
+        configure_shell_for_user "$os" "$HOME" "$(whoami)"
+    fi
+    
+    print_info "Note: Users may need to run 'source ~/.bashrc' (or ~/.zshrc) or restart their terminal for changes to take effect."
 }
 
 # Main function
@@ -426,11 +477,11 @@ main() {
         exit 0
     fi
     
-    # Ask for scope (user vs system) for nano and screen only
+    # Ask for scope (user vs system) for all components
     echo ""
-    print_info "Choose configuration scope for nano and screen:"
-    echo "  1) User-specific (recommended)"
-    echo "  2) System-wide (requires root privileges)"
+    print_info "Choose configuration scope:"
+    echo "  1) User-specific (recommended) - configures for current user only"
+    echo "  2) System-wide (requires root) - nano/screen system-wide, shell for all users in /home/"
     read -p "Enter choice (1-2): " -r scope_choice
     
     local scope
@@ -451,7 +502,7 @@ main() {
     echo ""
     configure_screen "$os" "$scope"
     echo ""
-    configure_shell "$os"
+    configure_shell "$os" "$scope"
     
     echo ""
     print_success "Configuration setup complete!"
