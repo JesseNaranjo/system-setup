@@ -86,10 +86,10 @@ check_and_install_packages() {
         
         # Define packages to check for macOS
         declare -A packages=(
+            ["7zip"]="sevenzip"
+            ["htop"]="htop"
             ["nano"]="nano"
             ["screen"]="screen"
-            ["htop"]="htop"
-            ["sevenzip"]="p7zip"
         )
         
         # Check each package
@@ -137,11 +137,11 @@ check_and_install_packages() {
         
         # Define packages to check for Linux
         declare -A packages=(
-            ["nano"]="nano"
-            ["screen"]="screen"
-            ["htop"]="htop"
             ["7zip"]="7zip"
+            ["htop"]="htop"
+            ["nano"]="nano"
             ["openssh-server"]="openssh-server"
+            ["screen"]="screen"
         )
         
         # Check each package
@@ -372,7 +372,7 @@ configure_nano() {
     # Add homebrew include for macOS
     if [[ "$os" == "macos" ]]; then
         local include_line='include "/opt/homebrew/share/nano/*.nanorc"'
-        if ! config_exists "$config_file" 'include "/opt/homebrew/share/nano/\*\.nanorc"'; then
+        if ! config_exists "$config_file" "$include_line"; then
             print_info "+ Adding homebrew nano syntax definitions to $config_file"
             echo "" >> "$config_file"
             echo "# homebrew nano syntax definitions" >> "$config_file"
