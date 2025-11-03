@@ -127,10 +127,13 @@ check_and_install_packages() {
 
         # Define packages to check for macOS
         declare -A packages=(
-            ["7zip"]="sevenzip"
+            ["7-zip"]="sevenzip"
+            ["ca-certificates"]="ca-certificates"
+            ["Git"]="git"
             ["htop"]="htop"
-            ["nano"]="nano"
-            ["screen"]="screen"
+            ["Nano Editor"]="nano"
+            ["Ollama"]="ollama"
+            ["GNU Screen"]="screen"
         )
 
         # Check each package
@@ -178,11 +181,15 @@ check_and_install_packages() {
 
         # Define packages to check for Linux
         declare -A packages=(
-            ["7zip"]="7zip"
+            ["7-zip"]="7zip"
+            ["aptitude"]="aptitude"
+            ["ca-certificates"]="ca-certificates"
+            ["cURL"]="curl"
+            ["Git"]="git"
             ["htop"]="htop"
-            ["nano"]="nano"
-            ["openssh-server"]="openssh-server"
-            ["screen"]="screen"
+            ["Nano Editor"]="nano"
+            ["OpenSSH Server"]="openssh-server"
+            ["GNU Screen"]="screen"
         )
 
         # Check each package
