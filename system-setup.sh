@@ -98,19 +98,104 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Check if a package is installed on macOS (brew)
-is_brew_package_installed() {
-    local package="$1"
-    brew list "$package" &>/dev/null
+# Check if a package is installed (unified for both macOS and Linux)
+is_package_installed() {
+    local os="$1"
+    local package="$2"
+
+    if [[ "$os" == "macos" ]]; then
+        brew list "$package" &>/dev/null
+    else
+        dpkg -l "$package" 2>/dev/null | grep -q "^ii"
+    fi
 }
 
-# Check if a package is installed on Linux (apt)
-is_apt_package_installed() {
-    local package="$1"
-    dpkg -l "$package" 2>/dev/null | grep -q "^ii"
+# Verify package manager is available
+verify_package_manager() {
+    local os="$1"
+
+    if [[ "$os" == "macos" ]]; then
+        if ! command -v brew &>/dev/null; then
+            print_error "Homebrew is not installed. Please install it from https://brew.sh"
+            return 1
+        fi
+    else
+        if ! command -v apt &>/dev/null; then
+            print_error "apt package manager not found. This script requires apt (Debian/Ubuntu-based systems)"
+            return 1
+        fi
+    fi
+    return 0
 }
 
-# Check and optionally install packages
+# Get package definitions for the given OS
+get_package_list() {
+    local os="$1"
+
+    if [[ "$os" == "macos" ]]; then
+        # macOS packages (brew)
+        echo "7-zip:sevenzip"
+        echo "ca-certificates:ca-certificates"
+        echo "Git:git"
+        echo "htop:htop"
+        echo "Nano Editor:nano"
+        echo "Ollama:ollama"
+        echo "GNU Screen:screen"
+    else
+        # Linux packages (apt)
+        echo "7-zip:7zip"
+        echo "aptitude:aptitude"
+        echo "ca-certificates:ca-certificates"
+        echo "cURL:curl"
+        echo "Git:git"
+        echo "htop:htop"
+        echo "Nano Editor:nano"
+        echo "OpenSSH Server:openssh-server"
+        echo "GNU Screen:screen"
+    fi
+}
+
+# Track if specific packages are installed for later configuration
+track_special_packages() {
+    local package="$1"
+
+    if [[ "$package" == "nano" ]]; then
+        NANO_INSTALLED=true
+    elif [[ "$package" == "screen" ]]; then
+        SCREEN_INSTALLED=true
+    fi
+}
+
+# Install packages based on OS
+install_packages() {
+    local os="$1"
+    shift
+    local packages=("$@")
+
+    if [[ ${#packages[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    echo ""
+    print_info "Installing packages: ${packages[*]}"
+
+    if [[ "$os" == "macos" ]]; then
+        if brew install "${packages[@]}"; then
+            print_success "All packages installed successfully"
+            return 0
+        fi
+    else
+        if sudo apt update && sudo apt install -y "${packages[@]}"; then
+            print_success "All packages installed successfully"
+            return 0
+        fi
+    fi
+
+    print_error "Failed to install some packages"
+    return 1
+}
+
+# Check and optionally install packages (consolidated logic)
 check_and_install_packages() {
     local os="$1"
     local packages_to_install=()
@@ -118,115 +203,29 @@ check_and_install_packages() {
     print_info "Checking for required packages..."
     echo ""
 
-    if [[ "$os" == "macos" ]]; then
-        # Check if brew is installed
-        if ! command -v brew &>/dev/null; then
-            print_error "Homebrew is not installed. Please install it from https://brew.sh"
-            return 1
-        fi
+    # Verify package manager availability
+    if ! verify_package_manager "$os"; then
+        return 1
+    fi
 
-        # Define packages to check for macOS
-        declare -A packages=(
-            ["7-zip"]="sevenzip"
-            ["ca-certificates"]="ca-certificates"
-            ["Git"]="git"
-            ["htop"]="htop"
-            ["Nano Editor"]="nano"
-            ["Ollama"]="ollama"
-            ["GNU Screen"]="screen"
-        )
-
-        # Check each package
-        for display_name in "${!packages[@]}"; do
-            package="${packages[$display_name]}"
-            if is_brew_package_installed "$package"; then
-                print_success "$display_name is already installed"
-                if [[ "$display_name" == "nano" ]]; then
-                    NANO_INSTALLED=true
-                elif [[ "$display_name" == "screen" ]]; then
-                    SCREEN_INSTALLED=true
-                fi
-            else
-                print_warning "$display_name is not installed"
-                read -p "Would you like to install $display_name? (y/N): " -r
-                if [[ $REPLY =~ ^[Yy]$ ]]; then
-                    packages_to_install+=("$package")
-                    if [[ "$display_name" == "nano" ]]; then
-                        NANO_INSTALLED=true
-                    elif [[ "$display_name" == "screen" ]]; then
-                        SCREEN_INSTALLED=true
-                    fi
-                fi
-            fi
-        done
-
-        # Install all selected packages at once
-        if [[ ${#packages_to_install[@]} -gt 0 ]]; then
-            echo ""
-            print_info "Installing packages: ${packages_to_install[*]}"
-            if brew install "${packages_to_install[@]}"; then
-                print_success "All packages installed successfully"
-            else
-                print_error "Failed to install some packages"
-                return 1
+    # Process each package in the list
+    while IFS=: read -r display_name package; do
+        if is_package_installed "$os" "$package"; then
+            print_success "$display_name is already installed"
+            track_special_packages "$package"
+        else
+            print_warning "$display_name is not installed"
+            read -p "Would you like to install $display_name? (y/N): " -r
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                packages_to_install+=("$package")
+                track_special_packages "$package"
             fi
         fi
+    done < <(get_package_list "$os")
 
-    elif [[ "$os" == "linux" ]]; then
-        # Check if apt is available
-        if ! command -v apt &>/dev/null; then
-            print_error "apt package manager not found. This script requires apt (Debian/Ubuntu-based systems)"
-            return 1
-        fi
-
-        # Define packages to check for Linux
-        declare -A packages=(
-            ["7-zip"]="7zip"
-            ["aptitude"]="aptitude"
-            ["ca-certificates"]="ca-certificates"
-            ["cURL"]="curl"
-            ["Git"]="git"
-            ["htop"]="htop"
-            ["Nano Editor"]="nano"
-            ["OpenSSH Server"]="openssh-server"
-            ["GNU Screen"]="screen"
-        )
-
-        # Check each package
-        for display_name in "${!packages[@]}"; do
-            package="${packages[$display_name]}"
-            if is_apt_package_installed "$package"; then
-                print_success "$display_name is already installed"
-                if [[ "$display_name" == "nano" ]]; then
-                    NANO_INSTALLED=true
-                elif [[ "$display_name" == "screen" ]]; then
-                    SCREEN_INSTALLED=true
-                fi
-            else
-                print_warning "$display_name is not installed"
-                read -p "Would you like to install $display_name? (y/N): " -r
-                if [[ $REPLY =~ ^[Yy]$ ]]; then
-                    packages_to_install+=("$package")
-                    if [[ "$display_name" == "nano" ]]; then
-                        NANO_INSTALLED=true
-                    elif [[ "$display_name" == "screen" ]]; then
-                        SCREEN_INSTALLED=true
-                    fi
-                fi
-            fi
-        done
-
-        # Install all selected packages at once
-        if [[ ${#packages_to_install[@]} -gt 0 ]]; then
-            echo ""
-            print_info "Installing packages: ${packages_to_install[*]}"
-            if sudo apt update && sudo apt install -y "${packages_to_install[@]}"; then
-                print_success "All packages installed successfully"
-            else
-                print_error "Failed to install some packages"
-                return 1
-            fi
-        fi
+    # Install all selected packages at once
+    if ! install_packages "$os" "${packages_to_install[@]}"; then
+        return 1
     fi
 
     echo ""
