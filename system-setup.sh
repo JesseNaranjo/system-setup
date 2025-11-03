@@ -30,26 +30,25 @@ if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
     else
         # Display large error message if neither curl nor wget is available
         echo ""
-        echo "╔═══════════════════════════════════════════════════════════════════════════════╗"
-        echo "║                                                                               ║"
-        echo "║                          ⚠️  SELF-UPDATE NOT AVAILABLE  ⚠️                    ║"
-        echo "║                                                                               ║"
-        echo "║  Neither 'curl' nor 'wget' is installed on this system.                      ║"
-        echo "║  Self-updating functionality requires one of these tools.                    ║"
-        echo "║                                                                               ║"
-        echo "║  To enable self-updating, please install one of the following:               ║"
-        echo "║                                                                               ║"
-        echo "║    • curl  (recommended)                                                      ║"
-        echo "║    • wget                                                                     ║"
-        echo "║                                                                               ║"
-        echo "║  Installation commands:                                                       ║"
-        echo "║    macOS:    brew install curl                                                ║"
-        echo "║    Debian:   sudo apt install curl                                            ║"
-        echo "║    RHEL:     sudo yum install curl                                            ║"
-        echo "║                                                                               ║"
-        echo "║  Continuing with local version of the script...                              ║"
-        echo "║                                                                               ║"
-        echo "╚═══════════════════════════════════════════════════════════════════════════════╝"
+        echo "╔═════════════════════════════════════════════════════════════════════╗"
+        echo "║                                                                     ║"
+        echo "║                  ⚠️  SELF-UPDATE NOT AVAILABLE  ⚠️                  ║"
+        echo "║                                                                     ║"
+        echo "║    Neither 'curl' nor 'wget' is installed on this system.           ║"
+        echo "║    Self-updating functionality requires one of these tools.         ║"
+        echo "║                                                                     ║"
+        echo "║    To enable self-updating, please install one of the following:    ║"
+        echo "║      • curl  (recommended)                                          ║"
+        echo "║      • wget                                                         ║"
+        echo "║                                                                     ║"
+        echo "║    Installation commands:                                           ║"
+        echo "║      macOS:    brew install curl                                    ║"
+        echo "║      Debian:   sudo apt install curl                                ║"
+        echo "║      RHEL:     sudo yum install curl                                ║"
+        echo "║                                                                     ║"
+        echo "║    Continuing with local version of the script...                   ║"
+        echo "║                                                                     ║"
+        echo "╚═════════════════════════════════════════════════════════════════════╝"
         echo ""
     fi
 
@@ -132,7 +131,7 @@ detect_os() {
 
 # Print colored output
 print_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    echo -e "${BLUE}[   INFO]${NC} $1"
 }
 
 print_success() {
@@ -144,7 +143,7 @@ print_warning() {
 }
 
 print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[  ERROR]${NC} $1"
 }
 
 # Check if a package is installed (unified for both macOS and Linux)
