@@ -112,6 +112,7 @@ readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
 readonly YELLOW='\033[1;33m'
 readonly BLUE='\033[0;34m'
+readonly GRAY='\033[0;90m'
 readonly NC='\033[0m' # No Color
 
 # Global variables
@@ -147,6 +148,10 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}[  ERROR]${NC} $1"
+}
+
+print_backup() {
+    echo -e "${GRAY}[ BACKUP]${NC} $1"
 }
 
 # Check if a package is installed (unified for both macOS and Linux)
@@ -316,7 +321,7 @@ backup_file() {
             chown "$owner" "$backup" 2>/dev/null || true
         fi
 
-        print_info "Backed up existing file: $file -> $backup"
+        print_backup "- Backed up existing file: $file -> $backup"
         BACKED_UP_FILES="$BACKED_UP_FILES $file"
     fi
 }
