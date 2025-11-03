@@ -298,10 +298,10 @@ backup_file() {
     if [[ -f "$file" ]]; then
         local backup
         backup="${file}.backup.$(date +%Y%m%d_%H%M%S)"
-        
+
         # Copy file with preserved permissions (-p flag)
         cp -p "$file" "$backup"
-        
+
         # Preserve ownership (requires appropriate permissions)
         # Get the owner and group of the original file
         if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -315,7 +315,7 @@ backup_file() {
             owner=$(stat -c "%u:%g" "$file")
             chown "$owner" "$backup" 2>/dev/null || true
         fi
-        
+
         print_info "Backed up existing file: $file -> $backup"
         BACKED_UP_FILES="$BACKED_UP_FILES $file"
     fi
@@ -719,6 +719,152 @@ configure_shell() {
     print_info "Note: Users may need to run 'source ~/.bashrc' (or ~/.zshrc) or restart their terminal for changes to take effect."
 }
 
+# Configure swap memory
+configure_swap() {
+    local os="$1"
+
+    # Swap configuration is only relevant for Linux systems
+    if [[ "$os" != "linux" ]]; then
+        print_info "Swap configuration is only applicable to Linux systems"
+        return 0
+    fi
+
+    # Check if running inside an LXC container
+    if [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ; then
+        print_info "Swap configuration is not recommended inside LXC containers (detected LXC environment)"
+        return 0
+    fi
+
+    # Additional LXC detection methods as fallback
+    if [[ -f /.dockerenv ]] || [[ -f /run/systemd/container ]] || grep -q lxc /proc/1/cgroup 2>/dev/null; then
+        print_info "Swap configuration is not recommended inside containers (detected container environment)"
+        return 0
+    fi
+
+    print_info "Checking swap configuration..."
+
+    # Check if swap is currently enabled
+    local swap_status
+    swap_status=$(swapon --show 2>/dev/null)
+
+    if [[ -n "$swap_status" ]]; then
+        print_info "- Swap is already enabled:"
+        echo "- $swap_status"
+        return 0
+    fi
+
+    print_info "- Swap is currently disabled"
+    echo ""
+    print_info "Recommended swap sizes:"
+    echo "          • ≤2 GB RAM: 2x RAM"
+    echo "          • >2 GB RAM: 1.5x RAM"
+    echo ""
+
+    local response
+    read -p "Would you like to set up swap? (y/N): " -r response
+
+    if [[ ! $response =~ ^[Yy]$ ]]; then
+        print_info "- Keeping swap disabled (no changes made)"
+        return 0
+    fi
+    echo ""
+
+    print_info "Configuring swap memory..."
+
+    # Get total RAM in GB
+    local ram_kb
+    ram_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+    local ram_gb=$((ram_kb / 1024 / 1024))
+
+    # Calculate swap size based on RAM
+    local swap_gb
+    if [[ $ram_gb -le 2 ]]; then
+        swap_gb=$((ram_gb * 2))
+    else
+        # 1.5x RAM (using integer math: multiply by 3 and divide by 2)
+        swap_gb=$(((ram_gb * 3) / 2))
+    fi
+
+    # Convert to MB for dd count
+    local swap_mb=$((swap_gb * 1024))
+
+    print_info "- Detected RAM: ${ram_gb} GB"
+    print_info "- Calculated swap size: ${swap_gb} GB (${swap_mb} MB)"
+    echo ""
+
+    # Get system's temp directory
+    local tmp_dir="${TMPDIR:-/tmp}"
+    tmp_dir="${tmp_dir%/}"  # Remove trailing slash if present
+    local swapfile="${tmp_dir}/swapfile"
+
+    print_info "Creating swap file at ${swapfile}..."
+
+    # Create swap file
+    if ! dd if=/dev/zero of="$swapfile" bs=1M count="$swap_mb" 2>&1 | grep -v "records in\|records out"; then
+        print_error "Failed to create swap file"
+        return 1
+    fi
+
+    print_success "- Swap file created (${swap_gb} GB)"
+
+    # Set correct permissions
+    print_info "- Setting permissions on swap file (chmod)..."
+    if ! chmod 600 "$swapfile"; then
+        print_error "Failed to set permissions on swap file"
+        rm -f "$swapfile"
+        return 1
+    fi
+
+    # Format as swap
+    print_info "- Formatting swap file (mkswap)..."
+    if ! mkswap "$swapfile" 2>&1 | tail -n 1; then
+        print_error "Failed to format swap file"
+        rm -f "$swapfile"
+        return 1
+    fi
+
+    # Enable swap
+    print_info "- Enabling swap (swapon)..."
+    if ! swapon "$swapfile"; then
+        print_error "Failed to enable swap"
+        rm -f "$swapfile"
+        return 1
+    fi
+
+    print_success "Swap enabled successfully"
+    echo ""
+
+    # Show current swap status
+    print_info "Current swap status:"
+    swapon --show || true
+    echo ""
+
+    # Check if fstab entry exists
+    local fstab_entry="${swapfile} none swap sw 0 0"
+    if grep -q "^${swapfile}" /etc/fstab 2>/dev/null; then
+        print_info "Swap entry already exists in /etc/fstab"
+    else
+        print_info "Adding swap entry to /etc/fstab for persistence across reboots..."
+
+        # Backup fstab before modification
+        backup_file /etc/fstab
+
+        # Add entry to fstab
+        echo "" >> /etc/fstab
+        echo "# Swap file - managed by system-setup.sh" >> /etc/fstab
+        echo "# Added: $(date)" >> /etc/fstab
+        echo "$fstab_entry" >> /etc/fstab
+
+        print_success "- Swap entry added to /etc/fstab"
+    fi
+    echo ""
+
+    print_info "Swap configuration complete"
+    print_info "- Swap is automatically activated on reboot"
+    print_info "- Swap file: ${swapfile}"
+    print_info "- Size: ${swap_gb} GB"
+}
+
 # Configure SSH to use socket-based activation instead of service
 configure_ssh_socket() {
     local os="$1"
@@ -932,6 +1078,12 @@ main() {
 
     configure_shell "$os" "$scope"
     echo ""
+
+    # Configure swap memory if system scope (Linux only)
+    if [[ "$scope" == "system" ]]; then
+        configure_swap "$os"
+        echo ""
+    fi
 
     # Configure OpenSSH Server if installed (Linux only, system scope only)
     if [[ "$scope" == "system" ]]; then
