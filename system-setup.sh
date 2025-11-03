@@ -486,6 +486,9 @@ configure_shell_for_user() {
 
     # Configure safety aliases
     if ! grep -q "Aliases to help avoid some mistakes" "$shell_config" 2>/dev/null; then
+        backup_file "$shell_config"
+        add_change_header "$shell_config" "shell"
+
         echo "" >> "$shell_config"
         echo "# Aliases to help avoid some mistakes:" >> "$shell_config"
     fi
