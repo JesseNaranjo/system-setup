@@ -73,17 +73,17 @@ is_apt_package_installed() {
 check_and_install_packages() {
     local os="$1"
     local packages_to_install=()
-    
+
     print_info "Checking for required packages..."
     echo ""
-    
+
     if [[ "$os" == "macos" ]]; then
         # Check if brew is installed
         if ! command -v brew &>/dev/null; then
             print_error "Homebrew is not installed. Please install it from https://brew.sh"
             return 1
         fi
-        
+
         # Define packages to check for macOS
         declare -A packages=(
             ["7zip"]="sevenzip"
@@ -91,7 +91,7 @@ check_and_install_packages() {
             ["nano"]="nano"
             ["screen"]="screen"
         )
-        
+
         # Check each package
         for display_name in "${!packages[@]}"; do
             package="${packages[$display_name]}"
@@ -115,7 +115,7 @@ check_and_install_packages() {
                 fi
             fi
         done
-        
+
         # Install all selected packages at once
         if [[ ${#packages_to_install[@]} -gt 0 ]]; then
             echo ""
@@ -127,14 +127,14 @@ check_and_install_packages() {
                 return 1
             fi
         fi
-        
+
     elif [[ "$os" == "linux" ]]; then
         # Check if apt is available
         if ! command -v apt &>/dev/null; then
             print_error "apt package manager not found. This script requires apt (Debian/Ubuntu-based systems)"
             return 1
         fi
-        
+
         # Define packages to check for Linux
         declare -A packages=(
             ["7zip"]="7zip"
@@ -143,7 +143,7 @@ check_and_install_packages() {
             ["openssh-server"]="openssh-server"
             ["screen"]="screen"
         )
-        
+
         # Check each package
         for display_name in "${!packages[@]}"; do
             package="${packages[$display_name]}"
@@ -167,7 +167,7 @@ check_and_install_packages() {
                 fi
             fi
         done
-        
+
         # Install all selected packages at once
         if [[ ${#packages_to_install[@]} -gt 0 ]]; then
             echo ""
@@ -180,7 +180,7 @@ check_and_install_packages() {
             fi
         fi
     fi
-    
+
     echo ""
     return 0
 }
@@ -188,12 +188,12 @@ check_and_install_packages() {
 # Backup file if it exists (only once per session)
 backup_file() {
     local file="$1"
-    
+
     # Check if already backed up in this session
     if [[ "$BACKED_UP_FILES" == *"$file"* ]]; then
         return 0
     fi
-    
+
     if [[ -f "$file" ]]; then
         local backup
         backup="${file}.backup.$(date +%Y%m%d_%H%M%S)"
@@ -207,7 +207,7 @@ backup_file() {
 config_exists() {
     local file="$1"
     local pattern="$2"
-    
+
     [[ -f "$file" ]] && grep -qE "^[[:space:]]*${pattern}" "$file"
 }
 
@@ -215,9 +215,9 @@ config_exists() {
 get_config_value() {
     local file="$1"
     local setting="$2"
-    
+
     if [[ -f "$file" ]]; then
-        grep -E "^[[:space:]]*${setting}" "$file" | head -n 1 | sed -E "s/^[[:space:]]*${setting}[[:space:]]*//"
+        grep -E "^[[:space:]]*${setting}" "$file" | head -n 1 | sed -E "s/^[[:space:]]*${setting}[[:space:]]*//" || true
     fi
 }
 
@@ -227,17 +227,17 @@ add_config_if_needed() {
     local setting="$2"
     local value="$3"
     local description="$4"
-    
+
     local full_setting
     if [[ -n "$value" ]]; then
         full_setting="${setting} ${value}"
     else
         full_setting="${setting}"
     fi
-    
+
     local current_value
     current_value=$(get_config_value "$file" "$setting")
-    
+
     if config_exists "$file" "$setting"; then
         if [[ "$current_value" == "$value" ]]; then
             print_info "✓ $description already configured correctly"
@@ -253,7 +253,7 @@ add_config_if_needed() {
     else
         print_info "+ Adding $description to $file"
     fi
-    
+
     echo "$full_setting" >> "$file"
 }
 
@@ -263,11 +263,11 @@ add_alias_if_needed() {
     local alias_name="$2"
     local alias_value="$3"
     local description="$4"
-    
+
     local pattern="alias[[:space:]]+${alias_name}="
     local full_alias="alias ${alias_name}='${alias_value}'"
     local current_value
-    
+
     if config_exists "$file" "$pattern"; then
         current_value=$(get_config_value "$file" "$pattern" | sed "s/^'//; s/'$//")
         if [[ "$current_value" == "$alias_value" ]]; then
@@ -284,7 +284,7 @@ add_alias_if_needed() {
     else
         print_info "+ Adding $description alias to $file"
     fi
-    
+
     echo "$full_alias" >> "$file"
 }
 
@@ -294,11 +294,11 @@ add_export_if_needed() {
     local var_name="$2"
     local var_value="$3"
     local description="$4"
-    
+
     local pattern="export[[:space:]]+${var_name}="
     local full_export="export ${var_name}=${var_value}"
     local current_value
-    
+
     if config_exists "$file" "$pattern"; then
         current_value=$(get_config_value "$file" "$pattern")
         if [[ "$current_value" == "$var_value" ]]; then
@@ -315,7 +315,7 @@ add_export_if_needed() {
     else
         print_info "+ Adding $description export to $file"
     fi
-    
+
     echo "$full_export" >> "$file"
 }
 
@@ -323,9 +323,9 @@ add_export_if_needed() {
 configure_nano() {
     local os="$1"
     local scope="$2"  # "user" or "system"
-    
+
     print_info "Configuring nano..."
-    
+
     local config_file
     if [[ "$scope" == "system" ]]; then
         config_file="/etc/nanorc"
@@ -336,13 +336,13 @@ configure_nano() {
     else
         config_file="$HOME/.nanorc"
     fi
-    
+
     # Create config file if it doesn't exist
     if [[ ! -f "$config_file" ]]; then
         print_info "Creating new nano configuration file: $config_file"
         touch "$config_file"
     fi
-    
+
     # Add configuration header if file is empty or doesn't have our header
     if [[ ! -s "$config_file" ]] || ! grep -q "setup-configs.sh" "$config_file" 2>/dev/null; then
         echo "" >> "$config_file"
@@ -350,11 +350,11 @@ configure_nano() {
         echo "# Last updated: $(date)" >> "$config_file"
         echo "" >> "$config_file"
     fi
-    
+
     # Check if we need to backup (only if we're going to make changes)
     local original_size
     original_size=$(wc -l < "$config_file" 2>/dev/null || echo "0")
-    
+
     # Configure each setting individually
     add_config_if_needed "$config_file" "set atblanks" "" "atblanks setting"
     add_config_if_needed "$config_file" "set autoindent" "" "autoindent setting"
@@ -368,7 +368,7 @@ configure_nano() {
     add_config_if_needed "$config_file" "set smarthome" "" "smarthome setting"
     add_config_if_needed "$config_file" "set softwrap" "" "softwrap setting"
     add_config_if_needed "$config_file" "set tabsize" "4" "tab size setting"
-    
+
     # Add homebrew include for macOS
     if [[ "$os" == "macos" ]]; then
         local include_line='include "/opt/homebrew/share/nano/*.nanorc"'
@@ -381,14 +381,14 @@ configure_nano() {
             print_info "✓ homebrew nano syntax definitions already configured"
         fi
     fi
-    
+
     # Check if we made changes and backup if needed
     local new_size
     new_size=$(wc -l < "$config_file" 2>/dev/null || echo "0")
     if [[ "$new_size" -gt "$original_size" ]]; then
         print_info "Configuration changes made to $config_file"
     fi
-    
+
     print_success "Nano configuration completed for $config_file"
 }
 
@@ -396,9 +396,9 @@ configure_nano() {
 configure_screen() {
     local os="$1"
     local scope="$2"  # "user" or "system"
-    
+
     print_info "Configuring GNU screen..."
-    
+
     local config_file
     if [[ "$scope" == "system" ]]; then
         config_file="/etc/screenrc"
@@ -409,13 +409,13 @@ configure_screen() {
     else
         config_file="$HOME/.screenrc"
     fi
-    
+
     # Create config file if it doesn't exist
     if [[ ! -f "$config_file" ]]; then
         print_info "Creating new screen configuration file: $config_file"
         touch "$config_file"
     fi
-    
+
     # Add configuration header if file is empty or doesn't have our header
     if [[ ! -s "$config_file" ]] || ! grep -q "setup-configs.sh" "$config_file" 2>/dev/null; then
         echo "" >> "$config_file"
@@ -423,14 +423,14 @@ configure_screen() {
         echo "# Last updated: $(date)" >> "$config_file"
         echo "" >> "$config_file"
     fi
-    
+
     # Configure each setting individually
     add_config_if_needed "$config_file" "startup_message" "off" "startup message setting"
     add_config_if_needed "$config_file" "defscrollback" "9999" "default scrollback setting"
     add_config_if_needed "$config_file" "scrollback" "9999" "scrollback setting"
     add_config_if_needed "$config_file" "defmousetrack" "on" "default mouse tracking setting"
     add_config_if_needed "$config_file" "mousetrack" "on" "mouse tracking setting"
-    
+
     print_success "GNU screen configuration completed for $config_file"
 }
 
@@ -439,7 +439,7 @@ configure_shell_for_user() {
     local os="$1"
     local home_dir="$2"
     local username="$3"
-    
+
     # Determine shell config file
     local shell_config
     if [[ "$os" == "macos" ]]; then
@@ -447,13 +447,13 @@ configure_shell_for_user() {
     else
         shell_config="${home_dir}/.bashrc"
     fi
-    
+
     # Skip if home directory doesn't exist or is not accessible
     if [[ ! -d "$home_dir" ]]; then
         print_warning "Home directory $home_dir does not exist, skipping user $username"
         return 0
     fi
-    
+
     # Create config file if it doesn't exist
     if [[ ! -f "$shell_config" ]]; then
         print_info "Creating new shell configuration file: $shell_config (user: $username)"
@@ -463,7 +463,7 @@ configure_shell_for_user() {
             chown "$username:$username" "$shell_config" 2>/dev/null || true
         fi
     fi
-    
+
     # Add configuration header if file is empty or doesn't have our header
     if [[ ! -s "$shell_config" ]] || ! grep -q "setup-configs.sh" "$shell_config" 2>/dev/null; then
         echo "" >> "$shell_config"
@@ -471,24 +471,24 @@ configure_shell_for_user() {
         echo "# Last updated: $(date)" >> "$shell_config"
         echo "" >> "$shell_config"
     fi
-    
+
     # Configure safety aliases
     if ! grep -q "Aliases to help avoid some mistakes" "$shell_config" 2>/dev/null; then
         echo "" >> "$shell_config"
         echo "# Aliases to help avoid some mistakes:" >> "$shell_config"
     fi
-    
+
     add_alias_if_needed "$shell_config" "cp" "cp -aiv" "copy with attributes and interactive"
     add_alias_if_needed "$shell_config" "mkdir" "mkdir -v" "verbose mkdir"
     add_alias_if_needed "$shell_config" "mv" "mv -iv" "interactive move"
     add_alias_if_needed "$shell_config" "rm" "rm -Iv" "interactive remove"
-    
+
     if ! grep -q "verbose chmod" "$shell_config" 2>/dev/null; then
         echo "" >> "$shell_config"
     fi
     add_alias_if_needed "$shell_config" "chmod" "chmod -vv" "verbose chmod"
     add_alias_if_needed "$shell_config" "chown" "chown -vv" "verbose chown"
-    
+
     # OS-specific ls configuration
     if [[ "$os" == "macos" ]]; then
         if ! grep -q "macOS ls configuration" "$shell_config" 2>/dev/null; then
@@ -504,7 +504,7 @@ configure_shell_for_user() {
         fi
         add_alias_if_needed "$shell_config" "ls" "ls --color=auto --group-directories-first -AFHhl" "Linux ls with colors and formatting"
     fi
-    
+
     # Additional utility aliases
     if ! grep -q "Additional utility aliases" "$shell_config" 2>/dev/null; then
         echo "" >> "$shell_config"
@@ -512,7 +512,7 @@ configure_shell_for_user() {
     fi
     add_alias_if_needed "$shell_config" "lsblk" 'lsblk -o "NAME,FSTYPE,FSVER,LABEL,FSAVAIL,SIZE,FSUSE%,MOUNTPOINTS,UUID"' "enhanced lsblk"
     add_alias_if_needed "$shell_config" "lxc-ls" "lxc-ls -f" "formatted lxc-ls"
-    
+
     # 7z compression helpers
     if [[ "$os" == "macos" ]]; then
         if ! grep -q "7z compression helpers (macOS" "$shell_config" 2>/dev/null; then
@@ -531,7 +531,7 @@ configure_shell_for_user() {
         add_alias_if_needed "$shell_config" "7z-ultra2" "7z a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 2"
         add_alias_if_needed "$shell_config" "7z-ultra3" "7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 3"
     fi
-    
+
     print_success "Shell configuration completed for $shell_config (user: $username)"
 }
 
@@ -539,18 +539,22 @@ configure_shell_for_user() {
 configure_shell() {
     local os="$1"
     local scope="$2"  # "user" or "system"
-    
+
     print_info "Configuring shell aliases..."
-    
+
     if [[ "$scope" == "system" ]]; then
-        # System-wide configuration: iterate over all users in /home/
+        # Configure root user
+        print_info "Configuring shell for root user..."
+        configure_shell_for_user "$os" "/root" "root"
+
+        # System-wide configuration: iterate over all users in /home/ and root
         if [[ ! -d "/home" ]]; then
             print_warning "/home directory does not exist, cannot configure system-wide"
             return 1
         fi
-        
+
         print_info "Configuring shell for all users in /home/..."
-        
+
         # Find all user home directories in /home
         local user_count=0
         for user_home in /home/*; do
@@ -562,7 +566,7 @@ configure_shell() {
                 ((user_count++))
             fi
         done
-        
+
         if [[ $user_count -eq 0 ]]; then
             print_warning "No user directories found in /home/"
         else
@@ -573,7 +577,7 @@ configure_shell() {
         print_info "Configuring shell for current user..."
         configure_shell_for_user "$os" "$HOME" "$(whoami)"
     fi
-    
+
     print_info "Note: Users may need to run 'source ~/.bashrc' (or ~/.zshrc) or restart their terminal for changes to take effect."
 }
 
@@ -581,16 +585,16 @@ configure_shell() {
 main() {
     print_info "System Setup and Configuration Script (Idempotent Mode)"
     print_info "======================================================="
-    
+
     local os
     os=$(detect_os)
     print_info "Detected OS: $os"
-    
+
     if [[ "$os" == "unknown" ]]; then
         print_error "Unknown operating system. This script supports Linux and macOS."
         exit 1
     fi
-    
+
     # Check and install packages
     echo ""
     print_info "Step 1: Package Management"
@@ -598,7 +602,7 @@ main() {
     if ! check_and_install_packages "$os"; then
         print_error "Package management failed. Continuing with configuration for installed packages..."
     fi
-    
+
     # Get user preferences
     echo ""
     print_info "Step 2: Configuration"
@@ -619,32 +623,32 @@ main() {
     print_info "The script will only add or update configurations that are missing or different."
     print_info "Existing configurations matching the desired values will be left unchanged."
     echo ""
-    
+
     read -p "Continue with configuration? (y/N): " -r
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         print_info "Configuration cancelled."
         exit 0
     fi
-    
+
     # Ask for scope (user vs system) for all components
     echo ""
     print_info "Choose configuration scope:"
     echo "  1) User-specific (recommended) - configures for current user only"
     echo "  2) System-wide (requires root) - nano/screen system-wide, shell for all users in /home/"
     read -p "Enter choice (1-2): " -r scope_choice
-    
+
     local scope
     case "$scope_choice" in
         1) scope="user" ;;
         2) scope="system" ;;
-        *) 
+        *)
             print_warning "Invalid choice. Defaulting to user-specific."
             scope="user"
             ;;
     esac
-    
+
     print_info "Using scope: $scope"
-    
+
     # Configure each component
     echo ""
     if [[ "$NANO_INSTALLED" == true ]]; then
@@ -654,7 +658,7 @@ main() {
         print_info "Skipping nano configuration (not installed)"
         echo ""
     fi
-    
+
     if [[ "$SCREEN_INSTALLED" == true ]]; then
         configure_screen "$os" "$scope"
         echo ""
@@ -662,11 +666,12 @@ main() {
         print_info "Skipping screen configuration (not installed)"
         echo ""
     fi
-    
+
     configure_shell "$os" "$scope"
-    
+
     echo ""
     print_success "Setup complete!"
+    echo ""
     print_info "The script made only necessary changes to bring your configuration up to date."
     print_info "You may need to restart your terminal or source your shell configuration file for all changes to take effect."
 }
