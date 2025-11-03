@@ -43,8 +43,8 @@ if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
         echo "║                                                                     ║"
         echo "║    Installation commands:                                           ║"
         echo "║      macOS:    brew install curl                                    ║"
-        echo "║      Debian:   sudo apt install curl                                ║"
-        echo "║      RHEL:     sudo yum install curl                                ║"
+        echo "║      Debian:   apt install curl                                     ║"
+        echo "║      RHEL:     yum install curl                                     ║"
         echo "║                                                                     ║"
         echo "║    Continuing with local version of the script...                   ║"
         echo "║                                                                     ║"
@@ -238,7 +238,7 @@ install_packages() {
             return 0
         fi
     else
-        if sudo apt update && sudo apt install -y "${packages[@]}"; then
+        if apt update && apt install -y "${packages[@]}"; then
             print_success "All packages installed successfully"
             return 0
         fi
@@ -735,7 +735,7 @@ configure_ssh_socket() {
     if [[ "$ssh_socket_enabled" == true && "$ssh_service_enabled" == true ]]; then
         print_warning "Both ssh.socket and ssh.service are enabled (conflicting configuration)"
         print_info "Disabling ssh.service to avoid conflicts..."
-        if sudo systemctl disable --now ssh.service 2>/dev/null; then
+        if systemctl disable --now ssh.service 2>/dev/null; then
             print_success "- ssh.service disabled and stopped"
             print_success "- SSH is now using socket-based activation only"
         else
@@ -781,7 +781,7 @@ configure_ssh_socket() {
     # Disable and stop ssh.service if it's enabled
     if [[ "$ssh_service_enabled" == true ]]; then
         print_info "Disabling ssh.service..."
-        if sudo systemctl disable --now ssh.service 2>/dev/null; then
+        if systemctl disable --now ssh.service 2>/dev/null; then
             print_success "- ssh.service disabled and stopped"
         else
             print_warning "Could not disable ssh.service (it may not be active)"
@@ -798,7 +798,7 @@ configure_ssh_socket() {
     # Give user a moment to read the message
     sleep 3
 
-    if sudo systemctl edit ssh.socket; then
+    if systemctl edit ssh.socket; then
         print_success "ssh.socket configuration saved"
     else
         print_error "Failed to edit ssh.socket configuration"
@@ -808,13 +808,13 @@ configure_ssh_socket() {
 
     # Enable and start ssh.socket
     print_info "Enabling and starting ssh.socket..."
-    if sudo systemctl enable --now ssh.socket; then
+    if systemctl enable --now ssh.socket; then
         print_success "- ssh.socket enabled and started"
         echo ""
 
         # Show status
         print_info "Current SSH socket status:"
-        sudo systemctl status ssh.socket --no-pager --lines=10 || true
+        systemctl status ssh.socket --no-pager --lines=10 || true
     else
         print_error "Failed to enable ssh.socket"
         return 1
