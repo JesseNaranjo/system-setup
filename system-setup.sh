@@ -26,6 +26,7 @@ readonly NC='\033[0m' # No Color
 
 # Global variables
 BACKED_UP_FILES=""
+HEADER_ADDED_FILES=""
 NANO_INSTALLED=false
 SCREEN_INSTALLED=false
 
@@ -203,6 +204,36 @@ backup_file() {
     fi
 }
 
+# Add change header to file (only once per session)
+add_change_header() {
+    local file="$1"
+    local config_type="$2"  # "nano", "screen", or "shell"
+
+    # Check if header already added in this session
+    if [[ "$HEADER_ADDED_FILES" == *"$file"* ]]; then
+        return 0
+    fi
+
+    # Add header before changes
+    echo "" >> "$file"
+    case "$config_type" in
+        nano)
+            echo "# nano configuration - managed by system-setup.sh" >> "$file"
+            ;;
+        screen)
+            echo "# GNU screen configuration - managed by system-setup.sh" >> "$file"
+            ;;
+        shell)
+            echo "# Shell configuration - managed by system-setup.sh" >> "$file"
+            ;;
+    esac
+    echo "# Updated: $(date)" >> "$file"
+    echo "" >> "$file"
+
+    # Mark this file as having header added
+    HEADER_ADDED_FILES="$HEADER_ADDED_FILES $file"
+}
+
 # Check if a configuration line exists in a file
 config_exists() {
     local file="$1"
@@ -223,10 +254,11 @@ get_config_value() {
 
 # Add configuration line only if it doesn't exist or has different value
 add_config_if_needed() {
-    local file="$1"
-    local setting="$2"
-    local value="$3"
-    local description="$4"
+    local config_type="$1"
+    local file="$2"
+    local setting="$3"
+    local value="$4"
+    local description="$5"
 
     local full_setting
     if [[ -n "$value" ]]; then
@@ -245,13 +277,17 @@ add_config_if_needed() {
         else
             print_info "✗ $description has different value: '$current_value' (expected: '$value')"
             print_warning "Updating $description in $file"
-            # Backup before making changes
+            # Backup and add header before making changes
             backup_file "$file"
+            add_change_header "$file" "$config_type"
             # Remove old line and add new one (use temp file for cross-platform compatibility)
             grep -v "^[[:space:]]*${setting}" "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
         fi
     else
         print_info "+ Adding $description to $file"
+        # Backup and add header before making changes
+        backup_file "$file"
+        add_change_header "$file" "$config_type"
     fi
 
     echo "$full_setting" >> "$file"
@@ -276,18 +312,23 @@ add_alias_if_needed() {
         else
             print_info "✗ $description alias has different value: '$current_value' (expected: '$alias_value')"
             print_warning "Updating $description alias in $file"
-            # Backup before making changes
+            # Backup and add header before making changes
             backup_file "$file"
+            add_change_header "$file" "shell"
             # Remove old line and add new one (use temp file for cross-platform compatibility)
             grep -v "^[[:space:]]*alias[[:space:]]*${alias_name}=" "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
         fi
     else
         print_info "+ Adding $description alias to $file"
+        # Backup and add header before making changes
+        backup_file "$file"
+        add_change_header "$file" "shell"
     fi
 
     echo "$full_alias" >> "$file"
 }
 
+# Add export only if it doesn't exist or has different value
 # Add export only if it doesn't exist or has different value
 add_export_if_needed() {
     local file="$1"
@@ -307,13 +348,17 @@ add_export_if_needed() {
         else
             print_info "✗ $description export has different value: '$current_value' (expected: '$var_value')"
             print_warning "Updating $description export in $file"
-            # Backup before making changes
+            # Backup and add header before making changes
             backup_file "$file"
+            add_change_header "$file" "shell"
             # Remove old line and add new one (use temp file for cross-platform compatibility)
             grep -v "^[[:space:]]*export[[:space:]]*${var_name}=" "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
         fi
     else
         print_info "+ Adding $description export to $file"
+        # Backup and add header before making changes
+        backup_file "$file"
+        add_change_header "$file" "shell"
     fi
 
     echo "$full_export" >> "$file"
@@ -343,56 +388,33 @@ configure_nano() {
         touch "$config_file"
     fi
 
-    # Save original content before adding header
-    local temp_backup="${config_file}.before_header.$$"
-    cp "$config_file" "$temp_backup"
-
-    # Track original size to detect if changes are made
-    local original_size
-    original_size=$(wc -l < "$config_file" 2>/dev/null || echo "0")
-
-    # Add update header before making changes
-    echo "" >> "$config_file"
-    echo "# nano configuration - managed by system-setup.sh" >> "$config_file"
-    echo "# Updated: $(date)" >> "$config_file"
-    echo "" >> "$config_file"
-
     # Configure each setting individually
-    add_config_if_needed "$config_file" "set atblanks" "" "atblanks setting"
-    add_config_if_needed "$config_file" "set autoindent" "" "autoindent setting"
-    add_config_if_needed "$config_file" "set constantshow" "" "constantshow setting"
-    add_config_if_needed "$config_file" "set indicator" "" "indicator setting"
-    add_config_if_needed "$config_file" "set linenumbers" "" "line numbers setting"
-    add_config_if_needed "$config_file" "set minibar" "" "minibar setting"
-    add_config_if_needed "$config_file" "set mouse" "" "mouse support setting"
-    add_config_if_needed "$config_file" "set multibuffer" "" "multibuffer setting"
-    add_config_if_needed "$config_file" "set nonewlines" "" "nonewlines setting"
-    add_config_if_needed "$config_file" "set smarthome" "" "smarthome setting"
-    add_config_if_needed "$config_file" "set softwrap" "" "softwrap setting"
-    add_config_if_needed "$config_file" "set tabsize" "4" "tab size setting"
+    add_config_if_needed "nano" "$config_file" "set atblanks" "" "atblanks setting"
+    add_config_if_needed "nano" "$config_file" "set autoindent" "" "autoindent setting"
+    add_config_if_needed "nano" "$config_file" "set constantshow" "" "constantshow setting"
+    add_config_if_needed "nano" "$config_file" "set indicator" "" "indicator setting"
+    add_config_if_needed "nano" "$config_file" "set linenumbers" "" "line numbers setting"
+    add_config_if_needed "nano" "$config_file" "set minibar" "" "minibar setting"
+    add_config_if_needed "nano" "$config_file" "set mouse" "" "mouse support setting"
+    add_config_if_needed "nano" "$config_file" "set multibuffer" "" "multibuffer setting"
+    add_config_if_needed "nano" "$config_file" "set nonewlines" "" "nonewlines setting"
+    add_config_if_needed "nano" "$config_file" "set smarthome" "" "smarthome setting"
+    add_config_if_needed "nano" "$config_file" "set softwrap" "" "softwrap setting"
+    add_config_if_needed "nano" "$config_file" "set tabsize" "4" "tab size setting"
 
     # Add homebrew include for macOS
     if [[ "$os" == "macos" ]]; then
         local include_line='include "/opt/homebrew/share/nano/*.nanorc"'
         if ! config_exists "$config_file" "$include_line"; then
             print_info "+ Adding homebrew nano syntax definitions to $config_file"
+            backup_file "$config_file"
+            add_change_header "$config_file" "nano"
             echo "" >> "$config_file"
             echo "# homebrew nano syntax definitions" >> "$config_file"
             echo "$include_line" >> "$config_file"
         else
             print_info "✓ homebrew nano syntax definitions already configured"
         fi
-    fi
-
-    # Check if we made changes
-    local new_size
-    new_size=$(wc -l < "$config_file" 2>/dev/null || echo "0")
-    if [[ "$new_size" -gt "$original_size" ]]; then
-        print_info "Configuration changes made to $config_file"
-        rm -f "$temp_backup"
-    else
-        # No changes were made, restore original content
-        mv "$temp_backup" "$config_file"
     fi
 
     print_success "Nano configuration completed for $config_file"
@@ -422,37 +444,12 @@ configure_screen() {
         touch "$config_file"
     fi
 
-    # Save original content before adding header
-    local temp_backup="${config_file}.before_header.$$"
-    cp "$config_file" "$temp_backup"
-
-    # Track original size to detect if changes are made
-    local original_size
-    original_size=$(wc -l < "$config_file" 2>/dev/null || echo "0")
-
-    # Add update header before making changes
-    echo "" >> "$config_file"
-    echo "# GNU screen configuration - managed by system-setup.sh" >> "$config_file"
-    echo "# Updated: $(date)" >> "$config_file"
-    echo "" >> "$config_file"
-
     # Configure each setting individually
-    add_config_if_needed "$config_file" "startup_message" "off" "startup message setting"
-    add_config_if_needed "$config_file" "defscrollback" "9999" "default scrollback setting"
-    add_config_if_needed "$config_file" "scrollback" "9999" "scrollback setting"
-    add_config_if_needed "$config_file" "defmousetrack" "on" "default mouse tracking setting"
-    add_config_if_needed "$config_file" "mousetrack" "on" "mouse tracking setting"
-
-    # Check if we made changes
-    local new_size
-    new_size=$(wc -l < "$config_file" 2>/dev/null || echo "0")
-    if [[ "$new_size" -gt "$original_size" ]]; then
-        print_info "Configuration changes made to $config_file"
-        rm -f "$temp_backup"
-    else
-        # No changes were made, restore original content
-        mv "$temp_backup" "$config_file"
-    fi
+    add_config_if_needed "screen" "$config_file" "startup_message" "off" "startup message setting"
+    add_config_if_needed "screen" "$config_file" "defscrollback" "9999" "default scrollback setting"
+    add_config_if_needed "screen" "$config_file" "scrollback" "9999" "scrollback setting"
+    add_config_if_needed "screen" "$config_file" "defmousetrack" "on" "default mouse tracking setting"
+    add_config_if_needed "screen" "$config_file" "mousetrack" "on" "mouse tracking setting"
 
     print_success "GNU screen configuration completed for $config_file"
 }
@@ -486,20 +483,6 @@ configure_shell_for_user() {
             chown "$username:$username" "$shell_config" 2>/dev/null || true
         fi
     fi
-
-    # Save original content before adding header
-    local temp_backup="${shell_config}.before_header.$$"
-    cp "$shell_config" "$temp_backup"
-
-    # Track original size to detect if changes are made
-    local original_size
-    original_size=$(wc -l < "$shell_config" 2>/dev/null || echo "0")
-
-    # Add update header before making changes
-    echo "" >> "$shell_config"
-    echo "# Shell configuration - managed by system-setup.sh" >> "$shell_config"
-    echo "# Updated: $(date)" >> "$shell_config"
-    echo "" >> "$shell_config"
 
     # Configure safety aliases
     if ! grep -q "Aliases to help avoid some mistakes" "$shell_config" 2>/dev/null; then
@@ -559,17 +542,6 @@ configure_shell_for_user() {
         add_alias_if_needed "$shell_config" "7z-ultra1" "7z a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 1"
         add_alias_if_needed "$shell_config" "7z-ultra2" "7z a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 2"
         add_alias_if_needed "$shell_config" "7z-ultra3" "7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 3"
-    fi
-
-    # Check if we made changes
-    local new_size
-    new_size=$(wc -l < "$shell_config" 2>/dev/null || echo "0")
-    if [[ "$new_size" -gt "$original_size" ]]; then
-        print_info "Configuration changes made to $shell_config"
-        rm -f "$temp_backup"
-    else
-        # No changes were made, restore original content
-        mv "$temp_backup" "$shell_config"
     fi
 
     # Restore ownership if running as root
