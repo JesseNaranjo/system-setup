@@ -72,6 +72,7 @@ if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
         if [[ "$DOWNLOAD_SUCCESS" == true ]]; then
             if diff -u "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
                 echo "  ✓ ${SCRIPT_FILE} is already up-to-date"
+                echo ""
             else
                 echo -e "${LINE_COLOR}╭───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╮${RESET_COLOR}${CODE_COLOR}"
                 cat "${TEMP_SCRIPT_FILE}"
@@ -80,7 +81,7 @@ if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
                 echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${RESET_COLOR}"; echo
 
                 read -p "→ Overwrite and run updated ${SCRIPT_FILE}?: [y/N] " continueExec
-                echo
+                echo ""
 
                 if [[ $continueExec == [Yy] ]]; then
                     chmod +x $TEMP_SCRIPT_FILE
@@ -92,11 +93,13 @@ if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
                 else
                     rm -f $TEMP_SCRIPT_FILE
                     echo "→ Running local unmodified copy..."
+                    echo ""
                 fi
             fi
         else
             echo "  ✖ Download failed — skipping $SCRIPT_FILE"
             echo "  → Running local unmodified copy..."
+            echo ""
         fi
     fi
 fi
