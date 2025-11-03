@@ -140,7 +140,7 @@ get_package_list() {
         echo "htop:htop"
         echo "Nano Editor:nano"
         echo "Ollama:ollama"
-        echo "GNU Screen:screen"
+        echo "Screen (GNU):screen"
     else
         # Linux packages (apt)
         echo "7-zip:7zip"
@@ -151,7 +151,7 @@ get_package_list() {
         echo "htop:htop"
         echo "Nano Editor:nano"
         echo "OpenSSH Server:openssh-server"
-        echo "GNU Screen:screen"
+        echo "Screen (GNU):screen"
     fi
 }
 
@@ -215,8 +215,9 @@ check_and_install_packages() {
             track_special_packages "$package"
         else
             print_warning "$display_name is not installed"
-            read -p "Would you like to install $display_name? (y/N): " -r
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
+            local response
+            read -p " - Would you like to install $display_name? (y/N): " -r response < /dev/tty
+            if [[ $response =~ ^[Yy]$ ]]; then
                 packages_to_install+=("$package")
                 track_special_packages "$package"
             fi
