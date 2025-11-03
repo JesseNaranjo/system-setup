@@ -547,7 +547,7 @@ configure_shell() {
         print_info "Configuring shell for root user..."
         configure_shell_for_user "$os" "/root" "root"
 
-        # System-wide configuration: iterate over all users in /home/ and root
+        # System-wide configuration: iterate over all users in /home/
         if [[ ! -d "/home" ]]; then
             print_warning "/home directory does not exist, cannot configure system-wide"
             return 1
@@ -624,17 +624,12 @@ main() {
     print_info "Existing configurations matching the desired values will be left unchanged."
     echo ""
 
-    read -p "Continue with configuration? (y/N): " -r
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        print_info "Configuration cancelled."
-        exit 0
-    fi
-
     # Ask for scope (user vs system) for all components
     echo ""
     print_info "Choose configuration scope:"
     echo "  1) User-specific (recommended) - configures for current user only"
     echo "  2) System-wide (requires root) - nano/screen system-wide, shell for all users in /home/"
+    echo "  Ctrl+C to cancel configuration and exit"
     read -p "Enter choice (1-2): " -r scope_choice
 
     local scope
