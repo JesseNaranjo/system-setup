@@ -343,17 +343,19 @@ configure_nano() {
         touch "$config_file"
     fi
 
-    # Add configuration header if file is empty or doesn't have our header
-    if [[ ! -s "$config_file" ]] || ! grep -q "setup-configs.sh" "$config_file" 2>/dev/null; then
-        echo "" >> "$config_file"
-        echo "# nano configuration - managed by setup-configs.sh" >> "$config_file"
-        echo "# Last updated: $(date)" >> "$config_file"
-        echo "" >> "$config_file"
-    fi
+    # Save original content before adding header
+    local temp_backup="${config_file}.before_header.$$"
+    cp "$config_file" "$temp_backup"
 
-    # Check if we need to backup (only if we're going to make changes)
+    # Track original size to detect if changes are made
     local original_size
     original_size=$(wc -l < "$config_file" 2>/dev/null || echo "0")
+
+    # Add update header before making changes
+    echo "" >> "$config_file"
+    echo "# nano configuration - managed by system-setup.sh" >> "$config_file"
+    echo "# Updated: $(date)" >> "$config_file"
+    echo "" >> "$config_file"
 
     # Configure each setting individually
     add_config_if_needed "$config_file" "set atblanks" "" "atblanks setting"
@@ -382,11 +384,15 @@ configure_nano() {
         fi
     fi
 
-    # Check if we made changes and backup if needed
+    # Check if we made changes
     local new_size
     new_size=$(wc -l < "$config_file" 2>/dev/null || echo "0")
     if [[ "$new_size" -gt "$original_size" ]]; then
         print_info "Configuration changes made to $config_file"
+        rm -f "$temp_backup"
+    else
+        # No changes were made, restore original content
+        mv "$temp_backup" "$config_file"
     fi
 
     print_success "Nano configuration completed for $config_file"
@@ -416,13 +422,19 @@ configure_screen() {
         touch "$config_file"
     fi
 
-    # Add configuration header if file is empty or doesn't have our header
-    if [[ ! -s "$config_file" ]] || ! grep -q "setup-configs.sh" "$config_file" 2>/dev/null; then
-        echo "" >> "$config_file"
-        echo "# GNU screen configuration - managed by setup-configs.sh" >> "$config_file"
-        echo "# Last updated: $(date)" >> "$config_file"
-        echo "" >> "$config_file"
-    fi
+    # Save original content before adding header
+    local temp_backup="${config_file}.before_header.$$"
+    cp "$config_file" "$temp_backup"
+
+    # Track original size to detect if changes are made
+    local original_size
+    original_size=$(wc -l < "$config_file" 2>/dev/null || echo "0")
+
+    # Add update header before making changes
+    echo "" >> "$config_file"
+    echo "# GNU screen configuration - managed by system-setup.sh" >> "$config_file"
+    echo "# Updated: $(date)" >> "$config_file"
+    echo "" >> "$config_file"
 
     # Configure each setting individually
     add_config_if_needed "$config_file" "startup_message" "off" "startup message setting"
@@ -430,6 +442,17 @@ configure_screen() {
     add_config_if_needed "$config_file" "scrollback" "9999" "scrollback setting"
     add_config_if_needed "$config_file" "defmousetrack" "on" "default mouse tracking setting"
     add_config_if_needed "$config_file" "mousetrack" "on" "mouse tracking setting"
+
+    # Check if we made changes
+    local new_size
+    new_size=$(wc -l < "$config_file" 2>/dev/null || echo "0")
+    if [[ "$new_size" -gt "$original_size" ]]; then
+        print_info "Configuration changes made to $config_file"
+        rm -f "$temp_backup"
+    else
+        # No changes were made, restore original content
+        mv "$temp_backup" "$config_file"
+    fi
 
     print_success "GNU screen configuration completed for $config_file"
 }
@@ -464,13 +487,19 @@ configure_shell_for_user() {
         fi
     fi
 
-    # Add configuration header if file is empty or doesn't have our header
-    if [[ ! -s "$shell_config" ]] || ! grep -q "setup-configs.sh" "$shell_config" 2>/dev/null; then
-        echo "" >> "$shell_config"
-        echo "# Shell configuration - managed by setup-configs.sh" >> "$shell_config"
-        echo "# Last updated: $(date)" >> "$shell_config"
-        echo "" >> "$shell_config"
-    fi
+    # Save original content before adding header
+    local temp_backup="${shell_config}.before_header.$$"
+    cp "$shell_config" "$temp_backup"
+
+    # Track original size to detect if changes are made
+    local original_size
+    original_size=$(wc -l < "$shell_config" 2>/dev/null || echo "0")
+
+    # Add update header before making changes
+    echo "" >> "$shell_config"
+    echo "# Shell configuration - managed by system-setup.sh" >> "$shell_config"
+    echo "# Updated: $(date)" >> "$shell_config"
+    echo "" >> "$shell_config"
 
     # Configure safety aliases
     if ! grep -q "Aliases to help avoid some mistakes" "$shell_config" 2>/dev/null; then
@@ -532,7 +561,24 @@ configure_shell_for_user() {
         add_alias_if_needed "$shell_config" "7z-ultra3" "7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 3"
     fi
 
+    # Check if we made changes
+    local new_size
+    new_size=$(wc -l < "$shell_config" 2>/dev/null || echo "0")
+    if [[ "$new_size" -gt "$original_size" ]]; then
+        print_info "Configuration changes made to $shell_config"
+        rm -f "$temp_backup"
+    else
+        # No changes were made, restore original content
+        mv "$temp_backup" "$shell_config"
+    fi
+
+    # Restore ownership if running as root
+    if [[ $EUID -eq 0 ]] && [[ "$username" != "root" ]]; then
+        chown "$username:$username" "$shell_config" 2>/dev/null || true
+    fi
+
     print_success "Shell configuration completed for $shell_config (user: $username)"
+    echo ""
 }
 
 # Configure shell
