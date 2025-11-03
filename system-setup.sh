@@ -298,7 +298,24 @@ backup_file() {
     if [[ -f "$file" ]]; then
         local backup
         backup="${file}.backup.$(date +%Y%m%d_%H%M%S)"
-        cp "$file" "$backup"
+        
+        # Copy file with preserved permissions (-p flag)
+        cp -p "$file" "$backup"
+        
+        # Preserve ownership (requires appropriate permissions)
+        # Get the owner and group of the original file
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS stat syntax
+            local owner
+            owner=$(stat -f "%u:%g" "$file")
+            chown "$owner" "$backup" 2>/dev/null || true
+        else
+            # Linux stat syntax
+            local owner
+            owner=$(stat -c "%u:%g" "$file")
+            chown "$owner" "$backup" 2>/dev/null || true
+        fi
+        
         print_info "Backed up existing file: $file -> $backup"
         BACKED_UP_FILES="$BACKED_UP_FILES $file"
     fi
