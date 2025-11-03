@@ -624,7 +624,7 @@ configure_shell() {
                 username=$(basename "$user_home")
                 print_info "Processing user: $username"
                 configure_shell_for_user "$os" "$user_home" "$username"
-                ((user_count++))
+                ((user_count++)) || true
             fi
         done
 
