@@ -280,8 +280,8 @@ add_config_if_needed() {
             # Backup and add header before making changes
             backup_file "$file"
             add_change_header "$file" "$config_type"
-            # Remove old line and add new one (use temp file for cross-platform compatibility)
-            grep -v "^[[:space:]]*${setting}" "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+            # Comment out old line instead of removing it
+            sed -i.bak "s/^[[:space:]]*\(${setting}\)/# \1  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$file" && rm -f "${file}.bak"
         fi
     else
         print_info "+ Adding $description to $file"
@@ -315,8 +315,8 @@ add_alias_if_needed() {
             # Backup and add header before making changes
             backup_file "$file"
             add_change_header "$file" "shell"
-            # Remove old line and add new one (use temp file for cross-platform compatibility)
-            grep -v "^[[:space:]]*alias[[:space:]]*${alias_name}=" "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+            # Comment out old line instead of removing it
+            sed -i.bak "s/^[[:space:]]*\(alias[[:space:]]*${alias_name}=.*\)/# \1  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$file" && rm -f "${file}.bak"
         fi
     else
         print_info "+ Adding $description alias to $file"
@@ -351,8 +351,8 @@ add_export_if_needed() {
             # Backup and add header before making changes
             backup_file "$file"
             add_change_header "$file" "shell"
-            # Remove old line and add new one (use temp file for cross-platform compatibility)
-            grep -v "^[[:space:]]*export[[:space:]]*${var_name}=" "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+            # Comment out old line instead of removing it
+            sed -i.bak "s/^[[:space:]]*\(export[[:space:]]*${var_name}=.*\)/# \1  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$file" && rm -f "${file}.bak"
         fi
     else
         print_info "+ Adding $description export to $file"
