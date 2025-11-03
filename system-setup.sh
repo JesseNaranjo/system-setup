@@ -909,18 +909,18 @@ main() {
     fi
 
     configure_shell "$os" "$scope"
-
-    # Configure OpenSSH Server if installed (Linux only)
     echo ""
-    if [[ "$OPENSSH_SERVER_INSTALLED" == true ]]; then
-        configure_ssh_socket "$os"
-        echo ""
-    else
-        print_info "Skipping OpenSSH Server configuration (not installed)"
+
+    # Configure OpenSSH Server if installed (Linux only, system scope only)
+    if [[ "$scope" == "system" ]]; then
+        if [[ "$OPENSSH_SERVER_INSTALLED" == true ]]; then
+            configure_ssh_socket "$os"
+        else
+            print_info "Skipping OpenSSH Server configuration (not installed)"
+        fi
         echo ""
     fi
 
-    echo ""
     print_success "Setup complete!"
     echo ""
     print_info "The script made only necessary changes to bring your configuration up to date."
