@@ -29,7 +29,7 @@ if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
 		echo ""
 		echo "╔═════════════════════════════════════════════════════════════════════╗"
 		echo "║                                                                     ║"
-		echo "║                  ⚠️  SELF-UPDATE NOT AVAILABLE  ⚠️                  ║"
+		echo "║                  ⚠️   SELF-UPDATE NOT AVAILABLE  ⚠️                   ║"  # the extra space is intentional for alignment due to the ⚠️  character
 		echo "║                                                                     ║"
 		echo "║    Neither 'curl' nor 'wget' is installed on this system.           ║"
 		echo "║    Self-updating functionality requires one of these tools.         ║"
