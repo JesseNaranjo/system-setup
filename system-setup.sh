@@ -117,6 +117,7 @@ BACKED_UP_FILES=""
 HEADER_ADDED_FILES=""
 NANO_INSTALLED=false
 SCREEN_INSTALLED=false
+OPENSSH_SERVER_INSTALLED=false
 
 # Detect OS
 detect_os() {
@@ -211,6 +212,8 @@ track_special_packages() {
         NANO_INSTALLED=true
     elif [[ "$package" == "screen" ]]; then
         SCREEN_INSTALLED=true
+    elif [[ "$package" == "openssh-server" ]]; then
+        OPENSSH_SERVER_INSTALLED=true
     fi
 }
 
@@ -697,6 +700,129 @@ configure_shell() {
     print_info "Note: Users may need to run 'source ~/.bashrc' (or ~/.zshrc) or restart their terminal for changes to take effect."
 }
 
+# Configure SSH to use socket-based activation instead of service
+configure_ssh_socket() {
+    local os="$1"
+
+    # SSH socket configuration is only relevant for Linux systems with systemd
+    if [[ "$os" != "linux" ]]; then
+        print_info "SSH socket configuration is only applicable to Linux systems with systemd"
+        return 0
+    fi
+
+    # Check if systemd is available
+    if ! command -v systemctl &>/dev/null; then
+        print_warning "systemctl not found - cannot configure SSH socket (systemd required)"
+        return 0
+    fi
+
+    # Check current state of ssh.service and ssh.socket
+    local ssh_service_enabled=false
+    local ssh_socket_enabled=false
+
+    if systemctl is-enabled ssh.service &>/dev/null; then
+        ssh_service_enabled=true
+    fi
+
+    if systemctl is-enabled ssh.socket &>/dev/null; then
+        ssh_socket_enabled=true
+    fi
+
+    # Case 1: Both ssh.socket and ssh.service are enabled
+    # Action: Disable ssh.service (no prompt needed - this is a misconfiguration)
+    if [[ "$ssh_socket_enabled" == true && "$ssh_service_enabled" == true ]]; then
+        print_warning "Both ssh.socket and ssh.service are enabled (conflicting configuration)"
+        print_info "Disabling ssh.service to avoid conflicts..."
+        if sudo systemctl disable --now ssh.service 2>/dev/null; then
+            print_success "- ssh.service disabled and stopped"
+            print_success "- SSH is now using socket-based activation only"
+        else
+            print_error "Could not disable ssh.service"
+            return 1
+        fi
+        return 0
+    fi
+
+    # Case 2: ssh.socket is already enabled and ssh.service is disabled
+    # Action: Nothing to do
+    if [[ "$ssh_socket_enabled" == true ]]; then
+        print_info "ssh.socket is already enabled - SSH is already using socket-based activation"
+        return 0
+    fi
+
+    # Case 3: ssh.socket is disabled (regardless of ssh.service state)
+    # Action: Prompt user to configure ssh.socket
+    print_info "Configuring OpenSSH Server..."
+    if [[ "$ssh_service_enabled" == true ]]; then
+        print_info "- Current state: ssh.service is enabled (traditional service-based activation)"
+    else
+        print_info "- Current state: SSH is not currently enabled via socket or service"
+    fi
+
+    echo ""
+    print_info "Socket-based activation (ssh.socket) vs Service-based (ssh.service):"
+    echo "  • ssh.socket: Starts SSH daemon on-demand when connections arrive (saves resources)"
+    echo "  • ssh.service: Keeps SSH daemon running constantly (traditional approach)"
+    echo ""
+
+    local response
+    read -p "Would you like to configure and enable ssh.socket? (y/N): " -r response
+
+    if [[ ! $response =~ ^[Yy]$ ]]; then
+        print_info "Keeping current SSH configuration (no changes made)"
+        return 0
+    fi
+
+    echo ""
+    print_info "Configuring socket-based SSH activation..."
+
+    # Disable and stop ssh.service if it's enabled
+    if [[ "$ssh_service_enabled" == true ]]; then
+        print_info "Disabling ssh.service..."
+        if sudo systemctl disable --now ssh.service 2>/dev/null; then
+            print_success "- ssh.service disabled and stopped"
+        else
+            print_warning "Could not disable ssh.service (it may not be active)"
+        fi
+    fi
+
+    # Open editor for ssh.socket configuration
+    echo ""
+    print_info "Opening systemd override editor for ssh.socket..."
+    print_info "You can customize the socket configuration here (e.g., change port, add ListenStream)"
+    print_info "Press Ctrl+X (or appropriate editor command) to save and exit when done"
+    echo ""
+
+    # Give user a moment to read the message
+    sleep 3
+
+    if sudo systemctl edit ssh.socket; then
+        print_success "ssh.socket configuration saved"
+    else
+        print_error "Failed to edit ssh.socket configuration"
+        return 1
+    fi
+    echo ""
+
+    # Enable and start ssh.socket
+    print_info "Enabling and starting ssh.socket..."
+    if sudo systemctl enable --now ssh.socket; then
+        print_success "- ssh.socket enabled and started"
+        echo ""
+
+        # Show status
+        print_info "Current SSH socket status:"
+        sudo systemctl status ssh.socket --no-pager --lines=10 || true
+    else
+        print_error "Failed to enable ssh.socket"
+        return 1
+    fi
+    echo ""
+
+    print_info "SSH socket configuration complete"
+    print_info "- SSH daemon will now start automatically when connections arrive"
+}
+
 # Main function
 main() {
     print_info "System Setup and Configuration Script (Idempotent Mode)"
@@ -733,6 +859,11 @@ main() {
         echo "  ✓ GNU screen settings"
     else
         echo "  ✗ GNU screen (not installed, will be skipped)"
+    fi
+    if [[ "$OPENSSH_SERVER_INSTALLED" == true ]]; then
+        echo "  ✓ OpenSSH Server (socket-based activation option)"
+    else
+        echo "  ✗ OpenSSH Server (not installed, will be skipped)"
     fi
     echo "  ✓ Shell aliases and configurations"
     echo ""
@@ -779,6 +910,16 @@ main() {
     fi
 
     configure_shell "$os" "$scope"
+
+    # Configure OpenSSH Server if installed (Linux only)
+    echo ""
+    if [[ "$OPENSSH_SERVER_INSTALLED" == true ]]; then
+        configure_ssh_socket "$os"
+        echo ""
+    else
+        print_info "Skipping OpenSSH Server configuration (not installed)"
+        echo ""
+    fi
 
     echo ""
     print_success "Setup complete!"
