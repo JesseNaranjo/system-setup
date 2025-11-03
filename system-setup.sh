@@ -797,10 +797,8 @@ configure_swap() {
     print_info "- Calculated swap size: ${swap_gb} GB (${swap_mb} MB)"
     echo ""
 
-    # Get system's temp directory
-    local tmp_dir="${TMPDIR:-/tmp}"
-    tmp_dir="${tmp_dir%/}"  # Remove trailing slash if present
-    local swapfile="${tmp_dir}/swapfile"
+    # Set swapfile location in /var
+    local swapfile="/var/swapfile"
 
     print_info "Creating swap file at ${swapfile}..."
 
