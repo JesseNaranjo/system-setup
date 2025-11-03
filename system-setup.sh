@@ -853,21 +853,21 @@ main() {
     print_info "---------------------"
     print_info "This script will configure:"
     if [[ "$NANO_INSTALLED" == true ]]; then
-        echo "  ✓ nano editor settings"
+        echo "          ✓ nano editor settings"
     else
-        echo "  ✗ nano editor (not installed, will be skipped)"
+        echo "          ✗ nano editor (not installed, will be skipped)"
     fi
     if [[ "$SCREEN_INSTALLED" == true ]]; then
-        echo "  ✓ GNU screen settings"
+        echo "          ✓ GNU screen settings"
     else
-        echo "  ✗ GNU screen (not installed, will be skipped)"
+        echo "          ✗ GNU screen (not installed, will be skipped)"
     fi
     if [[ "$OPENSSH_SERVER_INSTALLED" == true ]]; then
-        echo "  ✓ OpenSSH Server (socket-based activation option)"
+        echo "          ✓ OpenSSH Server (socket-based activation option)"
     else
-        echo "  ✗ OpenSSH Server (not installed, will be skipped)"
+        echo "          ✗ OpenSSH Server (not installed, will be skipped)"
     fi
-    echo "  ✓ Shell aliases and configurations"
+    echo "          ✓ Shell aliases and configurations"
     echo ""
     print_info "The script will only add or update configurations that are missing or different."
     print_info "Existing configurations matching the desired values will be left unchanged."
@@ -876,10 +876,11 @@ main() {
     # Ask for scope (user vs system) for all components
     echo ""
     print_info "Choose configuration scope:"
-    echo "  1) User-specific (recommended) - configures for current user only"
-    echo "  2) System-wide (requires root) - nano/screen system-wide, shell for all users in /home/"
-    echo "  Ctrl+C to cancel configuration and exit"
-    read -p "Enter choice (1-2): " -r scope_choice
+    echo "          1) User-specific (recommended) - configures for current user only"
+    echo "          2) System-wide (requires root) - nano/screen system-wide, shell for all users in /home/"
+    echo "          Ctrl+C to cancel configuration and exit"
+    echo ""
+    read -p "          Enter choice (1-2): " -r scope_choice
 
     local scope
     case "$scope_choice" in
@@ -890,6 +891,7 @@ main() {
             scope="user"
             ;;
     esac
+    echo ""
 
     print_info "Using scope: $scope"
 
