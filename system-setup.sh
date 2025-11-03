@@ -736,13 +736,13 @@ configure_swap() {
 
     # Check if running inside an LXC container
     if [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ; then
-        print_info "Swap configuration is not recommended inside LXC containers (detected LXC environment)"
+        print_info "Detected LXC environment: Swap configuration is not recommended inside LXC containers"
         return 0
     fi
 
     # Additional LXC detection methods as fallback
     if [[ -f /.dockerenv ]] || [[ -f /run/systemd/container ]] || grep -q lxc /proc/1/cgroup 2>/dev/null; then
-        print_info "Swap configuration is not recommended inside containers (detected container environment)"
+        print_info "Detected container environment: Swap configuration is not recommended inside containers"
         return 0
     fi
 
