@@ -39,6 +39,7 @@ Checks for and optionally installs packages:
 
 **System-wide (Option 2):**
 - nano/screen: System-wide configuration (`/etc/`)
+- /etc/issue: Network interface display (Linux only)
 - Shell: Configures root and all users in `/home/`
 - Swap: Configures swap memory (Linux only, LXC-aware)
 - SSH: Optional socket-based activation (Linux only)
@@ -54,11 +55,22 @@ Checks for and optionally installs packages:
 - **Settings**: startup_message off, scrollback 9999, mouse tracking enabled
 - **Files**: `~/.screenrc` (user) or `/etc/screenrc` (system)
 
+#### /etc/issue Network Display (System scope, Linux only)
+- **Auto-detection**: Identifies all network interfaces (excluding loopback)
+- **Interface types**: wire (ethernet), wifi (wireless), bridge, vpn, veth, docker
+- **Display format**: `<type>: \4{<interface>} / \6{<interface>}` for dynamic IPv4/IPv6
+- **Idempotent**: Updates interface list if devices are added, removed, or changed
+- **Example output**:
+  ```
+  wire: 192.168.1.100 / fe80::1
+  wifi: 192.168.1.101 / fe80::2
+  ```
+
 #### Shell Aliases
 - **Safety**: Interactive/verbose cp, mv, rm, chmod, chown
 - **Utilities**: Enhanced ls (color, formatting), lsblk, lxc-ls
 - **Compression**: 7z ultra compression aliases (3 levels)
-- **Platform-specific**: 
+- **Platform-specific**:
   - Linux: GNU coreutils options, `.bashrc`
   - macOS: BSD options, CLICOLOR export, `.zshrc`, 7zz command
 - **Files**: Current user's shell config (user) or all users in `/home/` (system)

@@ -576,6 +576,199 @@ configure_screen() {
     print_success "GNU screen configuration completed for $config_file"
 }
 
+# Detect network interface type
+get_interface_type() {
+    local iface="$1"
+
+    # Skip loopback
+    if [[ "$iface" == "lo" ]]; then
+        echo "loopback"
+        return
+    fi
+
+    # Check if wireless interface
+    if [[ -d "/sys/class/net/${iface}/wireless" ]] || [[ -L "/sys/class/net/${iface}/phy80211" ]]; then
+        echo "wifi"
+        return
+    fi
+
+    # Check if it's a virtual/bridge interface
+    if [[ -d "/sys/class/net/${iface}/bridge" ]]; then
+        echo "bridge"
+        return
+    fi
+
+    # Check if it's a tun/tap interface
+    if [[ -f "/sys/class/net/${iface}/tun_flags" ]]; then
+        echo "vpn"
+        return
+    fi
+
+    # Check if it's a virtual ethernet (veth, docker, lxc)
+    local dev_id=""
+    if [[ -f "/sys/class/net/${iface}/dev_id" ]]; then
+        dev_id=$(cat "/sys/class/net/${iface}/dev_id" 2>/dev/null)
+    fi
+
+    # veth pairs typically used by containers
+    if [[ "$iface" == veth* ]]; then
+        echo "veth"
+        return
+    fi
+
+    # Docker interfaces
+    if [[ "$iface" == docker* ]] || [[ "$iface" == br-* ]]; then
+        echo "docker"
+        return
+    fi
+
+    # Default to wired for physical ethernet interfaces
+    echo "wire"
+}
+
+# Configure /etc/issue with network interface information
+configure_issue() {
+    local os="$1"
+
+    # /etc/issue configuration is only relevant for Linux systems
+    if [[ "$os" != "linux" ]]; then
+        print_info "/etc/issue configuration is only applicable to Linux systems"
+        return 0
+    fi
+
+    # Check if running inside an LXC container
+    if [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ; then
+        print_info "Detected LXC environment: /etc/issue configuration may not be useful inside LXC containers"
+        # Don't return - still allow configuration if user wants it
+    fi
+
+    print_info "Configuring /etc/issue with network interface information..."
+
+    # Check if /etc/issue exists and is writable
+    if [[ ! -f /etc/issue ]]; then
+        print_warning "/etc/issue does not exist"
+        return 1
+    fi
+
+    if [[ ! -w /etc/issue ]]; then
+        print_error "No write permission to /etc/issue. Run as root."
+        return 1
+    fi
+
+    print_info "- This will add network interface IP addresses to /etc/issue login banner."
+    print_info "- The addresses will be displayed dynamically at login time."
+    echo ""
+
+    local response
+    read -p "Would you like to configure /etc/issue? (y/N): " -r response
+
+    if [[ ! $response =~ ^[Yy]$ ]]; then
+        print_info "- Keeping current /etc/issue configuration (no changes made)"
+        return 0
+    fi
+
+    echo ""
+    print_info "Detecting network interfaces..."
+
+    # Get list of network interfaces (excluding loopback)
+    local interfaces=()
+    local wire_interfaces=()
+    local wifi_interfaces=()
+    local other_interfaces=()
+
+    for iface in /sys/class/net/*; do
+        local iface_name=$(basename "$iface")
+
+        # Skip loopback
+        if [[ "$iface_name" == "lo" ]]; then
+            continue
+        fi
+
+        local iface_type=$(get_interface_type "$iface_name")
+
+        case "$iface_type" in
+            wire)
+                wire_interfaces+=("$iface_name")
+                ;;
+            wifi)
+                wifi_interfaces+=("$iface_name")
+                ;;
+            loopback)
+                # Skip loopback
+                ;;
+            *)
+                other_interfaces+=("$iface_name:$iface_type")
+                ;;
+        esac
+    done
+
+    # Display detected interfaces
+    if [[ ${#wire_interfaces[@]} -gt 0 ]]; then
+        print_info "- Wired interfaces: ${wire_interfaces[*]}"
+    fi
+    if [[ ${#wifi_interfaces[@]} -gt 0 ]]; then
+        print_info "- Wireless interfaces: ${wifi_interfaces[*]}"
+    fi
+    if [[ ${#other_interfaces[@]} -gt 0 ]]; then
+        print_info "- Other interfaces: ${other_interfaces[*]}"
+    fi
+
+    if [[ ${#wire_interfaces[@]} -eq 0 && ${#wifi_interfaces[@]} -eq 0 && ${#other_interfaces[@]} -eq 0 ]]; then
+        print_warning "No network interfaces detected (excluding loopback)"
+        return 0
+    fi
+
+    echo ""
+
+    # Backup /etc/issue
+    backup_file /etc/issue
+
+    # Remove any previous system-setup.sh managed network section
+    if grep -q "# Network interfaces - managed by system-setup.sh" /etc/issue; then
+        print_info "Removing previous network interface configuration from /etc/issue..."
+        # Remove from marker to end of file, then restore original content up to marker
+        sed -i.bak '/# Network interfaces - managed by system-setup.sh/,$d' /etc/issue && rm -f /etc/issue.bak
+    fi
+
+    # Add network interface section
+    print_info "Adding network interface information to /etc/issue..."
+
+    # Ensure there's a blank line before our section
+    if [[ -s /etc/issue ]] && [[ $(tail -c 1 /etc/issue | wc -l) -eq 0 ]]; then
+        echo "" >> /etc/issue
+    fi
+
+    # Add our managed section marker
+    echo "# Network interfaces - managed by system-setup.sh" >> /etc/issue
+    echo "# Updated: $(date)" >> /etc/issue
+
+    # Add wired interfaces
+    for iface in "${wire_interfaces[@]}"; do
+        echo "wire: \\4{${iface}} / \\6{${iface}}" >> /etc/issue
+    done
+
+    # Add wireless interfaces
+    for iface in "${wifi_interfaces[@]}"; do
+        echo "wifi: \\4{${iface}} / \\6{${iface}}" >> /etc/issue
+    done
+
+    # Add other interfaces with their type
+    for iface_info in "${other_interfaces[@]}"; do
+        local iface="${iface_info%%:*}"
+        local type="${iface_info##*:}"
+        echo "${type}: \\4{${iface}} / \\6{${iface}}" >> /etc/issue
+    done
+
+    # Add trailing blank lines for better visibility
+    echo "" >> /etc/issue
+    echo "" >> /etc/issue
+
+    print_success "/etc/issue updated with network interface information"
+    echo ""
+    print_info "Current /etc/issue content:"
+    cat /etc/issue
+}
+
 # Configure shell for a specific user
 configure_shell_for_user() {
     local os="$1"
@@ -1043,7 +1236,7 @@ main() {
     echo ""
     print_info "Choose configuration scope:"
     echo "          1) User-specific - nano/screen/shell for current user"
-    echo "          2) System-wide (root) - nano/screen system-wide, shell all users, swap, SSH socket"
+    echo "          2) System-wide (root) - nano/screen system-wide, /etc/issue, shell all users, swap, SSH socket"
     echo "          Ctrl+C to cancel configuration and exit"
     echo ""
     read -p "          Enter choice (1-2): " -r scope_choice
@@ -1076,6 +1269,12 @@ main() {
         echo ""
     else
         print_info "Skipping screen configuration (not installed)"
+        echo ""
+    fi
+
+    # Configure /etc/issue with network interfaces if system scope (Linux only)
+    if [[ "$scope" == "system" ]]; then
+        configure_issue "$os"
         echo ""
     fi
 
