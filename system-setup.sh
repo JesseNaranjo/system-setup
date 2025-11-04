@@ -393,7 +393,7 @@ add_config_if_needed() {
 
     if config_exists "$file" "$setting"; then
         if [[ "$current_value" == "$value" ]]; then
-            print_info "✓ $description already configured correctly"
+            print_success "✓ $description already configured correctly"
             return 0
         else
             print_info "✗ $description has different value: '$current_value' (expected: '$value')"
@@ -428,7 +428,7 @@ add_alias_if_needed() {
     if config_exists "$file" "$pattern"; then
         current_value=$(get_config_value "$file" "$pattern" | sed "s/^'//; s/'$//")
         if [[ "$current_value" == "$alias_value" ]]; then
-            print_info "✓ $description alias already configured correctly"
+            print_success "✓ $description alias already configured correctly"
             return 0
         else
             print_info "✗ $description alias has different value: '$current_value' (expected: '$alias_value')"
@@ -464,7 +464,7 @@ add_export_if_needed() {
     if config_exists "$file" "$pattern"; then
         current_value=$(get_config_value "$file" "$pattern")
         if [[ "$current_value" == "$var_value" ]]; then
-            print_info "✓ $description export already configured correctly"
+            print_success "✓ $description export already configured correctly"
             return 0
         else
             print_info "✗ $description export has different value: '$current_value' (expected: '$var_value')"
@@ -534,7 +534,7 @@ configure_nano() {
             echo "# homebrew nano syntax definitions" >> "$config_file"
             echo "$include_line" >> "$config_file"
         else
-            print_info "✓ homebrew nano syntax definitions already configured"
+            print_success "✓ homebrew nano syntax definitions already configured"
         fi
     fi
 
