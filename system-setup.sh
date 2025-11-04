@@ -1053,8 +1053,8 @@ main() {
         1) scope="user" ;;
         2) scope="system" ;;
         *)
-            print_warning "Invalid choice. Defaulting to user-specific."
-            scope="user"
+            print_error "Invalid choice. Aborting."
+            exit 1
             ;;
     esac
     echo ""
