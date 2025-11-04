@@ -723,45 +723,91 @@ configure_issue() {
     # Backup /etc/issue
     backup_file /etc/issue
 
-    # Remove any previous system-setup.sh managed network section
-    if grep -q "# Network interfaces - managed by system-setup.sh" /etc/issue; then
+    # Check if previous network section exists and track its position
+    local box_exists=false
+    local insert_line=""
+
+    if grep -q "║ Network Interfaces" /etc/issue; then
+        box_exists=true
         print_info "Removing previous network interface configuration from /etc/issue..."
-        # Remove from marker to end of file, then restore original content up to marker
-        sed -i.bak '/# Network interfaces - managed by system-setup.sh/,$d' /etc/issue && rm -f /etc/issue.bak
+
+        # Find line with Network Interfaces header
+        local header_line=$(grep -n "║ Network Interfaces" /etc/issue | cut -d: -f1 | head -1)
+
+        if [[ -n "$header_line" ]] && [[ $header_line -gt 1 ]]; then
+            # Find the top border (line before header)
+            local top_border=$((header_line - 1))
+            insert_line=$top_border
+
+            # Find the bottom border (line with ╚═══...)
+            local bottom_border=$(tail -n +$top_border /etc/issue | grep -n "^╚═" | head -1 | cut -d: -f1)
+
+            if [[ -n "$bottom_border" ]]; then
+                # Calculate absolute line number of bottom border
+                bottom_border=$((top_border + bottom_border - 1))
+
+                # Delete only the box lines (from top border to bottom border)
+                sed -i.bak "${top_border},${bottom_border}d" /etc/issue && rm -f /etc/issue.bak
+            fi
+        fi
     fi
 
     # Add network interface section
     print_info "Adding network interface information to /etc/issue..."
 
-    # Ensure there's a blank line before our section
-    if [[ -s /etc/issue ]] && [[ $(tail -c 1 /etc/issue | wc -l) -eq 0 ]]; then
-        echo "" >> /etc/issue
-    fi
+    # Create temporary file with new box content
+    local temp_box=$(mktemp)
 
-    # Add our managed section marker
-    echo "# Network interfaces - managed by system-setup.sh" >> /etc/issue
-    echo "# Updated: $(date)" >> /etc/issue
+    # Add box with network interfaces (left-side only, right-side open for dynamic IP lengths)
+    echo "  ╔═══════════════════════════════════════════════════════════════════════" > "$temp_box"
+    echo "  ║ Network Interfaces" >> "$temp_box"
+    echo "  ╠═══════════════════════════════════════════════════════════════════════" >> "$temp_box"
 
     # Add wired interfaces
     for iface in "${wire_interfaces[@]}"; do
-        echo "wire: \\4{${iface}} / \\6{${iface}}" >> /etc/issue
+        echo "  ║  wire: \\4{${iface}} / \\6{${iface}} (${iface})" >> "$temp_box"
     done
 
     # Add wireless interfaces
     for iface in "${wifi_interfaces[@]}"; do
-        echo "wifi: \\4{${iface}} / \\6{${iface}}" >> /etc/issue
+        echo "  ║  wifi: \\4{${iface}} / \\6{${iface}} (${iface})" >> "$temp_box"
     done
 
     # Add other interfaces with their type
     for iface_info in "${other_interfaces[@]}"; do
         local iface="${iface_info%%:*}"
         local type="${iface_info##*:}"
-        echo "${type}: \\4{${iface}} / \\6{${iface}}" >> /etc/issue
+        echo "  ║  ${type}: \\4{${iface}} / \\6{${iface}} (${iface})" >> "$temp_box"
     done
 
-    # Add trailing blank lines for better visibility
-    echo "" >> /etc/issue
-    echo "" >> /etc/issue
+    echo "  ╚═══════════════════════════════════════════════════════════════════════" >> "$temp_box"
+
+    # Insert the box at the appropriate position
+    if [[ "$box_exists" == true ]] && [[ -n "$insert_line" ]]; then
+        # Insert at the same line position where the old box was
+        # Since sed 'r' inserts after the line, we need to insert after the line before our target
+        local insert_after=$((insert_line - 1))
+        if [[ $insert_after -lt 1 ]]; then
+            # Special case: insert at beginning of file
+            cat "$temp_box" /etc/issue > /etc/issue.tmp && mv /etc/issue.tmp /etc/issue
+        else
+            sed -i.bak "${insert_after}r ${temp_box}" /etc/issue && rm -f /etc/issue.bak
+        fi
+    else
+        # Initial setup: append to end with blank lines for spacing
+        # Ensure there's a blank line before our section
+        if [[ -s /etc/issue ]] && [[ $(tail -c 1 /etc/issue | wc -l) -eq 0 ]]; then
+            echo "" >> /etc/issue
+        fi
+
+        cat "$temp_box" >> /etc/issue
+
+        # Add trailing blank lines for better visibility (only on initial setup)
+        echo "" >> /etc/issue
+    fi
+
+    # Clean up temporary file
+    rm -f "$temp_box"
 
     print_success "/etc/issue updated with network interface information"
     echo ""
