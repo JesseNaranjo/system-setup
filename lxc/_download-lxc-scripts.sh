@@ -1,20 +1,64 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-set -o pipefail     # propagate pipeline errors
-#set -eo pipefail    # fail fast, propagate pipeline errors
-#set -euo pipefail   # fail fast, fail on unset vars, propagate pipeline errors
+# _download-lxc-scripts.sh - LXC Script Management and Auto-Updater
+#
+# Usage: ./_download-lxc-scripts.sh
+#
+# This script:
+# - Self-updates from the remote repository before running
+# - Downloads the latest versions of all LXC management scripts
+# - Shows diffs for changed files before updating
+# - Prompts for confirmation before overwriting local files
+# - Preserves executable permissions on downloaded scripts
+#
+# The script checks for curl or wget and uses whichever is available.
+# If neither is installed, it displays installation instructions and continues
+# with the local version of the script.
 
+set -euo pipefail
 
-REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/lxc"
-FILES=( "create-priv-lxc.sh" "restart-lxc.sh" "setup-lxc.sh" "start-lxc.sh" "stop-lxc.sh" )
+# Colors for output
+readonly BLUE='\033[0;34m'
+readonly GRAY='\033[0;90m'
+readonly GREEN='\033[0;32m'
+readonly RED='\033[0;31m'
+readonly YELLOW='\033[1;33m'
+readonly NC='\033[0m' # No Color
 
-LINE_COLOR="\033[0;33m"
-CODE_COLOR="\033[40m"
-RESET_COLOR="\033[0m"
+# Diff display colors
+readonly LINE_COLOR="\033[0;33m"
+readonly CODE_COLOR="\033[40m"
 
+# Remote repository configuration
+readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/lxc"
+readonly FILES=( "create-priv-lxc.sh" "restart-lxc.sh" "setup-lxc.sh" "start-lxc.sh" "stop-lxc.sh" )
 
-if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
-	SCRIPT_FILE="_download-lxc-scripts.sh"
+# Print colored output
+print_info() {
+    echo -e "${BLUE}[   INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[  ERROR]${NC} $1"
+}
+
+# ============================================================================
+# Self-Update Section
+# ============================================================================
+# This section checks for updates to this script itself before proceeding.
+# It downloads the latest version from GitHub and offers to replace the local
+# copy if changes are detected.
+
+if [[ ${scriptUpdated:-0} -eq 0 ]]; then
+	readonly SCRIPT_FILE="_download-lxc-scripts.sh"
 	TEMP_SCRIPT_FILE="$(mktemp)"
 	trap 'rm -f "${TEMP_SCRIPT_FILE}"' RETURN     # ensure cleanup even on exit/interrupt
 
@@ -51,7 +95,8 @@ if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
 
 	# Proceed with self-update if a download command is available
 	if [[ -n "$DOWNLOAD_CMD" ]]; then
-		echo "▶ Fetching ${REMOTE_BASE}/${SCRIPT_FILE}..."
+		print_info "Checking for updates to ${SCRIPT_FILE}..."
+		echo "          ▶ Fetching ${REMOTE_BASE}/${SCRIPT_FILE}..."
 
 		DOWNLOAD_SUCCESS=false
 		if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
@@ -68,42 +113,60 @@ if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
 
 		if [[ "$DOWNLOAD_SUCCESS" == true ]]; then
 			if diff -u "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
-				echo "  ✓ ${SCRIPT_FILE} is already up-to-date"
+				print_success "- ${SCRIPT_FILE} is already up-to-date"
+				echo ""
 			else
-				echo -e "${LINE_COLOR}╭───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╮${RESET_COLOR}${CODE_COLOR}"
+				echo -e "${LINE_COLOR}╭───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╮${NC}${CODE_COLOR}"
 				cat "${TEMP_SCRIPT_FILE}"
-				echo -e "${RESET_COLOR}${LINE_COLOR}╰────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${RESET_COLOR}"
+				echo -e "${NC}${LINE_COLOR}╰────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
 				diff -u --color "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" || true
-				echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${RESET_COLOR}"; echo
+				echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"; echo
 
-				read -p "→ Overwrite and run ${SCRIPT_FILE}?: [y/N] " continueExec
-				echo
+				read -p "→ Overwrite and run updated ${SCRIPT_FILE}?: [y/N] " continueExec
+				echo ""
 
 				if [[ $continueExec == [Yy] ]]; then
-					chmod +x $TEMP_SCRIPT_FILE
+					chmod +x "${TEMP_SCRIPT_FILE}"
 					export scriptUpdated=1
-					$TEMP_SCRIPT_FILE
+					"${TEMP_SCRIPT_FILE}"
 					unset scriptUpdated
-					mv $TEMP_SCRIPT_FILE ${BASH_SOURCE[0]}
+					mv "${TEMP_SCRIPT_FILE}" "${BASH_SOURCE[0]}"
 					exit 0
 				else
-					rm -f $TEMP_SCRIPT_FILE
-					echo "→ Running local unmodified copy..."
+					rm -f "${TEMP_SCRIPT_FILE}"
+					print_info "Running local unmodified copy..."
+					echo ""
 				fi
 			fi
 		else
-			echo "  ✖ Download failed — skipping $SCRIPT_FILE"
-			echo "  → Running local unmodified copy..."
+			print_error "Download failed — skipping $SCRIPT_FILE"
+			print_info "Running local unmodified copy..."
+			echo ""
 		fi
 	fi
 fi
 
+# ============================================================================
+# Download LXC Scripts Section
+# ============================================================================
+# This section downloads all LXC management scripts from the remote repository.
+# For each script, it shows a diff if changes are detected and prompts for
+# confirmation before overwriting.
+
+print_info "Starting LXC scripts download..."
+echo ""
+
+# Track statistics
+UPDATED_COUNT=0
+SKIPPED_COUNT=0
+FAILED_COUNT=0
 
 for fname in "${FILES[@]}"; do
-	tmp="$(mktemp)"                 # secure, race-free temp file :contentReference[oaicite:0]{index=0}
+	tmp="$(mktemp)"                 # secure, race-free temp file
 	trap 'rm -f "${tmp}"' RETURN    # ensure cleanup even on exit/interrupt
 
-	echo "▶ Fetching ${REMOTE_BASE}/${fname}..."
+	print_info "Checking ${fname}..."
+	echo "          ▶ Fetching ${REMOTE_BASE}/${fname}..."
 
 	DOWNLOAD_SUCCESS=false
 	if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
@@ -119,29 +182,59 @@ for fname in "${FILES[@]}"; do
 	fi
 
 	if [[ "$DOWNLOAD_SUCCESS" != true ]]; then
-		echo "  ✖ Download failed — skipping $fname"
+		print_error "Download failed — skipping $fname"
+		((FAILED_COUNT++))
+		echo ""
 		continue
 	fi
 
+	# Create file if it doesn't exist
 	if [[ ! -f "${fname}" ]]; then
 		touch "${fname}"
 	fi
 
 	if diff -u "${fname}" "${tmp}" > /dev/null 2>&1; then
-		echo "  ✓ ${fname} is already up-to-date"
+		print_success "${fname} is already up-to-date"
+		echo ""
 	else
-		echo; echo -e "${LINE_COLOR}╭────────────────────────────────────────────────── Δ detected in ${fname} ──────────────────────────────────────────────────╮${RESET_COLOR}"
+		echo ""
+		echo -e "${LINE_COLOR}╭────────────────────────────────────────────────── Δ detected in ${fname} ──────────────────────────────────────────────────╮${NC}"
 		diff -u --color "${fname}" "${tmp}" || true
-		echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${fname} ─────────────────────────────────────────────────────────╯${RESET_COLOR}"
+		echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${fname} ─────────────────────────────────────────────────────────╯${NC}"
+		echo ""
 
 		read -rp "→ Overwrite local ${fname} with remote copy? [y/N] " continueOverwrite
+		echo ""
+
 		if [[ $continueOverwrite =~ ^[Yy]$ ]]; then
-			chmod +x $tmp
+			chmod +x "${tmp}"
 			mv "${tmp}" "${fname}"
-			echo "  ↺ Replaced ${fname}"
+			print_success "Replaced ${fname}"
+			((UPDATED_COUNT++))
 		else
-			echo "  ◼ Skipped ${fname}"
+			print_warning "Skipped ${fname}"
+			((SKIPPED_COUNT++))
 			rm -f "${tmp}"
 		fi
+		echo ""
 	fi
 done
+
+# ============================================================================
+# Summary Section
+# ============================================================================
+# Display final statistics of the download operation
+
+echo ""
+echo "============================================================================"
+print_info "Download Summary"
+echo "============================================================================"
+echo -e "${GREEN}Updated:${NC}  ${UPDATED_COUNT} file(s)"
+echo -e "${YELLOW}Skipped:${NC}  ${SKIPPED_COUNT} file(s)"
+echo -e "${RED}Failed:${NC}   ${FAILED_COUNT} file(s)"
+echo "============================================================================"
+echo ""
+
+if [[ $FAILED_COUNT -gt 0 ]]; then
+	exit 1
+fi

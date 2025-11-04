@@ -15,6 +15,8 @@
 # It provides options for user-specific or system-wide installation.
 # Existing configuration files are backed up before modification.
 
+set -euo pipefail
+
 if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
     REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main"
     SCRIPT_FILE="system-setup.sh"
@@ -104,15 +106,12 @@ if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
     fi
 fi
 
-
-set -euo pipefail
-
 # Colors for output
-readonly RED='\033[0;31m'
-readonly GREEN='\033[0;32m'
-readonly YELLOW='\033[1;33m'
 readonly BLUE='\033[0;34m'
 readonly GRAY='\033[0;90m'
+readonly GREEN='\033[0;32m'
+readonly RED='\033[0;31m'
+readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m' # No Color
 
 # Global variables
