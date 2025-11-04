@@ -51,6 +51,40 @@ print_error() {
 }
 
 # ============================================================================
+# Check for Download Tools
+# ============================================================================
+# Check for curl or wget availability
+DOWNLOAD_CMD=""
+if command -v curl &>/dev/null; then
+    DOWNLOAD_CMD="curl"
+elif command -v wget &>/dev/null; then
+    DOWNLOAD_CMD="wget"
+else
+    # Display large error message if neither curl nor wget is available
+    echo ""
+    echo "╔═════════════════════════════════════════════════════════════════════╗"
+    echo "║                                                                     ║"
+    echo "║                  ⚠️   SELF-UPDATE NOT AVAILABLE  ⚠️                   ║"  # the extra space is intentional for alignment due to the ⚠️  character
+    echo "║                                                                     ║"
+    echo "║    Neither 'curl' nor 'wget' is installed on this system.           ║"
+    echo "║    Self-updating functionality requires one of these tools.         ║"
+    echo "║                                                                     ║"
+    echo "║    To enable self-updating, please install one of the following:    ║"
+    echo "║      • curl  (recommended)                                          ║"
+    echo "║      • wget                                                         ║"
+    echo "║                                                                     ║"
+    echo "║    Installation commands:                                           ║"
+    echo "║      macOS:    brew install curl                                    ║"
+    echo "║      Debian:   sudo apt install curl                                ║"
+    echo "║      RHEL:     sudo yum install curl                                ║"
+    echo "║                                                                     ║"
+    echo "║    Continuing with local version of the script...                   ║"
+    echo "║                                                                     ║"
+    echo "╚═════════════════════════════════════════════════════════════════════╝"
+    echo ""
+fi
+
+# ============================================================================
 # Self-Update Section
 # ============================================================================
 # This section checks for updates to this script itself before proceeding.
@@ -61,37 +95,6 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
     readonly SCRIPT_FILE="_download-ollama-scripts.sh"
     TEMP_SCRIPT_FILE="$(mktemp)"
     trap 'rm -f "${TEMP_SCRIPT_FILE}"' RETURN     # ensure cleanup even on exit/interrupt
-
-    # Check for curl or wget availability
-    DOWNLOAD_CMD=""
-    if command -v curl &>/dev/null; then
-        DOWNLOAD_CMD="curl"
-    elif command -v wget &>/dev/null; then
-        DOWNLOAD_CMD="wget"
-    else
-        # Display large error message if neither curl nor wget is available
-        echo ""
-        echo "╔═════════════════════════════════════════════════════════════════════╗"
-        echo "║                                                                     ║"
-        echo "║                  ⚠️   SELF-UPDATE NOT AVAILABLE  ⚠️                   ║"  # the extra space is intentional for alignment due to the ⚠️  character
-        echo "║                                                                     ║"
-        echo "║    Neither 'curl' nor 'wget' is installed on this system.           ║"
-        echo "║    Self-updating functionality requires one of these tools.         ║"
-        echo "║                                                                     ║"
-        echo "║    To enable self-updating, please install one of the following:    ║"
-        echo "║      • curl  (recommended)                                          ║"
-        echo "║      • wget                                                         ║"
-        echo "║                                                                     ║"
-        echo "║    Installation commands:                                           ║"
-        echo "║      macOS:    brew install curl                                    ║"
-        echo "║      Debian:   sudo apt install curl                                ║"
-        echo "║      RHEL:     sudo yum install curl                                ║"
-        echo "║                                                                     ║"
-        echo "║    Continuing with local version of the script...                   ║"
-        echo "║                                                                     ║"
-        echo "╚═════════════════════════════════════════════════════════════════════╝"
-        echo ""
-    fi
 
     # Proceed with self-update if a download command is available
     if [[ -n "$DOWNLOAD_CMD" ]]; then
