@@ -759,28 +759,28 @@ configure_issue() {
     local temp_box=$(mktemp)
 
     # Add box with network interfaces (left-side only, right-side open for dynamic IP lengths)
-    echo "  ╔═══════════════════════════════════════════════════════════════════════" > "$temp_box"
+    echo "  ╔═══════════════════════════════════════════════════════════════════════════" > "$temp_box"
     echo "  ║ Network Interfaces" >> "$temp_box"
-    echo "  ╠═══════════════════════════════════════════════════════════════════════" >> "$temp_box"
+    echo "  ╠═══════════════════════════════════════════════════════════════════════════" >> "$temp_box"
 
     # Add wired interfaces
     for iface in "${wire_interfaces[@]}"; do
-        echo "  ║  wire: \\4{${iface}} / \\6{${iface}} (${iface})" >> "$temp_box"
+        echo "  ║ - wire: \\4{${iface}} / \\6{${iface}} (${iface})" >> "$temp_box"
     done
 
     # Add wireless interfaces
     for iface in "${wifi_interfaces[@]}"; do
-        echo "  ║  wifi: \\4{${iface}} / \\6{${iface}} (${iface})" >> "$temp_box"
+        echo "  ║ - wifi: \\4{${iface}} / \\6{${iface}} (${iface})" >> "$temp_box"
     done
 
     # Add other interfaces with their type
     for iface_info in "${other_interfaces[@]}"; do
         local iface="${iface_info%%:*}"
         local type="${iface_info##*:}"
-        echo "  ║  ${type}: \\4{${iface}} / \\6{${iface}} (${iface})" >> "$temp_box"
+        echo "  ║ - ${type}: \\4{${iface}} / \\6{${iface}} (${iface})" >> "$temp_box"
     done
 
-    echo "  ╚═══════════════════════════════════════════════════════════════════════" >> "$temp_box"
+    echo "  ╚═══════════════════════════════════════════════════════════════════════════" >> "$temp_box"
 
     # Insert the box at the appropriate position
     if [[ "$box_exists" == true ]] && [[ -n "$insert_line" ]]; then
