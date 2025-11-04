@@ -125,19 +125,15 @@ echo ""
 # System Configuration
 # ============================================================================
 
-# Backup /etc/lxc/default.conf
-print_info "Backing up /etc/lxc/default.conf..."
-backup_file "/etc/lxc/default.conf"
-echo ""
-
 # Configure veth interface permissions
 VETH_ENTRY="$LIMITED_USER veth lxcbr0 10"
 
 print_info "Configuring veth interface permissions..."
 if grep -q "^$VETH_ENTRY" /etc/lxc/lxc-usernet 2>/dev/null; then
-    print_info "✓ veth entry already exists in /etc/lxc/lxc-usernet"
+    print_success "✓ veth entry already exists in /etc/lxc/lxc-usernet"
 else
     print_warning "Adding veth entry to /etc/lxc/lxc-usernet"
+    backup_file "/etc/lxc/lxc-usernet"
     echo "$VETH_ENTRY" | tee -a /etc/lxc/lxc-usernet > /dev/null
     print_success "- Added: $VETH_ENTRY"
 fi
@@ -148,9 +144,10 @@ SUB_ENTRY="$LIMITED_USER:$ID_NO:65535"
 
 print_info "Configuring subuid mappings..."
 if grep -q "^$SUB_ENTRY" /etc/subuid 2>/dev/null; then
-    print_info "✓ subuid entry already exists in /etc/subuid"
+    print_success "✓ subuid entry already exists in /etc/subuid"
 else
     print_warning "Adding subuid entry to /etc/subuid"
+    backup_file "/etc/subuid"
     echo "$SUB_ENTRY" | tee -a /etc/subuid > /dev/null
     print_success "- Added: $SUB_ENTRY"
 fi
@@ -159,9 +156,10 @@ echo ""
 # Configure subgid mappings
 print_info "Configuring subgid mappings..."
 if grep -q "^$SUB_ENTRY" /etc/subgid 2>/dev/null; then
-    print_info "✓ subgid entry already exists in /etc/subgid"
+    print_success "✓ subgid entry already exists in /etc/subgid"
 else
     print_warning "Adding subgid entry to /etc/subgid"
+    backup_file "/etc/subgid"
     echo "$SUB_ENTRY" | tee -a /etc/subgid > /dev/null
     print_success "- Added: $SUB_ENTRY"
 fi
@@ -175,6 +173,7 @@ if [[ "$USER_NAMESPACE_ENABLED" -eq 1 ]]; then
     print_success "✓ User namespaces already enabled"
 else
     print_warning "User namespaces not enabled, enabling permanently..."
+    backup_file "/etc/sysctl.d/99-lxc.conf"
     sysctl -w kernel.unprivileged_userns_clone=1
     echo "kernel.unprivileged_userns_clone = 1" | tee /etc/sysctl.d/99-lxc.conf > /dev/null
     sysctl --system > /dev/null 2>&1
@@ -294,7 +293,6 @@ echo "  - Systemd Service:   $LIMITED_USER_CONFIG_SYSTEMD_USER/lxc-bg-start@.ser
 echo ""
 echo "Next Steps:"
 echo "  1. Switch to the user: su - $LIMITED_USER"
-echo "  2. Create a container: lxc-create -t download -n mycontainer"
-echo "  3. Start the container: lxc-start -n mycontainer"
-echo "  4. Auto-start on boot: systemctl --user enable lxc-bg-start@mycontainer"
+echo "  2. Create a container: lxc-create mycontainer -t download"
+echo "  3. Start the container: ./start-lxc mycontainer"
 echo ""
