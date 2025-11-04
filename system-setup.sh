@@ -151,7 +151,7 @@ print_error() {
 }
 
 print_backup() {
-    echo -e "${GRAY}[ BACKUP]${NC} $1"
+    echo -e "${GRAY}[ BACKUP] $1${NC}"
 }
 
 # Check if a package is installed (unified for both macOS and Linux)
@@ -929,8 +929,8 @@ configure_ssh_socket() {
 
     echo ""
     print_info "Socket-based activation (ssh.socket) vs Service-based (ssh.service):"
-    echo "  • ssh.socket: Starts SSH daemon on-demand when connections arrive (saves resources)"
-    echo "  • ssh.service: Keeps SSH daemon running constantly (traditional approach)"
+    echo "          • ssh.socket: Starts SSH daemon on-demand when connections arrive (saves resources)"
+    echo "          • ssh.service: Keeps SSH daemon running constantly (traditional approach)"
     echo ""
 
     local response
@@ -1042,8 +1042,8 @@ main() {
     # Ask for scope (user vs system) for all components
     echo ""
     print_info "Choose configuration scope:"
-    echo "          1) User-specific (recommended) - configures for current user only"
-    echo "          2) System-wide (requires root) - nano/screen system-wide, shell for all users in /home/"
+    echo "          1) User-specific - nano/screen/shell for current user"
+    echo "          2) System-wide (root) - nano/screen system-wide, shell all users, swap, SSH socket"
     echo "          Ctrl+C to cancel configuration and exit"
     echo ""
     read -p "          Enter choice (1-2): " -r scope_choice
