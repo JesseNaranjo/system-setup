@@ -213,7 +213,7 @@ for fname in "${FILES[@]}"; do
 
     if [[ "$DOWNLOAD_SUCCESS" != true ]]; then
         print_error "Download failed — skipping $fname"
-        ((++FAILED_COUNT))
+        ((FAILED_COUNT++ || true))
         rm -f "${tmp}"
         echo ""
         continue
@@ -240,10 +240,10 @@ for fname in "${FILES[@]}"; do
             chmod +x "${tmp}"
             mv "${tmp}" "${fname}"
             print_success "Replaced ${fname}"
-            ((++UPDATED_COUNT))
+            ((UPDATED_COUNT++ || true))
         else
             print_warning "Skipped ${fname}"
-            ((++SKIPPED_COUNT))
+            ((SKIPPED_COUNT++ || true))
             rm -f "${tmp}"
         fi
         echo ""
