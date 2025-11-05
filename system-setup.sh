@@ -1473,16 +1473,24 @@ configure_container_static_ip() {
 
     echo ""
 
-    # Prompt for static IP address
+    # Prompt for static IP address in CIDR notation
     local static_ip=""
-    local static_prefix="24"
+    local static_prefix=""
 
     while true; do
-        read -p "          Enter static IP address (e.g., 192.168.1.100): " -r static_ip </dev/tty
+        read -p "          Enter static IP in CIDR notation (e.g., 192.168.1.100/24, defaults to /24): " -r user_input </dev/tty
 
-        # Basic IP address validation
-        if [[ "$static_ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-            # Check each octet is 0-255
+        # Check if input contains a slash (CIDR notation)
+        if [[ "$user_input" =~ ^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})(/([0-9]+))?$ ]]; then
+            static_ip="${BASH_REMATCH[1]}"
+            static_prefix="${BASH_REMATCH[3]}"
+
+            # Set default prefix if not provided
+            if [[ -z "$static_prefix" ]]; then
+                static_prefix="24"
+            fi
+
+            # Validate IP address octets (0-255)
             local valid=true
             IFS='.' read -ra OCTETS <<< "$static_ip"
             for octet in "${OCTETS[@]}"; do
@@ -1492,19 +1500,18 @@ configure_container_static_ip() {
                 fi
             done
 
+            # Validate prefix (1-32)
+            if [[ $static_prefix -lt 1 ]] || [[ $static_prefix -gt 32 ]]; then
+                valid=false
+            fi
+
             if [[ "$valid" == true ]]; then
                 break
             fi
         fi
 
-        print_error "Invalid IP address format. Please try again."
+        print_error "Invalid IP address format. Please use CIDR notation (e.g., 192.168.1.100/24)"
     done
-
-    # Prompt for network prefix (CIDR)
-    read -p "          Enter network prefix length (default: 24): " -r user_prefix </dev/tty
-    if [[ -n "$user_prefix" ]] && [[ "$user_prefix" =~ ^[0-9]+$ ]] && [[ $user_prefix -ge 1 ]] && [[ $user_prefix -le 32 ]]; then
-        static_prefix="$user_prefix"
-    fi
 
     echo ""
     print_info "Configuring static IP: ${static_ip}/${static_prefix} on ${primary_interface}..."
