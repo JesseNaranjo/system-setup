@@ -2,7 +2,7 @@
 
 
 echo_internal() {
-	printf "\n$1\n"
+    printf "\n$1\n"
 }
 
 
@@ -10,14 +10,14 @@ echo_internal() {
 
 echo_internal "Turning off swap..."
 (
-	set -x
-	sudo swapoff -a
+    set -x
+    sudo swapoff -a
 )
 
 echo_internal "Setting IP forwarding..."
 (
-	set -x
-	sudo sysctl net.ipv4.conf.all.forwarding=1
+    set -x
+    sudo sysctl net.ipv4.conf.all.forwarding=1
 )
 
 
@@ -25,8 +25,8 @@ echo_internal "Setting IP forwarding..."
 
 echo_internal "Enabling cri-o and kubelet services..."
 (
-	set -x
-	sudo systemctl enable crio.service kubelet.service
+    set -x
+    sudo systemctl enable crio.service kubelet.service
 )
 
 
@@ -34,19 +34,19 @@ echo_internal "Enabling cri-o and kubelet services..."
 
 echo_internal "Starting cri-o and kubetlet services..."
 (
-	set -x
-	sudo systemctl start crio.service kubelet.service
+    set -x
+    sudo systemctl start crio.service kubelet.service
 )
 
 echo_internal ""
 SYSCTL_STATUS_OUTPUT=$(
-	sudo systemctl status crio.service kubelet.service
+    sudo systemctl status crio.service kubelet.service
 )
 echo -e "${SYSCTL_STATUS_OUTPUT}"
 
 echo_internal ""
 sleep 5s
 (
-	set -x
-	kubectl get all --all-namespaces
+    set -x
+    kubectl get all --all-namespaces
 )
