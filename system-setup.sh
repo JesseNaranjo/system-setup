@@ -17,7 +17,17 @@
 
 set -euo pipefail
 
-if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
+# Colors for output (must be defined early for self-update section)
+readonly BLUE='\033[0;34m'
+readonly GRAY='\033[0;90m'
+readonly GREEN='\033[0;32m'
+readonly RED='\033[0;31m'
+readonly YELLOW='\033[1;33m'
+readonly NC='\033[0m' # No Color
+readonly LINE_COLOR='\033[0;36m' # Cyan for lines/borders
+readonly CODE_COLOR='\033[0;37m' # White for code blocks
+
+if [[ ${scriptUpdated:-0} -eq 0 ]]; then
     REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main"
     SCRIPT_FILE="system-setup.sh"
     TEMP_SCRIPT_FILE="$(mktemp)"
@@ -76,11 +86,11 @@ if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
                 echo "  ✓ ${SCRIPT_FILE} is already up-to-date"
                 echo ""
             else
-                echo -e "${LINE_COLOR}╭───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╮${RESET_COLOR}${CODE_COLOR}"
+                echo -e "${LINE_COLOR}╭───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╮${NC}${CODE_COLOR}"
                 cat "${TEMP_SCRIPT_FILE}"
-                echo -e "${RESET_COLOR}${LINE_COLOR}╰────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${RESET_COLOR}"
+                echo -e "${NC}${LINE_COLOR}╰────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
                 diff -u --color "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" || true
-                echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${RESET_COLOR}"; echo
+                echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"; echo
 
                 read -p "→ Overwrite and run updated ${SCRIPT_FILE}?: [y/N] " continueExec
                 echo ""
@@ -105,14 +115,6 @@ if [[ $scriptUpdated -eq 0 || -z $scriptUpdated ]]; then
         fi
     fi
 fi
-
-# Colors for output
-readonly BLUE='\033[0;34m'
-readonly GRAY='\033[0;90m'
-readonly GREEN='\033[0;32m'
-readonly RED='\033[0;31m'
-readonly YELLOW='\033[1;33m'
-readonly NC='\033[0m' # No Color
 
 # Global variables
 BACKED_UP_FILES=""
