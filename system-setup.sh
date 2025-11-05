@@ -120,7 +120,7 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
                 diff -u --color "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" || true
                 echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"; echo
 
-                if prompt_yes_no "→ Overwrite and run updated ${SCRIPT_FILE}?" "n"; then
+                if prompt_yes_no "→ Overwrite and run updated ${SCRIPT_FILE}?" "y"; then
                     echo ""
                     chmod +x "$TEMP_SCRIPT_FILE"
                     mv -f "$TEMP_SCRIPT_FILE" "${BASH_SOURCE[0]}"
@@ -664,7 +664,9 @@ configure_issue_network() {
     print_info "Reviewing network interface information in /etc/issue..."
 
     # Check if running inside an LXC container
+    local in_container=false
     if [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ; then
+        in_container=true
         print_warning "Detected LXC environment: /etc/issue configuration may not be useful inside LXC containers"
         # Don't return - still allow configuration if user wants it
     fi
@@ -809,10 +811,16 @@ configure_issue_network() {
     echo ""
 
     # Prompt user to update
+    # Default to 'n' inside containers, 'y' everywhere else
+    local default_update="y"
+    if [[ "$in_container" == true ]]; then
+        default_update="n"
+    fi
+
     print_info "Login banner (/etc/issue) network interface configuration:"
     echo "          - This will add network interface IP addresses to /etc/issue login banner."
     echo "          - The addresses will be displayed dynamically at login time."
-    if ! prompt_yes_no "Would you like to update /etc/issue?" "y"; then
+    if ! prompt_yes_no "Would you like to update /etc/issue?" "$default_update"; then
         print_info "- Keeping current /etc/issue configuration (no changes made)"
         return 0
     fi
@@ -1268,7 +1276,7 @@ configure_ssh_socket() {
     echo "          • ssh.service: Keeps SSH daemon running constantly (traditional approach)"
     echo ""
 
-    if ! prompt_yes_no "Would you like to configure and enable ssh.socket?" "n"; then
+    if ! prompt_yes_no "Would you like to configure and enable ssh.socket?" "y"; then
         print_info "Keeping current SSH configuration (no changes made)"
         return 0
     fi
