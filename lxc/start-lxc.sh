@@ -67,7 +67,7 @@ print_info "Starting ${#@} container(s)..."
 echo ""
 
 for lxcName in "$@"; do
-    echo "          - Starting LXC: ${lxcName}..."
+    print_info "Starting LXC: ${lxcName}..."
     # lxc-unpriv-start --name "${lxcName}"
     if systemctl --user start "lxc-bg-start@${lxcName}.service"; then
         print_success "✓ Started ${lxcName}"
@@ -76,31 +76,29 @@ for lxcName in "$@"; do
     fi
     sleep 1
 done
-
 echo ""
 
 # If only one container specified, attach to it
 if [[ $# -eq 1 ]]; then
     lxcName=$1
 
-    echo ""
     print_info "Container started. Attaching in:"
     x=3
     while [ $x -gt 0 ]; do
-        echo "  $x..."
+        echo "          $x..."
         sleep 0.75
         x=$((x - 1))
     done
-
     echo ""
+
     lxc-ls --fancy
+    echo ""
 
     # lxc-unpriv-attach reuses the calling environment in the container:
     # - All env variables are passed through, so by default the container thinks
     #   that it's running as the user that attached into the LXC
     # - Even though inside the container you may be root, the env variables are
     #   not setup correctly (for example, check $HOME without the --set-var argument)
-    echo ""
     print_info "Attaching to ${lxcName} as root (use 'exit' or Ctrl+D to detach)..."
     echo ""
     lxc-unpriv-attach --name "${lxcName}" --set-var HOME=/root -- /bin/bash -l

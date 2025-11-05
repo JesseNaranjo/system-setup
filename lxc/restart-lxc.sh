@@ -43,8 +43,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ $# -eq 0 || -z ${1-} ]]; then
     # No LXCs specified, so restart all running LXCs
     print_info "No containers specified, restarting all running containers..."
-    echo ""
-    lxc-ls --running
+
+    #lxc-ls --running
     RUNNING=( $(/usr/bin/lxc-ls --running) )
 
     if [[ ${#RUNNING[@]} -eq 0 ]]; then

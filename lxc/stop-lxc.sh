@@ -51,8 +51,8 @@ print_error() {
 if [[ $# -eq 0 || -z ${1-} ]]; then
     # No LXCs specified, so stop all running LXCs
     print_info "No containers specified, stopping all running containers..."
-    echo ""
-    lxc-ls --running
+
+    #lxc-ls --running
     RUNNING=( $(/usr/bin/lxc-ls --running) )
 
     if [[ ${#RUNNING[@]} -eq 0 ]]; then
@@ -67,7 +67,7 @@ print_info "Stopping ${#RUNNING[@]} container(s)..."
 echo ""
 
 for lxcName in "${RUNNING[@]}"; do
-    echo "          - Stopping LXC: ${lxcName}..."
+    print_info "Stopping LXC: ${lxcName}..."
 
     # Stop the container
     if lxc-stop --name "${lxcName}"; then
