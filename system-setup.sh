@@ -122,11 +122,10 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
 
                 if prompt_yes_no "→ Overwrite and run updated ${SCRIPT_FILE}?" "n"; then
                     echo ""
-                    chmod +x $TEMP_SCRIPT_FILE
+                    chmod +x "$TEMP_SCRIPT_FILE"
+                    mv -f "$TEMP_SCRIPT_FILE" "${BASH_SOURCE[0]}"
                     export scriptUpdated=1
-                    $TEMP_SCRIPT_FILE
-                    unset scriptUpdated
-                    mv $TEMP_SCRIPT_FILE ${BASH_SOURCE[0]}
+                    exec "${BASH_SOURCE[0]}" "$@"
                     exit 0
                 else
                     echo ""
@@ -889,7 +888,7 @@ configure_issue_network() {
         local insert_after=$((insert_line - 1))
         if [[ $insert_after -lt 1 ]]; then
             # Special case: insert at beginning of file
-            cat "$temp_box" /etc/issue > /etc/issue.tmp && mv /etc/issue.tmp /etc/issue
+            cat "$temp_box" /etc/issue > /etc/issue.tmp && mv -f /etc/issue.tmp /etc/issue
         else
             sed -i.bak "${insert_after}r ${temp_box}" /etc/issue && rm -f /etc/issue.bak
         fi
@@ -1045,7 +1044,7 @@ configure_shell() {
                 username=$(basename "$user_home")
                 print_info "Processing user: $username"
                 configure_shell_for_user "$os" "$user_home" "$username"
-                ((user_count++ || true))
+                ((user_count++)) || true
             fi
         done
 

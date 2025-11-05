@@ -223,7 +223,7 @@ create_dest_repo() {
 
     print_step "Creating repository ${DST_ORG}/${name} (${visibility})"
     gh repo create "${DST_ORG}/${name}" "--${visibility}" >/dev/null
-    ((TOTAL_REPOS_CREATED++ || true))
+    ((TOTAL_REPOS_CREATED++)) || true
 
     # Enable Discussions and set default branch
     gh repo edit "${DST_ORG}/${name}" --enable-discussions --default-branch development >/dev/null 2>&1 || true
@@ -275,7 +275,7 @@ copy_wiki() {
         rm -rf "$wd"
         if git clone --bare "$src_wiki" "$wd" >/dev/null 2>&1; then
             if git --git-dir="$wd" push --mirror "$dst_wiki" 2>/dev/null; then
-                ((TOTAL_WIKIS_COPIED++ || true))
+                ((TOTAL_WIKIS_COPIED++)) || true
             else
                 print_warning "Wiki push failed for ${name}"
             fi
@@ -301,7 +301,7 @@ ensure_label() {
 
     gh api -H "Accept: application/vnd.github+json" "/repos/${DST_ORG}/${repo}/labels/${label}" >/dev/null 2>&1 && return 0
     if gh_post -X POST "/repos/${DST_ORG}/${repo}/labels" -f name="$label" -f color="$color" -f description="${desc}" >/dev/null 2>&1; then
-        ((TOTAL_LABELS_COPIED++ || true))
+        ((TOTAL_LABELS_COPIED++)) || true
     fi
 }
 
@@ -336,7 +336,7 @@ copy_labels_and_milestones() {
             [[ -n "$DESC" ]] && args+=(-f description="$DESC")
             [[ -n "$DUE"  ]] && args+=(-f due_on="$DUE")
             if gh_post "${args[@]}" >/dev/null 2>&1; then
-                ((TOTAL_MILESTONES_COPIED++ || true))
+                ((TOTAL_MILESTONES_COPIED++)) || true
             fi
         fi
     done
@@ -391,7 +391,7 @@ create_issue_in_dest() {
     existing="$(exists_issue_number_by_title "$name" "$title" "$created" || true)"
     if [[ -n "$existing" ]]; then
         print_info "Issue already exists in ${DST_ORG}/${name} with same title, skipping (#${existing})"
-        ((TOTAL_ISSUES_SKIPPED++ || true))
+        ((TOTAL_ISSUES_SKIPPED++)) || true
         echo "" # Signal "skipped" to caller
         return 0
     fi
@@ -424,7 +424,7 @@ create_issue_in_dest() {
 
     local newnum
     newnum="$(printf '%s' "$resp" | jq -r '.number')"
-    ((TOTAL_ISSUES_COPIED++ || true))
+    ((TOTAL_ISSUES_COPIED++)) || true
 
     # Close it if source was closed
     if [[ "$state" == "closed" ]]; then
@@ -443,7 +443,7 @@ post_issue_comment() {
     local body="$3"
     if gh_post -X POST "/repos/${DST_ORG}/${name}/issues/${num}/comments" \
         -f body="$body" >/dev/null; then
-        ((TOTAL_ISSUE_COMMENTS_COPIED++ || true))
+        ((TOTAL_ISSUE_COMMENTS_COPIED++)) || true
     fi
 }
 
@@ -550,8 +550,8 @@ copy_prs_as_archival_issues() {
         if [[ -z "$NEWNUM" ]]; then
             continue
         fi
-        
-        ((TOTAL_PRS_ARCHIVED++ || true))
+
+        ((TOTAL_PRS_ARCHIVED++)) || true
 
         # Collect PR conversation pieces:
         # 1) PR issue-comments
@@ -575,7 +575,7 @@ copy_prs_as_archival_issues() {
             local BODY=$(echo "$c" | jq -r '.body')
             local CMT="**(${KIND//_/ } by @${AUTH} on ${DATE})**\n\n${BODY}"
             if post_issue_comment "$name" "$NEWNUM" "$CMT"; then
-                ((TOTAL_PR_COMMENTS_COPIED++ || true))
+                ((TOTAL_PR_COMMENTS_COPIED++)) || true
             fi
         done || true
     done
@@ -662,7 +662,7 @@ copy_discussions() {
             local created
             created="$(gh_gql -f query="$m" -F rid="$dstRepoId" -F cid="$CATID" -F title="$DTITLE" -F body="$BODY")" || { print_warning "Failed to create discussion"; continue; }
             local newDid; newDid="$(echo "$created" | jq -r '.data.createDiscussion.discussion.id')"
-            ((TOTAL_DISCUSSIONS_COPIED++ || true))
+            ((TOTAL_DISCUSSIONS_COPIED++)) || true
 
             # Comments (single page or more)
             # First page from current node
@@ -673,7 +673,7 @@ copy_discussions() {
                 local CBODY="**(Original comment by @${CAUTH} on ${CDAT})**\n\n${CBOD}"
                 local cm='mutation($id:ID!,$body:String!){ addDiscussionComment(input:{discussionId:$id, body:$body}){ comment{ id } } }'
                 if gh_gql -f query="$cm" -F id="$newDid" -F body="$CBODY" >/dev/null 2>&1; then
-                    ((TOTAL_DISCUSSION_COMMENTS_COPIED++ || true))
+                    ((TOTAL_DISCUSSION_COMMENTS_COPIED++)) || true
                 fi
                 sleep "$THROTTLE"
             done
@@ -701,7 +701,7 @@ process_repositories() {
         HAS_WIKI=$(_j '.has_wiki')
 
         print_header "Processing repository: ${NAME}"
-        ((TOTAL_REPOS_PROCESSED++ || true))
+        ((TOTAL_REPOS_PROCESSED++)) || true
         create_dest_repo "$NAME" "$VIS" >/dev/null
 
         mirror_git_and_lfs "$NAME"

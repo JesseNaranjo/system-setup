@@ -190,7 +190,7 @@ process_repository() {
     local issues_count
     issues_count=$(echo "$issues" | wc -l | tr -d ' ')
     print_info "Found $issues_count issue(s)"
-    ((TOTAL_ISSUES_FOUND += issues_count || true))
+    ((TOTAL_ISSUES_FOUND += issues_count)) || true
     echo ""
 
     while IFS= read -r issue; do
@@ -272,7 +272,7 @@ attempt_delete_issue() {
         }' \
         -F issueId="$node_id" >/dev/null 2>&1; then
         print_success "    Deleted via GraphQL"
-        ((TOTAL_ISSUES_DELETED++ || true))
+        ((TOTAL_ISSUES_DELETED++)) || true
         return 0
     else
         print_warning "    Delete failed or not permitted; will close instead"
@@ -288,10 +288,10 @@ close_issue() {
 
     if gh issue close "$num" -R "$repo_name" --reason "$close_reason" -c "Bulk cleanup $(timestamp)" 2>/dev/null; then
         print_success "    Closed"
-        ((TOTAL_ISSUES_CLOSED++ || true))
+        ((TOTAL_ISSUES_CLOSED++)) || true
     else
         print_error "    Close failed"
-        ((TOTAL_ISSUES_FAILED++ || true))
+        ((TOTAL_ISSUES_FAILED++)) || true
         return 1
     fi
 }
@@ -303,7 +303,7 @@ lock_issue() {
 
     if gh api -X PUT "repos/${repo_name}/issues/${num}/lock" -f lock_reason="resolved" >/dev/null 2>&1; then
         print_success "    Locked"
-        ((TOTAL_ISSUES_LOCKED++ || true))
+        ((TOTAL_ISSUES_LOCKED++)) || true
     else
         print_warning "    Lock failed (insufficient permissions or already locked)"
     fi
@@ -352,8 +352,8 @@ main() {
             continue
         fi
 
-        ((num_repos++ || true))
-        ((TOTAL_REPOS_PROCESSED++ || true))
+        ((num_repos++)) || true
+        ((TOTAL_REPOS_PROCESSED++)) || true
 
         process_repository "$repo_name" "$visibility" "$state_arg"
     done <<< "$repos"
@@ -375,7 +375,7 @@ main() {
         echo -e "${CYAN}Mode:                      DRY-RUN (no changes made)${NC}"
     fi
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    
+
     if [[ $DRY_RUN -eq 0 ]]; then
         print_success "Operation complete!"
     else

@@ -156,11 +156,10 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
 
                 if prompt_yes_no "→ Overwrite and run updated ${SCRIPT_FILE}?" "n"; then
                     echo ""
-                    chmod +x "${TEMP_SCRIPT_FILE}"
+                    chmod +x "$TEMP_SCRIPT_FILE"
+                    mv -f "$TEMP_SCRIPT_FILE" "${BASH_SOURCE[0]}"
                     export scriptUpdated=1
-                    "${TEMP_SCRIPT_FILE}"
-                    unset scriptUpdated
-                    mv "${TEMP_SCRIPT_FILE}" "${BASH_SOURCE[0]}"
+                    exec "${BASH_SOURCE[0]}" "$@"
                     exit 0
                 else
                     rm -f "${TEMP_SCRIPT_FILE}"
@@ -213,7 +212,7 @@ for fname in "${FILES[@]}"; do
 
     if [[ "$DOWNLOAD_SUCCESS" != true ]]; then
         print_error "Download failed — skipping $fname"
-        ((FAILED_COUNT++ || true))
+        ((FAILED_COUNT++)) || true
         rm -f "${tmp}"
         echo ""
         continue
@@ -238,12 +237,12 @@ for fname in "${FILES[@]}"; do
         if prompt_yes_no "→ Overwrite local ${fname} with remote copy?" "n"; then
             echo ""
             chmod +x "${tmp}"
-            mv "${tmp}" "${fname}"
+            mv -f "${tmp}" "${fname}"
             print_success "Replaced ${fname}"
-            ((UPDATED_COUNT++ || true))
+            ((UPDATED_COUNT++)) || true
         else
             print_warning "Skipped ${fname}"
-            ((SKIPPED_COUNT++ || true))
+            ((SKIPPED_COUNT++)) || true
             rm -f "${tmp}"
         fi
         echo ""
