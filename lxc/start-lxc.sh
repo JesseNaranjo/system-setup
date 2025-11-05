@@ -67,12 +67,18 @@ print_info "Starting ${#@} container(s)..."
 echo ""
 
 for lxcName in "$@"; do
-    print_info "Starting LXC: ${lxcName}..."
+    # Check if container is already running
+    if lxc-info -n "${lxcName}" -s 2>/dev/null | grep -q "RUNNING"; then
+        print_success "⊙ Container ${lxcName} is already running..."
+        continue
+    fi
+
+    print_info "Starting ${lxcName}..."
     # lxc-unpriv-start --name "${lxcName}"
     if systemctl --user start "lxc-bg-start@${lxcName}.service"; then
-        print_success "✓ Started ${lxcName}"
+        print_success "✓ Service and Container started: ${lxcName}"
     else
-        print_error "✗ Failed to start ${lxcName}"
+        print_error "✗ Failed to start service/container: ${lxcName}"
     fi
     sleep 1
 done

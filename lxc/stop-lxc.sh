@@ -67,7 +67,7 @@ print_info "Stopping ${#RUNNING[@]} container(s)..."
 echo ""
 
 for lxcName in "${RUNNING[@]}"; do
-    print_info "Stopping LXC: ${lxcName}..."
+    print_info "Stopping ${lxcName}..."
 
     # Stop the container
     if lxc-stop --name "${lxcName}"; then
