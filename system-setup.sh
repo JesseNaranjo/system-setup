@@ -300,12 +300,32 @@ check_and_install_packages() {
             track_special_packages "$package"
         else
             print_warning "$display_name is not installed"
-            if prompt_yes_no " - Would you like to install $display_name?" "n"; then
+            if prompt_yes_no "          - Would you like to install $display_name?" "n"; then
                 packages_to_install+=("$package")
                 track_special_packages "$package"
             fi
         fi
     done < <(get_package_list "$os")
+
+    # Check if there are any packages to install
+    if [[ ${#packages_to_install[@]} -eq 0 ]]; then
+        echo ""
+        return 0
+    fi
+
+    # Display packages to be installed and confirm
+    echo ""
+    print_info "The following packages will be installed:"
+    for package in "${packages_to_install[@]}"; do
+        echo "          - $package"
+    done
+    echo ""
+
+    if ! prompt_yes_no "          Do you want to proceed with the installation?" "y"; then
+        print_info "Package installation cancelled"
+        echo ""
+        return 0
+    fi
 
     # Install all selected packages at once
     if ! install_packages "$os" "${packages_to_install[@]}"; then
@@ -820,7 +840,9 @@ configure_issue_network() {
     print_info "Login banner (/etc/issue) network interface configuration:"
     echo "          - This will add network interface IP addresses to /etc/issue login banner."
     echo "          - The addresses will be displayed dynamically at login time."
-    if ! prompt_yes_no "Would you like to update /etc/issue?" "$default_update"; then
+    echo ""
+
+    if ! prompt_yes_no "          Would you like to update /etc/issue?" "$default_update"; then
         print_info "- Keeping current /etc/issue configuration (no changes made)"
         return 0
     fi
@@ -1111,7 +1133,7 @@ configure_swap() {
     echo "          • >2 GB RAM: 1.5x RAM"
     echo ""
 
-    if ! prompt_yes_no "Would you like to set up swap?" "n"; then
+    if ! prompt_yes_no "          Would you like to set up swap?" "n"; then
         print_info "- Keeping swap disabled (no changes made)"
         return 0
     fi
@@ -1276,7 +1298,7 @@ configure_ssh_socket() {
     echo "          • ssh.service: Keeps SSH daemon running constantly (traditional approach)"
     echo ""
 
-    if ! prompt_yes_no "Would you like to configure and enable ssh.socket?" "y"; then
+    if ! prompt_yes_no "          Would you like to configure and enable ssh.socket?" "y"; then
         print_info "Keeping current SSH configuration (no changes made)"
         return 0
     fi
