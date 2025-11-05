@@ -2,9 +2,7 @@
 
 # gh_org_copy.sh - Copy GitHub organization repositories without forking
 #
-# Usage: SRC_ORG="OldOrg" DST_ORG="NewOrg" THROTTLE=2 ./gh_org_copy.sh
-#
-# This script:
+# This script provides comprehensive organization migration capabilities including:
 # - Mirrors git refs (branches/tags) and Git LFS objects
 # - Copies wiki repositories
 # - Recreates labels and milestones
@@ -13,15 +11,19 @@
 # - Copies discussions with comments via GraphQL (best-effort category mapping)
 #
 # Requirements:
-# - gh CLI ≥ 2.30
-# - jq (JSON processor)
-# - git (version control)
-# - git-lfs (optional, for LFS object support)
+#   - gh CLI ≥ 2.30 (GitHub command-line tool)
+#   - jq (JSON processor)
+#   - git (version control)
+#   - git-lfs (optional, for LFS object support)
 #
 # Authentication:
-# Run 'gh auth login' first. PAT must have the following scopes:
-#   Source Org: repo, read:discussion
-#   Dest Org:   repo, write:discussion, admin:org (for creating repos)
+#   Run 'gh auth login' first. PAT must have the following scopes:
+#     Source Org: repo, read:discussion
+#     Dest Org:   repo, write:discussion, admin:org (for creating repos)
+#
+# Usage:
+#   SRC_ORG="OldOrg" DST_ORG="NewOrg" ./gh_org_copy.sh
+#   SRC_ORG="OldOrg" DST_ORG="NewOrg" THROTTLE=2 ./gh_org_copy.sh
 #
 # Environment Variables:
 #   SRC_ORG            - Source organization name (required)
@@ -29,6 +31,9 @@
 #   WORKDIR            - Working directory for temporary clones (default: /tmp/org-copy-...)
 #   THROTTLE           - Seconds to sleep between API calls (default: 0.3)
 #   LABEL_ARCHIVED_PR  - Label name for archived PRs (default: archived-pr)
+#
+# Note: This is a comprehensive migration tool. Always test with a small
+#       subset of repositories first to verify the process.
 
 set -euo pipefail
 
@@ -47,6 +52,20 @@ readonly DST_ORG="${DST_ORG:-}"
 readonly WORKDIR="${WORKDIR:-${TMPDIR:-/tmp}/org-copy-${SRC_ORG}-to-${DST_ORG}}"
 readonly THROTTLE="${THROTTLE:-0.3}"
 readonly LABEL_ARCHIVED_PR="${LABEL_ARCHIVED_PR:-archived-pr}"
+
+# Global counters
+TOTAL_REPOS_PROCESSED=0
+TOTAL_REPOS_CREATED=0
+TOTAL_WIKIS_COPIED=0
+TOTAL_LABELS_COPIED=0
+TOTAL_MILESTONES_COPIED=0
+TOTAL_ISSUES_COPIED=0
+TOTAL_ISSUES_SKIPPED=0
+TOTAL_ISSUE_COMMENTS_COPIED=0
+TOTAL_PRS_ARCHIVED=0
+TOTAL_PR_COMMENTS_COPIED=0
+TOTAL_DISCUSSIONS_COPIED=0
+TOTAL_DISCUSSION_COMMENTS_COPIED=0
 
 # ============================================================================
 # Output Functions
@@ -69,11 +88,14 @@ print_error() {
 }
 
 print_header() {
-    echo -e "\n${CYAN}[$(date +'%H:%M:%S')]${NC} ${BLUE}$1${NC}"
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}[$(date +'%H:%M:%S')] $1${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
 
 print_step() {
-    echo -e "${BLUE}  ==>${NC} $1"
+    echo -e "${BLUE}  →${NC} $1"
 }
 
 # ============================================================================
@@ -84,20 +106,28 @@ print_step() {
 validate_config() {
     if [[ -z "$SRC_ORG" ]]; then
         print_error "SRC_ORG environment variable is required"
-        echo "Example: SRC_ORG=\"OldOrg\" DST_ORG=\"NewOrg\" $0"
+        echo ""
+        echo "Usage: SRC_ORG=\"OldOrg\" DST_ORG=\"NewOrg\" $0"
         exit 1
     fi
 
     if [[ -z "$DST_ORG" ]]; then
         print_error "DST_ORG environment variable is required"
-        echo "Example: SRC_ORG=\"OldOrg\" DST_ORG=\"NewOrg\" $0"
+        echo ""
+        echo "Usage: SRC_ORG=\"OldOrg\" DST_ORG=\"NewOrg\" $0"
         exit 1
     fi
 
-    print_info "Source organization: ${SRC_ORG}"
-    print_info "Destination organization: ${DST_ORG}"
-    print_info "Working directory: ${WORKDIR}"
-    print_info "API throttle: ${THROTTLE}s"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${CYAN}Configuration:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Source organization:   ${SRC_ORG}"
+    echo "Destination org:       ${DST_ORG}"
+    echo "Working directory:     ${WORKDIR}"
+    echo "API throttle:          ${THROTTLE}s"
+    echo "Archived PR label:     ${LABEL_ARCHIVED_PR}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 }
 
@@ -139,8 +169,9 @@ check_dependencies() {
 
 # Verify GitHub authentication
 verify_auth() {
+    print_info "Verifying GitHub CLI authentication..."
     if ! gh auth status >/dev/null 2>&1; then
-        print_error "Not authenticated with GitHub CLI"
+        print_error "GitHub CLI not authenticated"
         echo ""
         echo "Please run: gh auth login"
         echo ""
@@ -155,19 +186,20 @@ verify_auth() {
     GH_TOKEN="$(gh auth token)"
     export GH_TOKEN
 
-    print_success "GitHub authentication verified"
+    print_success "GitHub CLI authenticated"
 }
 
 # ============================================================================
 # GitHub API Helper Functions
 # ============================================================================
 
-# gh api wrapper with light throttling for mutating calls
+# GitHub API wrapper with throttling for mutating calls
 gh_post() {
     sleep "$THROTTLE"
     gh api "$@"
 }
 
+# GitHub GraphQL API wrapper
 gh_gql() {
     gh api graphql "$@"
 }
@@ -176,12 +208,12 @@ gh_gql() {
 # Repository Management Functions
 # ============================================================================
 
-# Create repo if missing and return visibility
+# Create destination repository if it doesn't exist and return visibility
 create_dest_repo() {
     local name="$1"
     local visibility="$2"
 
-    # Map "internal" (src) → "private" (dst) for portability
+    # Map "internal" (source) → "private" (destination) for portability
     [[ "$visibility" == "internal" ]] && visibility="private"
 
     if gh api -H "Accept: application/vnd.github+json" "/repos/${DST_ORG}/${name}" >/dev/null 2>&1; then
@@ -189,15 +221,16 @@ create_dest_repo() {
         return 0
     fi
 
-    print_step "Creating ${DST_ORG}/${name} (${visibility})"
+    print_step "Creating repository ${DST_ORG}/${name} (${visibility})"
     gh repo create "${DST_ORG}/${name}" "--${visibility}" >/dev/null
+    ((TOTAL_REPOS_CREATED++)) || true
 
-    # Enable Discussions up front
-    gh repo edit "${DST_ORG}/${name}" --enable-discussions --default-branch development >/dev/null || true
+    # Enable Discussions and set default branch
+    gh repo edit "${DST_ORG}/${name}" --enable-discussions --default-branch development >/dev/null 2>&1 || true
     echo "$visibility"
 }
 
-# Push a mirror of git refs (branches+tags) and all LFS objects
+# Push a mirror of git refs (branches + tags) and all LFS objects
 mirror_git_and_lfs() {
     local name="$1"
     local https_src="https://github.com/${SRC_ORG}/${name}.git"
@@ -206,29 +239,30 @@ mirror_git_and_lfs() {
 
     rm -rf "$gd"
     print_step "Cloning (mirror) ${SRC_ORG}/${name}"
-    git clone --mirror "$https_src" "$gd"
+    git clone --mirror "$https_src" "$gd" 2>/dev/null
 
-    # Strip PR/remote/replace/original namespaces so push won't be rejected
+    # Strip PR/remote/replace/original namespaces to avoid push rejection
     print_step "Stripping read-only ref namespaces"
     git --git-dir="$gd" for-each-ref --format='delete %(refname)' \
         'refs/pull/*' 'refs/pull/*/*' 'refs/remotes/*' 'refs/replace/*' 'refs/original/*' \
         | git --git-dir="$gd" update-ref --stdin
 
     print_step "Pushing (mirror) to ${DST_ORG}/${name}"
-    git --git-dir="$gd" push --mirror "$https_dst" || {
-        print_error "git push --mirror failed for ${name}"
+    if ! git --git-dir="$gd" push --mirror "$https_dst" 2>/dev/null; then
+        print_error "Git push --mirror failed for ${name}"
+        rm -rf "$gd"
         return 1
-    }
+    fi
 
     if command -v git-lfs >/dev/null 2>&1; then
         print_step "Pushing LFS objects for ${name}"
-        (cd "$gd" && git lfs fetch --all || true)
-        (cd "$gd" && git lfs push --all "$https_dst" || true)
+        (cd "$gd" && git lfs fetch --all 2>/dev/null || true)
+        (cd "$gd" && git lfs push --all "$https_dst" 2>/dev/null || true)
     fi
     rm -rf "$gd"
 }
 
-# Copy wiki repo if it exists
+# Copy wiki repository if it exists
 copy_wiki() {
     local name="$1"
     local src_wiki="https://github.com/${SRC_ORG}/${name}.wiki.git"
@@ -237,16 +271,20 @@ copy_wiki() {
 
     if git ls-remote "$src_wiki" &>/dev/null; then
         print_step "Copying wiki for ${name}"
-        gh repo edit "${DST_ORG}/${name}" --enable-wiki >/dev/null || true
+        gh repo edit "${DST_ORG}/${name}" --enable-wiki >/dev/null 2>&1 || true
         rm -rf "$wd"
-        git clone --bare "$src_wiki" "$wd" >/dev/null 2>&1 || {
-            print_warning "wiki clone failed for ${name}"
-            return
-        }
-        git --git-dir="$wd" push --mirror "$dst_wiki" || print_warning "wiki push failed for ${name}"
+        if git clone --bare "$src_wiki" "$wd" >/dev/null 2>&1; then
+            if git --git-dir="$wd" push --mirror "$dst_wiki" 2>/dev/null; then
+                ((TOTAL_WIKIS_COPIED++)) || true
+            else
+                print_warning "Wiki push failed for ${name}"
+            fi
+        else
+            print_warning "Wiki clone failed for ${name}"
+        fi
         rm -rf "$wd"
     else
-        print_warning "No wiki detected for ${name}"
+        print_step "No wiki detected for ${name}"
     fi
 }
 
@@ -254,7 +292,7 @@ copy_wiki() {
 # Labels, Milestones, and Metadata Functions
 # ============================================================================
 
-# Ensure label exists in dest
+# Ensure label exists in destination repository
 ensure_label() {
     local repo="$1"
     local label="$2"
@@ -262,10 +300,12 @@ ensure_label() {
     local desc="$4"
 
     gh api -H "Accept: application/vnd.github+json" "/repos/${DST_ORG}/${repo}/labels/${label}" >/dev/null 2>&1 && return 0
-    gh_post -X POST "/repos/${DST_ORG}/${repo}/labels" -f name="$label" -f color="$color" -f description="${desc}" >/dev/null 2>&1 || true
+    if gh_post -X POST "/repos/${DST_ORG}/${repo}/labels" -f name="$label" -f color="$color" -f description="${desc}" >/dev/null 2>&1; then
+        ((TOTAL_LABELS_COPIED++)) || true
+    fi
 }
 
-# Copy labels & milestones
+# Copy labels and milestones from source to destination
 copy_labels_and_milestones() {
     local name="$1"
 
@@ -277,7 +317,7 @@ copy_labels_and_milestones() {
     done
 
     print_step "Copying milestones for ${name}"
-    # Build map dest_title -> dest_number
+    # Build map of destination title → destination number
     declare -A DST_MS=()
     # Create any missing milestones by title
     gh api --paginate "/repos/${SRC_ORG}/${name}/milestones?state=all&per_page=100" \
@@ -288,14 +328,16 @@ copy_labels_and_milestones() {
         local STATE=$(_j '.state')
         local DUE=$(_j '.due_on // empty')
 
-        # Does it exist?
+        # Check if milestone already exists
         if ! gh api "/repos/${DST_ORG}/${name}/milestones?state=all&per_page=100" \
             --jq ".[] | select(.title==\"$TITLE\") | .number" | grep -q .; then
-            # Create
+            # Create milestone
             args=(-X POST "/repos/${DST_ORG}/${name}/milestones" -f title="$TITLE")
             [[ -n "$DESC" ]] && args+=(-f description="$DESC")
             [[ -n "$DUE"  ]] && args+=(-f due_on="$DUE")
-            gh_post "${args[@]}" >/dev/null 2>&1 || true
+            if gh_post "${args[@]}" >/dev/null 2>&1; then
+                ((TOTAL_MILESTONES_COPIED++)) || true
+            fi
         fi
     done
 }
@@ -304,28 +346,30 @@ copy_labels_and_milestones() {
 # Issue Management Functions
 # ============================================================================
 
-# Helper: find dest milestone number by title
+# Helper: find destination milestone number by title
 dest_milestone_number_by_title() {
-    local name="$1" title="$2"
+    local name="$1"
+    local title="$2"
     gh api "/repos/${DST_ORG}/${name}/milestones?state=all&per_page=100" \
         --jq -- "map(select(.title == \$t) | .number) | first" --raw-field t="$title"
-        #--jq ".[] | select(.title==\"$title\") | .number" | head -n1
 }
 
-# Return the number of an existing *issue* (not PR) with the exact title in DEST,
+# Return the number of an existing issue (not PR) with the exact title in destination,
 # or "" if none. Handles pagination and empty pages without jq errors.
 exists_issue_number_by_title() {
-    local repo="$1" title="$2" created="$3"
+    local repo="$1"
+    local title="$2"
+    local created="$3"
 
     # List all issues (state=all), paginate, and filter:
     # - .[]? : safe iterate (no error on null)
     # - exclude PRs: select(has("pull_request")|not)
-    # - exact title match (case-sensitive)
+    # - exact title match (case-sensitive) and creation date
     gh api --paginate "/repos/${DST_ORG}/${repo}/issues?state=all&per_page=100" 2>/dev/null \
     | jq -r --arg t "$title" --arg d "$created" '
-        .[]?                                                              # tolerate empty/null arrays
-        | select(has("pull_request")|not)                                 # only real issues
-        | select(.title == $t and (.created_at|split("T")[0]) == $d)      # exact title match
+        .[]?
+        | select(has("pull_request")|not)
+        | select(.title == $t and (.created_at|split("T")[0]) == $d)
         | .number
       ' | head -n1
 }
@@ -334,18 +378,25 @@ exists_issue_number_by_title() {
 # Implements idempotency by checking for duplicate titles with same creation date
 # Returns empty string if issue already exists (skips creation)
 create_issue_in_dest() {
-    local name="$1" title="$2" body="$3" labels_json="$4" milestone_title="$5" state="$6" created="$7"
+    local name="$1"
+    local title="$2"
+    local body="$3"
+    local labels_json="$4"
+    local milestone_title="$5"
+    local state="$6"
+    local created="$7"
 
     # Idempotency: skip if exact title exists already
     local existing
     existing="$(exists_issue_number_by_title "$name" "$title" "$created" || true)"
     if [[ -n "$existing" ]]; then
-        print_info "Issue already exists in ${DST_ORG}/${name} with same title, skipping (##${existing})"
-        echo "" # signal "skipped" to caller
+        print_info "Issue already exists in ${DST_ORG}/${name} with same title, skipping (#${existing})"
+        ((TOTAL_ISSUES_SKIPPED++)) || true
+        echo "" # Signal "skipped" to caller
         return 0
     fi
 
-    # Resolve milestone number in DEST (if any)
+    # Resolve milestone number in destination (if any)
     local msnum=""
     if [[ -n "$milestone_title" ]]; then
         msnum="$(dest_milestone_number_by_title "$name" "$milestone_title" || true)"
@@ -373,6 +424,7 @@ create_issue_in_dest() {
 
     local newnum
     newnum="$(printf '%s' "$resp" | jq -r '.number')"
+    ((TOTAL_ISSUES_COPIED++)) || true
 
     # Close it if source was closed
     if [[ "$state" == "closed" ]]; then
@@ -386,20 +438,25 @@ create_issue_in_dest() {
 
 # Post comment to an issue
 post_issue_comment() {
-    local name="$1" num="$2" body="$3"
-    gh_post -X POST "/repos/${DST_ORG}/${name}/issues/${num}/comments" -f body="$body" >/dev/null
+    local name="$1"
+    local num="$2"
+    local body="$3"
+    if gh_post -X POST "/repos/${DST_ORG}/${name}/issues/${num}/comments" \
+        -f body="$body" >/dev/null; then
+        ((TOTAL_ISSUE_COMMENTS_COPIED++)) || true
+    fi
 }
 
-# Copy issues (excluding PRs)
+# Copy issues (excluding PRs) from source to destination
 copy_issues() {
     local name="$1"
     print_step "Copying issues for ${name}"
 
-    # Page through all issues from SOURCE (includes PRs; we filter those out)
+    # Page through all issues from source (includes PRs; we filter those out)
     gh api --paginate "/repos/${SRC_ORG}/${name}/issues?state=all&per_page=100" 2>/dev/null \
     | jq -c '
-        .[]?                                         # tolerate empty/null pages
-        | select(has("pull_request")|not)            # exclude PRs
+        .[]?
+        | select(has("pull_request")|not)
         | {
             number, title,
             body: (.body // ""),
@@ -407,11 +464,11 @@ copy_issues() {
             author: (.user.login // "unknown"),
             created_at,
             milestone_title: (.milestone.title // ""),
-            labels: ((.labels // []) | map(.name))   # always an array
+            labels: ((.labels // []) | map(.name))
           }
       ' \
     | while IFS= read -r row; do
-        # extract fields
+        # Extract fields
         local NUM TITLE BODY URL STATE AUTHOR CREATED MIL_TITLE
         local LABELS_JSON
 
@@ -422,15 +479,15 @@ copy_issues() {
         AUTHOR=$(jq -r '.author'      <<<"$row")
         CREATED=$(jq -r '.created_at' <<<"$row")
         MIL_TITLE=$(jq -r '.milestone_title' <<<"$row")
-        LABELS_JSON=$(jq -c '.labels' <<<"$row")     # already a JSON array
+        LABELS_JSON=$(jq -c '.labels' <<<"$row")
 
-        # normalize labels again just in case
+        # Normalize labels
         [[ -z "$LABELS_JSON" || "$LABELS_JSON" == "null" ]] && LABELS_JSON='[]'
 
         local NEWBODY NEWNUM
         NEWBODY="(Copied from ${URL}\nOriginal author: @${AUTHOR} • Opened: ${CREATED})\n\n${BODY}"
 
-        # create issue (function returns "" if duplicate title exists)
+        # Create issue (function returns "" if duplicate title exists)
         NEWNUM="$(create_issue_in_dest "$name" "$TITLE" "$NEWBODY" "$LABELS_JSON" "$MIL_TITLE" "$STATE" "$CREATED")"
 
         # If we skipped (duplicate), don't try to post comments
@@ -489,12 +546,12 @@ copy_prs_as_archival_issues() {
         local NEWNUM
         NEWNUM="$(create_issue_in_dest "$name" "$ITITLE" "$IBODY" "$LABELS_JSON" "" "$STATE" "$CREATED")"
 
-        # If skipped (duplicate archival issue already exists), do NOT add comments again
+        # If skipped (duplicate archival issue already exists), don't add comments again
         if [[ -z "$NEWNUM" ]]; then
-            continue;
+            continue
         fi
-
-        #say "Processing PR # ${PRNUM}"
+        
+        ((TOTAL_PRS_ARCHIVED++)) || true
 
         # Collect PR conversation pieces:
         # 1) PR issue-comments
@@ -517,7 +574,9 @@ copy_prs_as_archival_issues() {
             local DATE=$(echo "$c" | jq -r '.created_at')
             local BODY=$(echo "$c" | jq -r '.body')
             local CMT="**(${KIND//_/ } by @${AUTH} on ${DATE})**\n\n${BODY}"
-            post_issue_comment "$name" "$NEWNUM" "$CMT"
+            if post_issue_comment "$name" "$NEWNUM" "$CMT"; then
+                ((TOTAL_PR_COMMENTS_COPIED++)) || true
+            fi
         done || true
     done
 }
@@ -603,6 +662,7 @@ copy_discussions() {
             local created
             created="$(gh_gql -f query="$m" -F rid="$dstRepoId" -F cid="$CATID" -F title="$DTITLE" -F body="$BODY")" || { print_warning "Failed to create discussion"; continue; }
             local newDid; newDid="$(echo "$created" | jq -r '.data.createDiscussion.discussion.id')"
+            ((TOTAL_DISCUSSIONS_COPIED++)) || true
 
             # Comments (single page or more)
             # First page from current node
@@ -612,7 +672,9 @@ copy_discussions() {
                 local CBOD=$(echo "$c"  | jq -r '.body // ""')
                 local CBODY="**(Original comment by @${CAUTH} on ${CDAT})**\n\n${CBOD}"
                 local cm='mutation($id:ID!,$body:String!){ addDiscussionComment(input:{discussionId:$id, body:$body}){ comment{ id } } }'
-                gh_gql -f query="$cm" -F id="$newDid" -F body="$CBODY" >/dev/null || true
+                if gh_gql -f query="$cm" -F id="$newDid" -F body="$CBODY" >/dev/null 2>&1; then
+                    ((TOTAL_DISCUSSION_COMMENTS_COPIED++)) || true
+                fi
                 sleep "$THROTTLE"
             done
             # Additional comment pages not handled here for simplicity (rare for most repos).
@@ -626,7 +688,9 @@ copy_discussions() {
 
 # Process all repositories in the source organization
 process_repositories() {
-    print_info "Listing repositories in ${SRC_ORG}"
+    print_info "Listing repositories in ${SRC_ORG}..."
+    echo ""
+
     gh api --paginate "/orgs/${SRC_ORG}/repos?per_page=100" \
         --jq '.[] | {name,visibility,archived,has_wiki} | @base64' \
     | while read -r row; do
@@ -636,7 +700,8 @@ process_repositories() {
         ARCH=$(_j '.archived')
         HAS_WIKI=$(_j '.has_wiki')
 
-        print_header "Processing repo: ${NAME}"
+        print_header "Processing repository: ${NAME}"
+        ((TOTAL_REPOS_PROCESSED++)) || true
         create_dest_repo "$NAME" "$VIS" >/dev/null
 
         mirror_git_and_lfs "$NAME"
@@ -651,7 +716,7 @@ process_repositories() {
         copy_discussions "$NAME"
 
         if [[ "$ARCH" == "true" ]]; then
-            print_warning "Source repo is archived; destination remains unarchived by default"
+            print_warning "Source repository is archived; destination remains unarchived by default"
         fi
     done
 }
@@ -661,8 +726,10 @@ process_repositories() {
 # ============================================================================
 
 main() {
-    print_header "GitHub Organization Copy Tool"
     echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${CYAN}GitHub Organization Copy Tool${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     validate_config
     check_dependencies
@@ -670,13 +737,37 @@ main() {
 
     # Create working directory
     mkdir -p "$WORKDIR"
-    print_success "✓ Working directory created: ${WORKDIR}"
+    print_success "Working directory created: ${WORKDIR}"
     echo ""
 
     process_repositories
 
-    print_success "Migration complete! Validate counts (issues/PR-archives/discussions) and sample a few repos"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${CYAN}Migration Summary${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Repositories processed:        ${TOTAL_REPOS_PROCESSED}"
+    echo "Repositories created:          ${TOTAL_REPOS_CREATED}"
+    echo "Wikis copied:                  ${TOTAL_WIKIS_COPIED}"
+    echo "Labels copied:                 ${TOTAL_LABELS_COPIED}"
+    echo "Milestones copied:             ${TOTAL_MILESTONES_COPIED}"
+    echo ""
+    echo "Issues copied:                 ${TOTAL_ISSUES_COPIED}"
+    echo "Issues skipped (existing):     ${TOTAL_ISSUES_SKIPPED}"
+    echo "Issue comments copied:         ${TOTAL_ISSUE_COMMENTS_COPIED}"
+    echo ""
+    echo "PRs archived as issues:        ${TOTAL_PRS_ARCHIVED}"
+    echo "PR comments copied:            ${TOTAL_PR_COMMENTS_COPIED}"
+    echo ""
+    echo "Discussions copied:            ${TOTAL_DISCUSSIONS_COPIED}"
+    echo "Discussion comments copied:    ${TOTAL_DISCUSSION_COMMENTS_COPIED}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    print_success "Migration complete!"
+    print_info "Please validate the migrated repositories and compare counts"
+    echo ""
 }
 
-# Run main function
-main
+# Run main function if script is executed directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
