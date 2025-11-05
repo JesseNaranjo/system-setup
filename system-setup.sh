@@ -1377,14 +1377,191 @@ configure_ssh_socket() {
     print_info "- SSH daemon will now start automatically when connections arrive"
 }
 
+# Configure static IP address for containers
+configure_container_static_ip() {
+    local os="$1"
+
+    # Only applicable for Linux containers
+    if [[ "$os" != "linux" ]]; then
+        return 0
+    fi
+
+    # Only run if in a container
+    if [[ "$RUNNING_IN_CONTAINER" != true ]]; then
+        return 0
+    fi
+
+    print_info "Checking static IP configuration for container..."
+
+    # Check if systemd-networkd is available
+    if [[ ! -d /etc/systemd/network ]]; then
+        print_warning "/etc/systemd/network directory not found - systemd-networkd may not be configured"
+        return 0
+    fi
+
+    # Get primary network interface (exclude lo, docker, veth, etc.)
+    local primary_interface=""
+    for iface in /sys/class/net/*; do
+        local iface_name=$(basename "$iface")
+
+        # Skip loopback, docker, and veth interfaces
+        if [[ "$iface_name" == "lo" ]] || [[ "$iface_name" == docker* ]] || [[ "$iface_name" == veth* ]] || [[ "$iface_name" == br-* ]]; then
+            continue
+        fi
+
+        # Get the first valid interface
+        if [[ -z "$primary_interface" ]]; then
+            primary_interface="$iface_name"
+        fi
+    done
+
+    if [[ -z "$primary_interface" ]]; then
+        print_warning "No suitable network interface found"
+        return 0
+    fi
+
+    echo "          - Primary network interface: $primary_interface"
+
+    # Get all current IP addresses
+    if command -v ip &>/dev/null; then
+        local ip_addresses=$(ip -4 addr show "$primary_interface" 2>/dev/null | grep "inet " | awk '{print $2}')
+        if [[ -n "$ip_addresses" ]]; then
+            echo "          - Current IP address(es):"
+            while IFS= read -r ip_addr; do
+                echo "            • $ip_addr"
+            done <<< "$ip_addresses"
+        else
+            print_warning "- No IP address currently assigned"
+        fi
+    else
+        print_warning "- 'ip' command not found, cannot display current IP addresses"
+    fi
+
+    # Check if static IP is already configured
+    local network_file="/etc/systemd/network/10-${primary_interface}.network"
+    local has_static_ip=false
+
+    if [[ -f "$network_file" ]]; then
+        if grep -q "^\[Address\]" "$network_file" 2>/dev/null; then
+            has_static_ip=true
+            print_success "✓ Static IP configuration already exists in $network_file"
+
+            # Show configured static IPs
+            local static_ips=$(grep -A 1 "^\[Address\]" "$network_file" | grep "^Address=" | cut -d= -f2)
+            if [[ -n "$static_ips" ]]; then
+                echo "          - Configured static IP(s):"
+                while IFS= read -r ip; do
+                    echo "            • $ip"
+                done <<< "$static_ips"
+            fi
+            echo ""
+            return 0
+        fi
+    fi
+
+    echo ""
+    print_info "Container static IP configuration:"
+    echo "          - This will add a secondary static IP address to $primary_interface"
+    echo "          - DHCP will remain enabled for the primary IP"
+    echo "          - Uses systemd-networkd configuration"
+    echo ""
+
+    if ! prompt_yes_no "          Would you like to configure a static IP address?" "y"; then
+        print_info "Skipping static IP configuration"
+        return 0
+    fi
+
+    echo ""
+
+    # Prompt for static IP address
+    local static_ip=""
+    local static_prefix="24"
+
+    while true; do
+        read -p "          Enter static IP address (e.g., 192.168.1.100): " -r static_ip </dev/tty
+
+        # Basic IP address validation
+        if [[ "$static_ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+            # Check each octet is 0-255
+            local valid=true
+            IFS='.' read -ra OCTETS <<< "$static_ip"
+            for octet in "${OCTETS[@]}"; do
+                if [[ $octet -gt 255 ]]; then
+                    valid=false
+                    break
+                fi
+            done
+
+            if [[ "$valid" == true ]]; then
+                break
+            fi
+        fi
+
+        print_error "Invalid IP address format. Please try again."
+    done
+
+    # Prompt for network prefix (CIDR)
+    read -p "          Enter network prefix length (default: 24): " -r user_prefix </dev/tty
+    if [[ -n "$user_prefix" ]] && [[ "$user_prefix" =~ ^[0-9]+$ ]] && [[ $user_prefix -ge 1 ]] && [[ $user_prefix -le 32 ]]; then
+        static_prefix="$user_prefix"
+    fi
+
+    echo ""
+    print_info "Configuring static IP: ${static_ip}/${static_prefix} on ${primary_interface}..."
+
+    # Backup existing network file if it exists
+    if [[ -f "$network_file" ]]; then
+        backup_file "$network_file"
+    fi
+
+    # Create or update the network configuration file
+    cat > "$network_file" << EOF
+# Network configuration for $primary_interface
+# Managed by system-setup.sh
+# Updated: $(date)
+
+[Match]
+Name=$primary_interface
+
+[Network]
+DHCP=yes
+
+[Address]
+Address=${static_ip}/${static_prefix}
+EOF
+
+    print_success "✓ Static IP configuration written to $network_file"
+    echo ""
+
+    # Restart systemd-networkd
+    print_info "Restarting systemd-networkd to apply changes..."
+    if systemctl restart systemd-networkd.service 2>/dev/null; then
+        print_success "✓ systemd-networkd restarted successfully"
+
+        # Wait a moment for network to settle
+        sleep 2
+
+        # Show new IP configuration
+        echo ""
+        print_info "Current IP addresses on $primary_interface:"
+        ip -4 addr show "$primary_interface" 2>/dev/null | grep "inet " | awk '{print "          - " $2}' || true
+    else
+        print_warning "Could not restart systemd-networkd (may require manual restart)"
+        print_info "To apply changes manually, run: systemctl restart systemd-networkd"
+    fi
+
+    echo ""
+    print_success "Static IP configuration complete"
+}
+
 # Main function
 main() {
     print_info "System Setup and Configuration Script (Idempotent Mode)"
-    print_info "======================================================="
+    echo "          ======================================================="
 
     local os
     os=$(detect_os)
-    print_info "Detected OS: $os"
+    echo "          - Detected OS: $os"
 
     if [[ "$os" == "unknown" ]]; then
         print_error "Unknown operating system. This script supports Linux and macOS."
@@ -1394,7 +1571,11 @@ main() {
     # Detect if running in a container (sets RUNNING_IN_CONTAINER global variable)
     detect_container
     if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
-        print_info "Running inside a container environment"
+        echo "          - Running inside a container environment"
+
+        # Offer to configure static IP for containers
+        echo ""
+        configure_container_static_ip "$os"
     fi
 
     # Check and install packages
