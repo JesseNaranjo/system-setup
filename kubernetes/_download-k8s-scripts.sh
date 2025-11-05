@@ -50,6 +50,34 @@ print_error() {
     echo -e "${RED}[  ERROR]${NC} $1"
 }
 
+# Prompt user for yes/no confirmation
+# Usage: prompt_yes_no "message" [default]
+#   default: "y" or "n" (optional, defaults to "n")
+# Returns: 0 for yes, 1 for no
+prompt_yes_no() {
+    local prompt_message="$1"
+    local default="${2:-n}"
+    local prompt_suffix
+    local user_reply
+
+    # Set the prompt suffix based on default
+    if [[ "${default,,}" == "y" ]]; then
+        prompt_suffix="(Y/n)"
+    else
+        prompt_suffix="(y/N)"
+    fi
+
+    # Read from /dev/tty to work correctly in while-read loops
+    read -p "$prompt_message $prompt_suffix: " -r user_reply </dev/tty
+
+    # If user just pressed Enter (empty reply), use default
+    if [[ -z "$user_reply" ]]; then
+        [[ "${default,,}" == "y" ]]
+    else
+        [[ $user_reply =~ ^[Yy]$ ]]
+    fi
+}
+
 # ============================================================================
 # Check for Download Tools
 # ============================================================================
@@ -125,10 +153,8 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
                 diff -u --color "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" || true
                 echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"; echo
 
-                read -p "→ Overwrite and run updated ${SCRIPT_FILE}?: [y/N] " continueExec
-                echo ""
-
-                if [[ $continueExec == [Yy] ]]; then
+                if prompt_yes_no "→ Overwrite and run updated ${SCRIPT_FILE}?" "n"; then
+                    echo ""
                     chmod +x "${TEMP_SCRIPT_FILE}"
                     export scriptUpdated=1
                     "${TEMP_SCRIPT_FILE}"
@@ -206,10 +232,8 @@ for fname in "${FILES[@]}"; do
         echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${fname} ─────────────────────────────────────────────────────────╯${NC}"
         echo ""
 
-        read -rp "→ Overwrite local ${fname} with remote copy? [y/N] " continueOverwrite
-        echo ""
-
-        if [[ $continueOverwrite =~ ^[Yy]$ ]]; then
+        if prompt_yes_no "→ Overwrite local ${fname} with remote copy?" "n"; then
+            echo ""
             chmod +x "${tmp}"
             mv "${tmp}" "${fname}"
             print_success "Replaced ${fname}"

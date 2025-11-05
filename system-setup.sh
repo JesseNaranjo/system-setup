@@ -27,6 +27,34 @@ readonly NC='\033[0m' # No Color
 readonly LINE_COLOR='\033[0;36m' # Cyan for lines/borders
 readonly CODE_COLOR='\033[0;37m' # White for code blocks
 
+# Prompt user for yes/no confirmation
+# Usage: prompt_yes_no "message" [default]
+#   default: "y" or "n" (optional, defaults to "n")
+# Returns: 0 for yes, 1 for no
+prompt_yes_no() {
+    local prompt_message="$1"
+    local default="${2:-n}"
+    local prompt_suffix
+    local user_reply
+
+    # Set the prompt suffix based on default
+    if [[ "${default,,}" == "y" ]]; then
+        prompt_suffix="(Y/n)"
+    else
+        prompt_suffix="(y/N)"
+    fi
+
+    # Read from /dev/tty to work correctly in while-read loops
+    read -p "$prompt_message $prompt_suffix: " -r user_reply </dev/tty
+
+    # If user just pressed Enter (empty reply), use default
+    if [[ -z "$user_reply" ]]; then
+        [[ "${default,,}" == "y" ]]
+    else
+        [[ $user_reply =~ ^[Yy]$ ]]
+    fi
+}
+
 if [[ ${scriptUpdated:-0} -eq 0 ]]; then
     REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main"
     SCRIPT_FILE="system-setup.sh"
@@ -92,10 +120,8 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
                 diff -u --color "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" || true
                 echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"; echo
 
-                read -p "→ Overwrite and run updated ${SCRIPT_FILE}?: [y/N] " continueExec
-                echo ""
-
-                if [[ $continueExec == [Yy] ]]; then
+                if prompt_yes_no "→ Overwrite and run updated ${SCRIPT_FILE}?" "n"; then
+                    echo ""
                     chmod +x $TEMP_SCRIPT_FILE
                     export scriptUpdated=1
                     $TEMP_SCRIPT_FILE
@@ -103,6 +129,7 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
                     mv $TEMP_SCRIPT_FILE ${BASH_SOURCE[0]}
                     exit 0
                 else
+                    echo ""
                     rm -f $TEMP_SCRIPT_FILE
                     echo "→ Running local unmodified copy..."
                     echo ""
@@ -274,9 +301,7 @@ check_and_install_packages() {
             track_special_packages "$package"
         else
             print_warning "$display_name is not installed"
-            local response
-            read -p " - Would you like to install $display_name? (y/N): " -r response < /dev/tty
-            if [[ $response =~ ^[Yy]$ ]]; then
+            if prompt_yes_no " - Would you like to install $display_name?" "n"; then
                 packages_to_install+=("$package")
                 track_special_packages "$package"
             fi
@@ -660,10 +685,7 @@ configure_issue() {
     print_info "- The addresses will be displayed dynamically at login time."
     echo ""
 
-    local response
-    read -p "Would you like to configure /etc/issue? (y/N): " -r response
-
-    if [[ ! $response =~ ^[Yy]$ ]]; then
+    if ! prompt_yes_no "Would you like to configure /etc/issue?" "n"; then
         print_info "- Keeping current /etc/issue configuration (no changes made)"
         return 0
     fi
@@ -1005,10 +1027,7 @@ configure_swap() {
     echo "          • >2 GB RAM: 1.5x RAM"
     echo ""
 
-    local response
-    read -p "Would you like to set up swap? (y/N): " -r response
-
-    if [[ ! $response =~ ^[Yy]$ ]]; then
+    if ! prompt_yes_no "Would you like to set up swap?" "n"; then
         print_info "- Keeping swap disabled (no changes made)"
         return 0
     fi
@@ -1173,10 +1192,7 @@ configure_ssh_socket() {
     echo "          • ssh.service: Keeps SSH daemon running constantly (traditional approach)"
     echo ""
 
-    local response
-    read -p "Would you like to configure and enable ssh.socket? (y/N): " -r response
-
-    if [[ ! $response =~ ^[Yy]$ ]]; then
+    if ! prompt_yes_no "Would you like to configure and enable ssh.socket?" "n"; then
         print_info "Keeping current SSH configuration (no changes made)"
         return 0
     fi
