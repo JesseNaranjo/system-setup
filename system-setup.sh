@@ -148,6 +148,7 @@ HEADER_ADDED_FILES=""
 NANO_INSTALLED=false
 SCREEN_INSTALLED=false
 OPENSSH_SERVER_INSTALLED=false
+RUNNING_IN_CONTAINER=false
 
 # Detect OS
 detect_os() {
@@ -158,6 +159,37 @@ detect_os() {
     else
         echo "unknown"
     fi
+}
+
+# Detect if running inside a container (LXC, Docker, or other)
+# Sets the global RUNNING_IN_CONTAINER variable
+detect_container() {
+    # Check for LXC container via environment variable
+    if [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ; then
+        RUNNING_IN_CONTAINER=true
+        return
+    fi
+
+    # Check for Docker container
+    if [[ -f /.dockerenv ]]; then
+        RUNNING_IN_CONTAINER=true
+        return
+    fi
+
+    # Check for systemd container
+    if [[ -f /run/systemd/container ]]; then
+        RUNNING_IN_CONTAINER=true
+        return
+    fi
+
+    # Check for LXC in cgroup
+    if grep -q lxc /proc/1/cgroup 2>/dev/null; then
+        RUNNING_IN_CONTAINER=true
+        return
+    fi
+
+    # Not in a container
+    RUNNING_IN_CONTAINER=false
 }
 
 # Print colored output
@@ -683,11 +715,9 @@ configure_issue_network() {
 
     print_info "Reviewing network interface information in /etc/issue..."
 
-    # Check if running inside an LXC container
-    local in_container=false
-    if [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ; then
-        in_container=true
-        print_warning "Detected LXC environment: /etc/issue configuration may not be useful inside LXC containers"
+    # Check if running inside a container
+    if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
+        print_warning "Detected container environment: /etc/issue configuration may not be useful inside containers"
         # Don't return - still allow configuration if user wants it
     fi
 
@@ -833,7 +863,7 @@ configure_issue_network() {
     # Prompt user to update
     # Default to 'n' inside containers, 'y' everywhere else
     local default_update="y"
-    if [[ "$in_container" == true ]]; then
+    if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
         default_update="n"
     fi
 
@@ -1102,14 +1132,8 @@ configure_swap() {
         return 0
     fi
 
-    # Check if running inside an LXC container
-    if [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ; then
-        print_info "Detected LXC environment: Swap configuration is not recommended inside LXC containers"
-        return 0
-    fi
-
-    # Additional LXC detection methods as fallback
-    if [[ -f /.dockerenv ]] || [[ -f /run/systemd/container ]] || grep -q lxc /proc/1/cgroup 2>/dev/null; then
+    # Check if running inside a container
+    if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
         print_info "Detected container environment: Swap configuration is not recommended inside containers"
         return 0
     fi
@@ -1365,6 +1389,12 @@ main() {
     if [[ "$os" == "unknown" ]]; then
         print_error "Unknown operating system. This script supports Linux and macOS."
         exit 1
+    fi
+
+    # Detect if running in a container (sets RUNNING_IN_CONTAINER global variable)
+    detect_container
+    if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
+        print_info "Running inside a container environment"
     fi
 
     # Check and install packages
