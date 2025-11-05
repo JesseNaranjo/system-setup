@@ -762,8 +762,8 @@ configure_issue() {
             local top_border=$((header_line - 1))
             insert_line=$top_border
 
-            # Find the bottom border (line with ╚═══...)
-            local bottom_border=$(tail -n +$top_border /etc/issue | grep -n "^╚═" | head -1 | cut -d: -f1)
+            # Find the bottom border (line with ╚═══...), accounting for leading whitespace
+            local bottom_border=$(tail -n +$top_border /etc/issue | grep -n "^\s*╚═" | head -1 | cut -d: -f1)
 
             if [[ -n "$bottom_border" ]]; then
                 # Calculate absolute line number of bottom border
