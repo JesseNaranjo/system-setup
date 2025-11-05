@@ -59,7 +59,7 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
     REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main"
     SCRIPT_FILE="system-setup.sh"
     TEMP_SCRIPT_FILE="$(mktemp)"
-    trap 'rm -f "${TEMP_SCRIPT_FILE}"' RETURN     # ensure cleanup even on exit/interrupt
+    trap 'rm -f "${TEMP_SCRIPT_FILE}"' EXIT     # ensure cleanup on script exit
 
     # Check for curl or wget availability
     DOWNLOAD_CMD=""

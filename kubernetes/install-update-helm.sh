@@ -1,6 +1,7 @@
 #!/bin/bash
 
 INSTALL_SCRIPT_PATH=$(mktemp)
+trap 'rm -f "${INSTALL_SCRIPT_PATH}"' EXIT
 
 echo "Downloading script to $INSTALL_SCRIPT_PATH..."
 curl -fsSL -o $INSTALL_SCRIPT_PATH https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3

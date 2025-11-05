@@ -122,7 +122,7 @@ fi
 if [[ ${scriptUpdated:-0} -eq 0 ]]; then
     readonly SCRIPT_FILE="_download-ollama-scripts.sh"
     TEMP_SCRIPT_FILE="$(mktemp)"
-    trap 'rm -f "${TEMP_SCRIPT_FILE}"' RETURN     # ensure cleanup even on exit/interrupt
+    trap 'rm -f "${TEMP_SCRIPT_FILE}"' EXIT     # ensure cleanup on script exit
 
     # Proceed with self-update if a download command is available
     if [[ -n "$DOWNLOAD_CMD" ]]; then
@@ -145,6 +145,7 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
         if [[ "$DOWNLOAD_SUCCESS" == true ]]; then
             if diff -u "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
                 print_success "- ${SCRIPT_FILE} is already up-to-date"
+                rm -f "${TEMP_SCRIPT_FILE}"
                 echo ""
             else
                 echo -e "${LINE_COLOR}╭───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╮${NC}${CODE_COLOR}"
@@ -169,6 +170,7 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
             fi
         else
             print_error "Download failed — skipping $SCRIPT_FILE"
+            rm -f "${TEMP_SCRIPT_FILE}"
             print_info "Running local unmodified copy..."
             echo ""
         fi
@@ -192,7 +194,6 @@ FAILED_COUNT=0
 
 for fname in "${FILES[@]}"; do
     tmp="$(mktemp)"                 # secure, race-free temp file
-    trap 'rm -f "${tmp}"' RETURN    # ensure cleanup even on exit/interrupt
 
     print_info "Checking ${fname}..."
     echo "          ▶ Fetching ${REMOTE_BASE}/${fname}..."
@@ -212,7 +213,8 @@ for fname in "${FILES[@]}"; do
 
     if [[ "$DOWNLOAD_SUCCESS" != true ]]; then
         print_error "Download failed — skipping $fname"
-        ((FAILED_COUNT++))
+        ((++FAILED_COUNT))
+        rm -f "${tmp}"
         echo ""
         continue
     fi
@@ -224,6 +226,7 @@ for fname in "${FILES[@]}"; do
 
     if diff -u "${fname}" "${tmp}" > /dev/null 2>&1; then
         print_success "${fname} is already up-to-date"
+        rm -f "${tmp}"
         echo ""
     else
         echo ""
@@ -237,10 +240,10 @@ for fname in "${FILES[@]}"; do
             chmod +x "${tmp}"
             mv "${tmp}" "${fname}"
             print_success "Replaced ${fname}"
-            ((UPDATED_COUNT++))
+            ((++UPDATED_COUNT))
         else
             print_warning "Skipped ${fname}"
-            ((SKIPPED_COUNT++))
+            ((++SKIPPED_COUNT))
             rm -f "${tmp}"
         fi
         echo ""

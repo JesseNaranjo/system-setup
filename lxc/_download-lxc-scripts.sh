@@ -84,32 +84,32 @@ prompt_yes_no() {
 # Check for curl or wget availability
 DOWNLOAD_CMD=""
 if command -v curl &>/dev/null; then
-	DOWNLOAD_CMD="curl"
+    DOWNLOAD_CMD="curl"
 elif command -v wget &>/dev/null; then
-	DOWNLOAD_CMD="wget"
+    DOWNLOAD_CMD="wget"
 else
-	# Display large error message if neither curl nor wget is available
-	echo ""
-	echo "╔═════════════════════════════════════════════════════════════════════╗"
-	echo "║                                                                     ║"
-	echo "║                  ⚠️   SELF-UPDATE NOT AVAILABLE  ⚠️                   ║"  # the extra space is intentional for alignment due to the ⚠️  character
-	echo "║                                                                     ║"
-	echo "║    Neither 'curl' nor 'wget' is installed on this system.           ║"
-	echo "║    Self-updating functionality requires one of these tools.         ║"
-	echo "║                                                                     ║"
-	echo "║    To enable self-updating, please install one of the following:    ║"
-	echo "║      • curl  (recommended)                                          ║"
-	echo "║      • wget                                                         ║"
-	echo "║                                                                     ║"
-	echo "║    Installation commands:                                           ║"
-	echo "║      macOS:    brew install curl                                    ║"
-	echo "║      Debian:   sudo apt install curl                                ║"
-	echo "║      RHEL:     sudo yum install curl                                ║"
-	echo "║                                                                     ║"
-	echo "║    Continuing with local version of the script...                   ║"
-	echo "║                                                                     ║"
-	echo "╚═════════════════════════════════════════════════════════════════════╝"
-	echo ""
+    # Display large error message if neither curl nor wget is available
+    echo ""
+    echo "╔═════════════════════════════════════════════════════════════════════╗"
+    echo "║                                                                     ║"
+    echo "║                  ⚠️   SELF-UPDATE NOT AVAILABLE  ⚠️                   ║"  # the extra space is intentional for alignment due to the ⚠️  character
+    echo "║                                                                     ║"
+    echo "║    Neither 'curl' nor 'wget' is installed on this system.           ║"
+    echo "║    Self-updating functionality requires one of these tools.         ║"
+    echo "║                                                                     ║"
+    echo "║    To enable self-updating, please install one of the following:    ║"
+    echo "║      • curl  (recommended)                                          ║"
+    echo "║      • wget                                                         ║"
+    echo "║                                                                     ║"
+    echo "║    Installation commands:                                           ║"
+    echo "║      macOS:    brew install curl                                    ║"
+    echo "║      Debian:   sudo apt install curl                                ║"
+    echo "║      RHEL:     sudo yum install curl                                ║"
+    echo "║                                                                     ║"
+    echo "║    Continuing with local version of the script...                   ║"
+    echo "║                                                                     ║"
+    echo "╚═════════════════════════════════════════════════════════════════════╝"
+    echo ""
 fi
 
 # ============================================================================
@@ -120,59 +120,61 @@ fi
 # copy if changes are detected.
 
 if [[ ${scriptUpdated:-0} -eq 0 ]]; then
-	readonly SCRIPT_FILE="_download-lxc-scripts.sh"
-	TEMP_SCRIPT_FILE="$(mktemp)"
-	trap 'rm -f "${TEMP_SCRIPT_FILE}"' RETURN     # ensure cleanup even on exit/interrupt
+    readonly SCRIPT_FILE="_download-lxc-scripts.sh"
+    TEMP_SCRIPT_FILE="$(mktemp)"
+    trap 'rm -f "${TEMP_SCRIPT_FILE}"' EXIT     # ensure cleanup on script exit
 
-	# Proceed with self-update if a download command is available
-	if [[ -n "$DOWNLOAD_CMD" ]]; then
-		print_info "Checking for updates to ${SCRIPT_FILE}..."
-		echo "          ▶ Fetching ${REMOTE_BASE}/${SCRIPT_FILE}..."
+    # Proceed with self-update if a download command is available
+    if [[ -n "$DOWNLOAD_CMD" ]]; then
+        print_info "Checking for updates to ${SCRIPT_FILE}..."
+        echo "          ▶ Fetching ${REMOTE_BASE}/${SCRIPT_FILE}..."
 
-		DOWNLOAD_SUCCESS=false
-		if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-			# -H header, -o file path, -f fail-on-HTTP-error, -s silent, -S show errors, -L follow redirects
-			if curl -H 'Cache-Control: no-cache, no-store' -o "${TEMP_SCRIPT_FILE}" -fsSL "${REMOTE_BASE}/${SCRIPT_FILE}"; then
-				DOWNLOAD_SUCCESS=true
-			fi
-		elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
-			# --no-cache, -O output file, -q quiet, --show-progress
-			if wget --no-cache --no-cookies -O "${TEMP_SCRIPT_FILE}" -q "${REMOTE_BASE}/${SCRIPT_FILE}"; then
-				DOWNLOAD_SUCCESS=true
-			fi
-		fi
+        DOWNLOAD_SUCCESS=false
+        if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
+            # -H header, -o file path, -f fail-on-HTTP-error, -s silent, -S show errors, -L follow redirects
+            if curl -H 'Cache-Control: no-cache, no-store' -o "${TEMP_SCRIPT_FILE}" -fsSL "${REMOTE_BASE}/${SCRIPT_FILE}"; then
+                DOWNLOAD_SUCCESS=true
+            fi
+        elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
+            # --no-cache, -O output file, -q quiet, --show-progress
+            if wget --no-cache --no-cookies -O "${TEMP_SCRIPT_FILE}" -q "${REMOTE_BASE}/${SCRIPT_FILE}"; then
+                DOWNLOAD_SUCCESS=true
+            fi
+        fi
 
-		if [[ "$DOWNLOAD_SUCCESS" == true ]]; then
-			if diff -u "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
-				print_success "- ${SCRIPT_FILE} is already up-to-date"
-				echo ""
-			else
-				echo -e "${LINE_COLOR}╭───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╮${NC}${CODE_COLOR}"
-				cat "${TEMP_SCRIPT_FILE}"
-				echo -e "${NC}${LINE_COLOR}╰────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
-				diff -u --color "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" || true
-				echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"; echo
+        if [[ "$DOWNLOAD_SUCCESS" == true ]]; then
+            if diff -u "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
+                print_success "- ${SCRIPT_FILE} is already up-to-date"
+                rm -f "${TEMP_SCRIPT_FILE}"
+                echo ""
+            else
+                echo -e "${LINE_COLOR}╭───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╮${NC}${CODE_COLOR}"
+                cat "${TEMP_SCRIPT_FILE}"
+                echo -e "${NC}${LINE_COLOR}╰────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
+                diff -u --color "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" || true
+                echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"; echo
 
-				if prompt_yes_no "→ Overwrite and run updated ${SCRIPT_FILE}?" "n"; then
-					echo ""
-					chmod +x "${TEMP_SCRIPT_FILE}"
-					export scriptUpdated=1
-					"${TEMP_SCRIPT_FILE}"
-					unset scriptUpdated
-					mv "${TEMP_SCRIPT_FILE}" "${BASH_SOURCE[0]}"
-					exit 0
-				else
-					rm -f "${TEMP_SCRIPT_FILE}"
-					print_info "Running local unmodified copy..."
-					echo ""
-				fi
-			fi
-		else
-			print_error "Download failed — skipping $SCRIPT_FILE"
-			print_info "Running local unmodified copy..."
-			echo ""
-		fi
-	fi
+                if prompt_yes_no "→ Overwrite and run updated ${SCRIPT_FILE}?" "n"; then
+                    echo ""
+                    chmod +x "${TEMP_SCRIPT_FILE}"
+                    export scriptUpdated=1
+                    "${TEMP_SCRIPT_FILE}"
+                    unset scriptUpdated
+                    mv "${TEMP_SCRIPT_FILE}" "${BASH_SOURCE[0]}"
+                    exit 0
+                else
+                    rm -f "${TEMP_SCRIPT_FILE}"
+                    print_info "Running local unmodified copy..."
+                    echo ""
+                fi
+            fi
+        else
+            print_error "Download failed — skipping $SCRIPT_FILE"
+            rm -f "${TEMP_SCRIPT_FILE}"
+            print_info "Running local unmodified copy..."
+            echo ""
+        fi
+    fi
 fi
 
 # ============================================================================
@@ -191,60 +193,61 @@ SKIPPED_COUNT=0
 FAILED_COUNT=0
 
 for fname in "${FILES[@]}"; do
-	tmp="$(mktemp)"                 # secure, race-free temp file
-	trap 'rm -f "${tmp}"' RETURN    # ensure cleanup even on exit/interrupt
+    tmp="$(mktemp)"                 # secure, race-free temp file
 
-	print_info "Checking ${fname}..."
-	echo "          ▶ Fetching ${REMOTE_BASE}/${fname}..."
+    print_info "Checking ${fname}..."
+    echo "          ▶ Fetching ${REMOTE_BASE}/${fname}..."
 
-	DOWNLOAD_SUCCESS=false
-	if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-		# -H header, -o file path, -f fail-on-HTTP-error, -s silent, -S show errors, -L follow redirects
-		if curl -H 'Cache-Control: no-cache, no-store' -o "${tmp}" -fsSL "${REMOTE_BASE}/${fname}"; then
-			DOWNLOAD_SUCCESS=true
-		fi
-	elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
-		# --no-cache, -O output file, -q quiet
-		if wget --no-cache --no-cookies -O "${tmp}" -q "${REMOTE_BASE}/${fname}"; then
-			DOWNLOAD_SUCCESS=true
-		fi
-	fi
+    DOWNLOAD_SUCCESS=false
+    if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
+        # -H header, -o file path, -f fail-on-HTTP-error, -s silent, -S show errors, -L follow redirects
+        if curl -H 'Cache-Control: no-cache, no-store' -o "${tmp}" -fsSL "${REMOTE_BASE}/${fname}"; then
+            DOWNLOAD_SUCCESS=true
+        fi
+    elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
+        # --no-cache, -O output file, -q quiet
+        if wget --no-cache --no-cookies -O "${tmp}" -q "${REMOTE_BASE}/${fname}"; then
+            DOWNLOAD_SUCCESS=true
+        fi
+    fi
 
-	if [[ "$DOWNLOAD_SUCCESS" != true ]]; then
-		print_error "Download failed — skipping $fname"
-		((FAILED_COUNT++))
-		echo ""
-		continue
-	fi
+    if [[ "$DOWNLOAD_SUCCESS" != true ]]; then
+        print_error "Download failed — skipping $fname"
+        ((++FAILED_COUNT))
+        rm -f "${tmp}"
+        echo ""
+        continue
+    fi
 
-	# Create file if it doesn't exist
-	if [[ ! -f "${fname}" ]]; then
-		touch "${fname}"
-	fi
+    # Create file if it doesn't exist
+    if [[ ! -f "${fname}" ]]; then
+        touch "${fname}"
+    fi
 
-	if diff -u "${fname}" "${tmp}" > /dev/null 2>&1; then
-		print_success "${fname} is already up-to-date"
-		echo ""
-	else
-		echo ""
-		echo -e "${LINE_COLOR}╭────────────────────────────────────────────────── Δ detected in ${fname} ──────────────────────────────────────────────────╮${NC}"
-		diff -u --color "${fname}" "${tmp}" || true
-		echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${fname} ─────────────────────────────────────────────────────────╯${NC}"
-		echo ""
+    if diff -u "${fname}" "${tmp}" > /dev/null 2>&1; then
+        print_success "${fname} is already up-to-date"
+        rm -f "${tmp}"
+        echo ""
+    else
+        echo ""
+        echo -e "${LINE_COLOR}╭────────────────────────────────────────────────── Δ detected in ${fname} ──────────────────────────────────────────────────╮${NC}"
+        diff -u --color "${fname}" "${tmp}" || true
+        echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${fname} ─────────────────────────────────────────────────────────╯${NC}"
+        echo ""
 
-		if prompt_yes_no "→ Overwrite local ${fname} with remote copy?" "n"; then
-			echo ""
-			chmod +x "${tmp}"
-			mv "${tmp}" "${fname}"
-			print_success "Replaced ${fname}"
-			((UPDATED_COUNT++))
-		else
-			print_warning "Skipped ${fname}"
-			((SKIPPED_COUNT++))
-			rm -f "${tmp}"
-		fi
-		echo ""
-	fi
+        if prompt_yes_no "→ Overwrite local ${fname} with remote copy?" "n"; then
+            echo ""
+            chmod +x "${tmp}"
+            mv "${tmp}" "${fname}"
+            print_success "Replaced ${fname}"
+            ((++UPDATED_COUNT))
+        else
+            print_warning "Skipped ${fname}"
+            ((++SKIPPED_COUNT))
+            rm -f "${tmp}"
+        fi
+        echo ""
+    fi
 done
 
 # ============================================================================
@@ -263,5 +266,5 @@ echo "==========================================================================
 echo ""
 
 if [[ $FAILED_COUNT -gt 0 ]]; then
-	exit 1
+    exit 1
 fi
