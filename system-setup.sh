@@ -653,7 +653,7 @@ get_interface_type() {
 }
 
 # Configure /etc/issue with network interface information
-configure_issue() {
+configure_issue_network() {
     local os="$1"
 
     # /etc/issue configuration is only relevant for Linux systems
@@ -662,13 +662,13 @@ configure_issue() {
         return 0
     fi
 
+    print_info "Reviewing network interface information in /etc/issue..."
+
     # Check if running inside an LXC container
     if [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ; then
-        print_info "Detected LXC environment: /etc/issue configuration may not be useful inside LXC containers"
+        print_warning "Detected LXC environment: /etc/issue configuration may not be useful inside LXC containers"
         # Don't return - still allow configuration if user wants it
     fi
-
-    print_info "Configuring /etc/issue with network interface information..."
 
     # Check if /etc/issue exists and is writable
     if [[ ! -f /etc/issue ]]; then
@@ -681,17 +681,7 @@ configure_issue() {
         return 1
     fi
 
-    print_info "- This will add network interface IP addresses to /etc/issue login banner."
-    print_info "- The addresses will be displayed dynamically at login time."
-    echo ""
-
-    if ! prompt_yes_no "Would you like to configure /etc/issue?" "n"; then
-        print_info "- Keeping current /etc/issue configuration (no changes made)"
-        return 0
-    fi
-
-    echo ""
-    print_info "Detecting network interfaces..."
+    print_info "Detecting network interfaces:"
 
     # Get list of network interfaces (excluding loopback)
     local interfaces=()
@@ -727,17 +717,104 @@ configure_issue() {
 
     # Display detected interfaces
     if [[ ${#wire_interfaces[@]} -gt 0 ]]; then
-        print_info "- Wired interfaces: ${wire_interfaces[*]}"
+        echo "          - Wired interfaces: ${wire_interfaces[*]}"
     fi
     if [[ ${#wifi_interfaces[@]} -gt 0 ]]; then
-        print_info "- Wireless interfaces: ${wifi_interfaces[*]}"
+        echo "          - Wireless interfaces: ${wifi_interfaces[*]}"
     fi
     if [[ ${#other_interfaces[@]} -gt 0 ]]; then
-        print_info "- Other interfaces: ${other_interfaces[*]}"
+        echo "          - Other interfaces: ${other_interfaces[*]}"
     fi
 
     if [[ ${#wire_interfaces[@]} -eq 0 && ${#wifi_interfaces[@]} -eq 0 && ${#other_interfaces[@]} -eq 0 ]]; then
         print_warning "No network interfaces detected (excluding loopback)"
+        return 0
+    fi
+
+    # Check if /etc/issue already has a network interface box and compare interfaces
+    if grep -q "║ Network Interfaces" /etc/issue; then
+        print_info "Network interfaces found in /etc/issue, checking for changes..."
+
+        # Extract interface names from current /etc/issue
+        local existing_interfaces=()
+        while IFS= read -r line; do
+            # Match lines like: "  ║ - wire: \4{eth0} / \6{eth0} (eth0)"
+            if [[ "$line" =~ \(([a-zA-Z0-9_-]+)\)[[:space:]]*$ ]]; then
+                existing_interfaces+=("${BASH_REMATCH[1]}")
+            fi
+        done < <(sed -n '/║ Network Interfaces/,/^\s*╚═/p' /etc/issue)
+
+        # Build list of current interfaces (all types combined)
+        local current_interfaces=()
+        current_interfaces+=("${wire_interfaces[@]}")
+        current_interfaces+=("${wifi_interfaces[@]}")
+        for iface_info in "${other_interfaces[@]}"; do
+            current_interfaces+=("${iface_info%%:*}")
+        done
+
+        # Check for new interfaces (in current but not in existing)
+        local new_interfaces=()
+        for iface in "${current_interfaces[@]}"; do
+            local found=false
+            for existing in "${existing_interfaces[@]}"; do
+                if [[ "$iface" == "$existing" ]]; then
+                    found=true
+                    break
+                fi
+            done
+            if [[ "$found" == false ]]; then
+                new_interfaces+=("$iface")
+            fi
+        done
+
+        # Check for removed interfaces (in existing but not in current)
+        local removed_interfaces=()
+        for existing in "${existing_interfaces[@]}"; do
+            local found=false
+            for iface in "${current_interfaces[@]}"; do
+                if [[ "$existing" == "$iface" ]]; then
+                    found=true
+                    break
+                fi
+            done
+            if [[ "$found" == false ]]; then
+                removed_interfaces+=("$existing")
+            fi
+        done
+
+        # Check if update is needed - if no changes, return early
+        if [[ ${#new_interfaces[@]} -eq 0 ]] && [[ ${#removed_interfaces[@]} -eq 0 ]]; then
+            print_success "✓ Network interfaces in /etc/issue are up to date"
+            return 0
+        fi
+
+        # Build reason message for changes
+        local update_reason=""
+        if [[ ${#new_interfaces[@]} -gt 0 ]]; then
+            update_reason="New interface(s) detected: ${new_interfaces[*]}"
+        fi
+
+        if [[ ${#removed_interfaces[@]} -gt 0 ]]; then
+            if [[ -n "$update_reason" ]]; then
+                update_reason="${update_reason}; "
+            fi
+            update_reason="${update_reason}Interface(s) no longer exist: ${removed_interfaces[*]}"
+        fi
+
+        print_warning "$update_reason"
+    else
+        # No existing configuration
+        print_info "No network interface configuration found in /etc/issue"
+    fi
+
+    echo ""
+
+    # Prompt user to update
+    print_info "Login banner (/etc/issue) network interface configuration:"
+    echo "          - This will add network interface IP addresses to /etc/issue login banner."
+    echo "          - The addresses will be displayed dynamically at login time."
+    if ! prompt_yes_no "Would you like to update /etc/issue?" "y"; then
+        print_info "- Keeping current /etc/issue configuration (no changes made)"
         return 0
     fi
 
@@ -1291,12 +1368,12 @@ main() {
     fi
     echo "          ✓ Shell aliases and configurations"
     echo ""
+
     print_info "The script will only add or update configurations that are missing or different."
     print_info "Existing configurations matching the desired values will be left unchanged."
     echo ""
 
     # Ask for scope (user vs system) for all components
-    echo ""
     print_info "Choose configuration scope:"
     echo "          1) User-specific - nano/screen/shell for current user"
     echo "          2) System-wide (root) - nano/screen system-wide, /etc/issue, shell all users, swap, SSH socket"
@@ -1313,12 +1390,11 @@ main() {
             exit 1
             ;;
     esac
-    echo ""
 
     print_info "Using scope: $scope"
+    echo ""
 
     # Configure each component
-    echo ""
     if [[ "$NANO_INSTALLED" == true ]]; then
         configure_nano "$os" "$scope"
         echo ""
@@ -1337,7 +1413,7 @@ main() {
 
     # Configure /etc/issue with network interfaces if system scope (Linux only)
     if [[ "$scope" == "system" ]]; then
-        configure_issue "$os"
+        configure_issue_network "$os"
         echo ""
     fi
 
