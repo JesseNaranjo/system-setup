@@ -422,8 +422,7 @@ modernize_apt_sources() {
     # Replace the original file with the modified one
     if [[ "$suites_modified" == true ]] || [[ "$components_modified" == true ]]; then
         # Backup the original
-        cp "$sources_file" "${sources_file}.backup"
-        print_backup "Created backup: ${sources_file}.backup"
+        backup_file "$sources_file"
 
         # Replace with new content
         mv "$temp_sources" "$sources_file"
