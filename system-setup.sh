@@ -354,42 +354,79 @@ modernize_apt_sources() {
     local temp_sources
     temp_sources=$(mktemp)
 
-    # Process the file: keep only the first stanza and modify it
-    local in_first_stanza=true
-    local in_stanza=false
-    local first_stanza_processed=false
+    # Process the file: buffer each stanza and process based on content
     local suites_modified=false
     local components_modified=false
+    local current_stanza_lines=()
+    local skip_current_stanza=false
+    local is_release_stanza=false
+    local is_security_stanza=false
+    local last_line_was_blank=false
 
     while IFS= read -r line; do
         # Detect stanza boundaries (empty lines separate stanzas)
         if [[ -z "$line" ]]; then
-            if [[ "$in_stanza" == true ]]; then
-                # End of a stanza
-                if [[ "$in_first_stanza" == true ]]; then
-                    # This is the end of the first stanza
-                    in_first_stanza=false
-                    first_stanza_processed=true
-                    echo "$line" >> "$temp_sources"
+            if [[ ${#current_stanza_lines[@]} -gt 0 ]]; then
+                # End of a stanza - write it out if not skipped
+                if [[ "$skip_current_stanza" != true ]]; then
+                    for stanza_line in "${current_stanza_lines[@]}"; do
+                        echo "$stanza_line" >> "$temp_sources"
+                    done
+                    # Write the empty line separator only if we haven't just written one
+                    if [[ "$last_line_was_blank" != true ]]; then
+                        echo "$line" >> "$temp_sources"
+                        last_line_was_blank=true
+                    fi
                 fi
-                in_stanza=false
+
+                # Reset for next stanza
+                current_stanza_lines=()
+                skip_current_stanza=false
+                is_release_stanza=false
+                is_security_stanza=false
             else
-                # Empty line between stanzas or at beginning
-                if [[ "$first_stanza_processed" != true ]]; then
+                # Empty line between stanzas or at beginning - only write if not duplicate
+                if [[ "$last_line_was_blank" != true ]]; then
                     echo "$line" >> "$temp_sources"
+                    last_line_was_blank=true
                 fi
             fi
             continue
         fi
 
-        # Non-empty line means we're in a stanza
-        in_stanza=true
+        # Non-empty line, reset blank line tracking
+        last_line_was_blank=false
 
-        # Only process the first stanza
-        if [[ "$in_first_stanza" == true ]]; then
-            # Modify Suites line
-            if [[ "$line" =~ ^Suites: ]]; then
-                # Check if updates and backports are already present
+        # Check if this is a Suites line to identify the stanza type
+        if [[ "$line" =~ ^Suites: ]]; then
+            local current_stanza_suite
+            current_stanza_suite=$(echo "$line" | sed -E 's/^Suites:\s*//')
+
+            # Check if this stanza should be skipped (updates or backports only)
+            if [[ "$current_stanza_suite" == "${release}-updates" ]] || [[ "$current_stanza_suite" == "${release}-backports" ]]; then
+                skip_current_stanza=true
+            fi
+
+            # Check if this is the main release stanza (contains the release name)
+            if [[ "$current_stanza_suite" =~ (^|[[:space:]])${release}([[:space:]]|$) ]]; then
+                is_release_stanza=true
+            fi
+
+            # Check if this is the security stanza
+            if [[ "$current_stanza_suite" == "${release}-security" ]]; then
+                is_security_stanza=true
+            fi
+        fi
+
+        # Skip processing lines if this stanza is marked to skip
+        if [[ "$skip_current_stanza" == true ]]; then
+            continue
+        fi
+
+        # Process lines based on type
+        if [[ "$line" =~ ^Suites: ]]; then
+            if [[ "$is_release_stanza" == true ]]; then
+                # Modify the release stanza - check if updates and backports are already present
                 local new_line="$line"
                 if [[ ! "$line" =~ ${release}-updates ]]; then
                     new_line="$new_line ${release}-updates"
@@ -399,9 +436,14 @@ modernize_apt_sources() {
                     new_line="$new_line ${release}-backports"
                     suites_modified=true
                 fi
-                echo "$new_line" >> "$temp_sources"
-            # Modify Components line
-            elif [[ "$line" =~ ^Components: ]]; then
+                current_stanza_lines+=("$new_line")
+            else
+                # Keep Suites lines in other stanzas unchanged
+                current_stanza_lines+=("$line")
+            fi
+        elif [[ "$line" =~ ^Components: ]]; then
+            if [[ "$is_release_stanza" == true ]] || [[ "$is_security_stanza" == true ]]; then
+                # Modify the release/security stanzas - only Components
                 local new_line="$line"
                 if [[ ! "$line" =~ (^|[[:space:]])non-free([[:space:]]|$) ]]; then
                     new_line="$new_line non-free"
@@ -411,13 +453,23 @@ modernize_apt_sources() {
                     new_line="$new_line non-free-firmware"
                     components_modified=true
                 fi
-                echo "$new_line" >> "$temp_sources"
+                current_stanza_lines+=("$new_line")
             else
-                # Keep other lines in first stanza unchanged
-                echo "$line" >> "$temp_sources"
+                # Keep Components lines in other stanzas unchanged
+                current_stanza_lines+=("$line")
             fi
+        else
+            # Keep non-Suite/non-Components lines as-is
+            current_stanza_lines+=("$line")
         fi
     done < "$sources_file"
+
+    # Handle the last stanza if file doesn't end with empty line
+    if [[ ${#current_stanza_lines[@]} -gt 0 ]] && [[ "$skip_current_stanza" != true ]]; then
+        for stanza_line in "${current_stanza_lines[@]}"; do
+            echo "$stanza_line" >> "$temp_sources"
+        done
+    fi
 
     # Replace the original file with the modified one
     if [[ "$suites_modified" == true ]] || [[ "$components_modified" == true ]]; then
