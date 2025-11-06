@@ -283,6 +283,175 @@ track_special_packages() {
     fi
 }
 
+# Modernize APT sources configuration (Debian/Ubuntu)
+# Converts old sources.list format to DEB822 format and configures non-free components
+modernize_apt_sources() {
+    local os="$1"
+
+    # Only run on Linux systems
+    if [[ "$os" != "linux" ]]; then
+        return 0
+    fi
+
+    # Only run if apt is available
+    if ! command -v apt &>/dev/null; then
+        return 0
+    fi
+
+    print_info "Modernizing APT sources configuration..."
+
+    # Run apt modernize-sources
+    if ! apt modernize-sources 2>/dev/null; then
+        print_warning "apt modernize-sources failed or is not available"
+        return 0
+    fi
+
+    # Remove backup file if it exists
+    if [[ -f /etc/apt/sources.list.bak ]]; then
+        rm -f /etc/apt/sources.list.bak
+        print_success "Removed /etc/apt/sources.list.bak"
+    fi
+
+    # Check if the new DEB822 format file exists
+    local sources_file="/etc/apt/sources.list.d/debian.sources"
+    if [[ ! -f "$sources_file" ]]; then
+        print_warning "DEB822 sources file not found at $sources_file"
+        return 0
+    fi
+
+    # Read the current Suites line and extract the release name
+    local suites_line
+    suites_line=$(grep -E "^Suites:" "$sources_file" | head -n 1)
+
+    if [[ -z "$suites_line" ]]; then
+        print_warning "Could not find Suites line in $sources_file"
+        return 0
+    fi
+
+    # Extract the first suite name (the release)
+    local release
+    release=$(echo "$suites_line" | sed -E 's/^Suites:\s*([a-z]+).*/\1/')
+
+    # Validate release name
+    local valid_releases=("bookworm" "trixie" "forky" "duke")
+    local is_valid_release=false
+    for valid_rel in "${valid_releases[@]}"; do
+        if [[ "$release" == "$valid_rel" ]]; then
+            is_valid_release=true
+            break
+        fi
+    done
+
+    if [[ "$is_valid_release" != true ]]; then
+        local releases_list=$(IFS=', '; echo "${valid_releases[*]}")
+        print_warning "Release '$release' is not a recognized Debian release ($releases_list)"
+        return 0
+    fi
+
+    print_info "Detected Debian release: $release"
+
+    # Create a temporary file for the new sources configuration
+    local temp_sources
+    temp_sources=$(mktemp)
+
+    # Process the file: keep only the first stanza and modify it
+    local in_first_stanza=true
+    local in_stanza=false
+    local first_stanza_processed=false
+    local suites_modified=false
+    local components_modified=false
+
+    while IFS= read -r line; do
+        # Detect stanza boundaries (empty lines separate stanzas)
+        if [[ -z "$line" ]]; then
+            if [[ "$in_stanza" == true ]]; then
+                # End of a stanza
+                if [[ "$in_first_stanza" == true ]]; then
+                    # This is the end of the first stanza
+                    in_first_stanza=false
+                    first_stanza_processed=true
+                    echo "$line" >> "$temp_sources"
+                fi
+                in_stanza=false
+            else
+                # Empty line between stanzas or at beginning
+                if [[ "$first_stanza_processed" != true ]]; then
+                    echo "$line" >> "$temp_sources"
+                fi
+            fi
+            continue
+        fi
+
+        # Non-empty line means we're in a stanza
+        in_stanza=true
+
+        # Only process the first stanza
+        if [[ "$in_first_stanza" == true ]]; then
+            # Modify Suites line
+            if [[ "$line" =~ ^Suites: ]]; then
+                # Check if updates and backports are already present
+                local new_line="$line"
+                if [[ ! "$line" =~ ${release}-updates ]]; then
+                    new_line="$new_line ${release}-updates"
+                    suites_modified=true
+                fi
+                if [[ ! "$line" =~ ${release}-backports ]]; then
+                    new_line="$new_line ${release}-backports"
+                    suites_modified=true
+                fi
+                echo "$new_line" >> "$temp_sources"
+            # Modify Components line
+            elif [[ "$line" =~ ^Components: ]]; then
+                local new_line="$line"
+                if [[ ! "$line" =~ (^|[[:space:]])non-free([[:space:]]|$) ]]; then
+                    new_line="$new_line non-free"
+                    components_modified=true
+                fi
+                if [[ ! "$line" =~ non-free-firmware ]]; then
+                    new_line="$new_line non-free-firmware"
+                    components_modified=true
+                fi
+                echo "$new_line" >> "$temp_sources"
+            else
+                # Keep other lines in first stanza unchanged
+                echo "$line" >> "$temp_sources"
+            fi
+        fi
+    done < "$sources_file"
+
+    # Replace the original file with the modified one
+    if [[ "$suites_modified" == true ]] || [[ "$components_modified" == true ]]; then
+        # Backup the original
+        cp "$sources_file" "${sources_file}.backup"
+        print_backup "Created backup: ${sources_file}.backup"
+
+        # Replace with new content
+        mv "$temp_sources" "$sources_file"
+
+        if [[ "$suites_modified" == true ]]; then
+            print_success "✓ Updated Suites to include: $release ${release}-updates ${release}-backports"
+        fi
+        if [[ "$components_modified" == true ]]; then
+            print_success "✓ Updated Components to include: non-free non-free-firmware"
+        fi
+        print_success "✓ APT sources modernization complete"
+    else
+        rm -f "$temp_sources"
+        print_success "APT sources already configured correctly"
+    fi
+    echo ""
+
+    # Offer to manually edit the sources file
+    if prompt_yes_no "Would you like to manually edit $sources_file with nano?" "n"; then
+        if command -v nano &>/dev/null; then
+            nano "$sources_file"
+            print_info "Manual edit completed"
+        else
+            print_warning "nano is not installed"
+        fi
+    fi
+}
+
 # Install packages based on OS
 install_packages() {
     local os="$1"
@@ -1584,17 +1753,23 @@ main() {
         echo ""
         configure_container_static_ip "$os"
     fi
+    echo ""
+
+    # Modernize APT sources (Linux only)
+    if [[ "$os" == "linux" ]]; then
+        modernize_apt_sources "$os"
+        echo ""
+    fi
 
     # Check and install packages
-    echo ""
     print_info "Step 1: Package Management"
     print_info "---------------------------"
     if ! check_and_install_packages "$os"; then
         print_error "Package management failed. Continuing with configuration for installed packages..."
     fi
+    echo ""
 
     # Get user preferences
-    echo ""
     print_info "Step 2: Configuration"
     print_info "---------------------"
     print_info "This script will configure:"
