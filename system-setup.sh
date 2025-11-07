@@ -320,8 +320,7 @@ modernize_apt_sources() {
     fi
 
     # Read the current Suites line and extract the release name
-    local suites_line
-    suites_line=$(grep -E "^Suites:" "$sources_file" | head -n 1)
+    local suites_line=$(grep -E "^Suites:" "$sources_file" | head -n 1)
 
     if [[ -z "$suites_line" ]]; then
         print_warning "Could not find Suites line in $sources_file"
@@ -329,8 +328,7 @@ modernize_apt_sources() {
     fi
 
     # Extract the first suite name (the release)
-    local release
-    release=$(echo "$suites_line" | sed -E 's/^Suites:\s*([a-z]+).*/\1/')
+    local release=$(echo "$suites_line" | sed -E 's/^Suites:\s*([a-z]+).*/\1/')
 
     # Validate release name
     local valid_releases=("bookworm" "trixie" "forky" "duke")
@@ -351,8 +349,7 @@ modernize_apt_sources() {
     print_info "Detected Debian release: $release"
 
     # Create a temporary file for the new sources configuration
-    local temp_sources
-    temp_sources=$(mktemp)
+    local temp_sources=$(mktemp)
 
     # Process the file: buffer each stanza and process based on content
     local suites_modified=false
@@ -399,8 +396,7 @@ modernize_apt_sources() {
 
         # Check if this is a Suites line to identify the stanza type
         if [[ "$line" =~ ^Suites: ]]; then
-            local current_stanza_suite
-            current_stanza_suite=$(echo "$line" | sed -E 's/^Suites:\s*//')
+            local current_stanza_suite=$(echo "$line" | sed -E 's/^Suites:\s*//')
 
             # Check if this stanza should be skipped (updates or backports only)
             if [[ "$current_stanza_suite" == "${release}-updates" ]] || [[ "$current_stanza_suite" == "${release}-backports" ]]; then
@@ -598,8 +594,7 @@ backup_file() {
     fi
 
     if [[ -f "$file" ]]; then
-        local backup
-        backup="${file}.backup.$(date +%Y%m%d_%H%M%S)"
+        local backup="${file}.backup.$(date +%Y%m%d_%H%M%S)"
 
         # Copy file with preserved permissions (-p flag)
         cp -p "$file" "$backup"
@@ -608,18 +603,16 @@ backup_file() {
         # Get the owner and group of the original file
         if [[ "$OSTYPE" == "darwin"* ]]; then
             # macOS stat syntax
-            local owner
-            owner=$(stat -f "%u:%g" "$file")
+            local owner=$(stat -f "%u:%g" "$file")
             chown "$owner" "$backup" 2>/dev/null || true
         else
             # Linux stat syntax
-            local owner
-            owner=$(stat -c "%u:%g" "$file")
+            local owner=$(stat -c "%u:%g" "$file")
             chown "$owner" "$backup" 2>/dev/null || true
         fi
 
-        print_backup "- Backed up existing file: $file -> $backup"
-        BACKED_UP_FILES="$BACKED_UP_FILES $file"
+        print_backup "- Created backup: $backup"
+        BACKED_UP_FILES="${BACKED_UP_FILES} ${file}"
     fi
 }
 
@@ -686,8 +679,7 @@ add_config_if_needed() {
         full_setting="${setting}"
     fi
 
-    local current_value
-    current_value=$(get_config_value "$file" "$setting")
+    local current_value=$(get_config_value "$file" "$setting")
 
     if config_exists "$file" "$setting"; then
         if [[ "$current_value" == "$value" ]]; then
@@ -1320,8 +1312,7 @@ configure_shell() {
         local user_count=0
         for user_home in /home/*; do
             if [[ -d "$user_home" ]]; then
-                local username
-                username=$(basename "$user_home")
+                local username=$(basename "$user_home")
                 print_info "Processing user: $username"
                 configure_shell_for_user "$os" "$user_home" "$username"
                 ((user_count++)) || true
@@ -1361,8 +1352,7 @@ configure_swap() {
     print_info "Checking swap configuration..."
 
     # Check if swap is currently enabled
-    local swap_status
-    swap_status=$(swapon --show 2>/dev/null)
+    local swap_status=$(swapon --show 2>/dev/null)
 
     if [[ -n "$swap_status" ]]; then
         print_info "- Swap is already enabled:"
@@ -1386,8 +1376,7 @@ configure_swap() {
     print_info "Configuring swap memory..."
 
     # Get total RAM in GB
-    local ram_kb
-    ram_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+    local ram_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
     local ram_gb=$((ram_kb / 1024 / 1024))
 
     # Calculate swap size based on RAM
@@ -1786,8 +1775,7 @@ main() {
     print_info "System Setup and Configuration Script (Idempotent Mode)"
     echo "          ======================================================="
 
-    local os
-    os=$(detect_os)
+    local os=$(detect_os)
     echo "          - Detected OS: $os"
 
     if [[ "$os" == "unknown" ]]; then

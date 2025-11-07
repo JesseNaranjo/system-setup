@@ -192,8 +192,7 @@ create_issue_in_dest() {
   local name="$1" title="$2" body="$3" labels_json="$4" milestone_title="$5" state="$6" created="$7"
 
   # Idempotency: skip if exact title exists already
-  local existing
-  existing="$(exists_issue_number_by_title "$name" "$title" "$created" || true)"
+  local existing="$(exists_issue_number_by_title "$name" "$title" "$created" || true)"
   if [[ -n "$existing" ]]; then
     say "Issue already exists in ${DST_ORG}/${name} with same title, skipping (##${existing})"
     echo "" # signal "skipped" to caller
@@ -207,8 +206,7 @@ create_issue_in_dest() {
   fi
 
   # Build JSON body with jq (correct conditional, no ternary)
-  local json
-  json="$(jq -n \
+  local json="$(jq -n \
     --arg t "$title" \
     --arg b "$body" \
     --argjson lbls "$labels_json" \
@@ -221,13 +219,11 @@ create_issue_in_dest() {
     ')"
 
   # Create issue
-  local resp
-  resp="$(printf '%s' "$json" \
+  local resp="$(printf '%s' "$json" \
          | gh api -H "Accept: application/vnd.github+json" \
                  -X POST "/repos/${DST_ORG}/${name}/issues" --input -)"
 
-  local newnum
-  newnum="$(printf '%s' "$resp" | jq -r '.number')"
+  local newnum="$(printf '%s' "$resp" | jq -r '.number')"
 
   # Close it if source was closed
   if [[ "$state" == "closed" ]]; then
@@ -295,8 +291,7 @@ copy_issues() {
       fi
 
       # Copy comments for this issue
-      local num
-      num=$(jq -r '.number' <<<"$row")
+      local num=$(jq -r '.number' <<<"$row")
       gh api --paginate "/repos/${SRC_ORG}/${name}/issues/${num}/comments?per_page=100" 2>/dev/null \
       | jq -c '.[]? | {author:(.user.login // "unknown"), created_at, body:(.body // "")}' \
       | while IFS= read -r crow; do
@@ -338,8 +333,7 @@ copy_prs_as_archival_issues() {
       local IBODY="${HEADER}\n---\n${BODY}"
       local LABELS_JSON="$(jq -cn --arg a "$LABEL_ARCHIVED_PR" '[$a]')"
 
-      local NEWNUM
-      NEWNUM="$(create_issue_in_dest "$name" "$ITITLE" "$IBODY" "$LABELS_JSON" "" "$STATE" "$CREATED")"
+      local NEWNUM="$(create_issue_in_dest "$name" "$ITITLE" "$IBODY" "$LABELS_JSON" "" "$STATE" "$CREATED")"
 
       # If skipped (duplicate archival issue already exists), do NOT add comments again
       if [[ -z "$NEWNUM" ]]; then
@@ -403,8 +397,7 @@ copy_discussions() {
     }'
 
   # Build dest category map (name -> id)
-  local dstCatsJSON
-  dstCatsJSON="$(gh_gql -f query="$q" -F so="$SRC_ORG" -F sr="$name" -F do="$DST_ORG" -F dr="$name" -F after="")" || {
+  local dstCatsJSON="$(gh_gql -f query="$q" -F so="$SRC_ORG" -F sr="$name" -F do="$DST_ORG" -F dr="$name" -F after="")" || {
     warn "GraphQL fetch failed for ${name} (likely no Discussions)"; return;
   }
   local dstCats; dstCats="$(echo "$dstCatsJSON" | jq -c '.data.dst.discussionCategories.nodes')" || dstCats="[]"
@@ -418,8 +411,7 @@ copy_discussions() {
   local cursor=""
   local hasNext="true"
   while [[ "$hasNext" == "true" ]]; do
-    local page
-    page="$(gh_gql -f query="$q" -F so="$SRC_ORG" -F sr="$name" -F do="$DST_ORG" -F dr="$name" -F after="$cursor")" || break
+    local page="$(gh_gql -f query="$q" -F so="$SRC_ORG" -F sr="$name" -F do="$DST_ORG" -F dr="$name" -F after="$cursor")" || break
     hasNext="$(echo "$page" | jq -r '.data.src.discussions.pageInfo.hasNextPage')"
     cursor="$(echo "$page"  | jq -r '.data.src.discussions.pageInfo.endCursor')"
 
@@ -433,8 +425,7 @@ copy_discussions() {
       local BODY="${HEADER}\n\n${DBODY}"
 
       # Resolve category id (name match or first)
-      local CATID
-      CATID="$(echo "$dstCats" | jq -r --arg n "$DCAT" 'first(.[] | select(.name==$n) | .id) // first(.[] | .id)')"
+      local CATID="$(echo "$dstCats" | jq -r --arg n "$DCAT" 'first(.[] | select(.name==$n) | .id) // first(.[] | .id)')"
 
       # Create discussion
       local dstRepoId; dstRepoId="$(echo "$page" | jq -r '.data.dst.id')"
@@ -443,8 +434,7 @@ copy_discussions() {
           discussion{ id number }
         }
       }'
-      local created
-      created="$(gh_gql -f query="$m" -F rid="$dstRepoId" -F cid="$CATID" -F title="$DTITLE" -F body="$BODY")" || { warn "Failed to create discussion"; continue; }
+      local created="$(gh_gql -f query="$m" -F rid="$dstRepoId" -F cid="$CATID" -F title="$DTITLE" -F body="$BODY")" || { warn "Failed to create discussion"; continue; }
       local newDid; newDid="$(echo "$created" | jq -r '.data.createDiscussion.discussion.id')"
 
       # Comments (single page or more)

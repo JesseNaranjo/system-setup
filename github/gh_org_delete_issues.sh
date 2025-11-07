@@ -179,16 +179,14 @@ process_repository() {
     echo -e "${CYAN}━━━━ [$visibility] $repo_name ━━━━${NC}"
 
     # Get issue list
-    local issues
-    issues=$(gh issue list -R "$repo_name" --state "$state_arg" --limit 2000 --json number,title,state | jq -c '.[]')
+    local issues=$(gh issue list -R "$repo_name" --state "$state_arg" --limit 2000 --json number,title,state | jq -c '.[]')
 
     if [[ -z "$issues" || "$issues" == "null" ]]; then
         print_info "No issues found"
         return 0
     fi
 
-    local issues_count
-    issues_count=$(echo "$issues" | wc -l | tr -d ' ')
+    local issues_count=$(echo "$issues" | wc -l | tr -d ' ')
     print_info "Found $issues_count issue(s)"
     ((TOTAL_ISSUES_FOUND += issues_count)) || true
     echo ""
@@ -318,10 +316,8 @@ main() {
     echo ""
 
     # Get repository list
-    local repos_json
-    repos_json=$(gh repo list "$ORG" --limit 1000 --json nameWithOwner,isArchived,visibility)
-    local repos
-    repos=$(echo "$repos_json" | jq -r '.[] | @base64')
+    local repos_json=$(gh repo list "$ORG" --limit 1000 --json nameWithOwner,isArchived,visibility)
+    local repos=$(echo "$repos_json" | jq -r '.[] | @base64')
 
     if [[ -z "$repos" ]]; then
         print_error "No repositories found or failed to fetch repositories"
@@ -329,8 +325,7 @@ main() {
     fi
 
     local num_repos=0
-    local state_arg
-    state_arg=$([[ $ONLY_OPEN -eq 1 ]] && echo "open" || echo "all")
+    local state_arg=$([[ $ONLY_OPEN -eq 1 ]] && echo "open" || echo "all")
 
     while IFS= read -r enc; do
         local repo_name is_archived visibility

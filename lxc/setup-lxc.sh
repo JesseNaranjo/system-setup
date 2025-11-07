@@ -97,8 +97,7 @@ backup_file() {
     fi
 
     if [[ -f "$file" ]]; then
-        local backup
-        backup="${file}.backup.$(date +%Y%m%d_%H%M%S)"
+        local backup="${file}.backup.$(date +%Y%m%d_%H%M%S)"
 
         # Copy file with preserved permissions (-p flag)
         cp -p "$file" "$backup"
@@ -107,13 +106,11 @@ backup_file() {
         # Get the owner and group of the original file
         if [[ "$OSTYPE" == "darwin"* ]]; then
             # macOS stat syntax
-            local owner
-            owner=$(stat -f "%u:%g" "$file")
+            local owner=$(stat -f "%u:%g" "$file")
             chown "$owner" "$backup" 2>/dev/null || true
         else
             # Linux stat syntax
-            local owner
-            owner=$(stat -c "%u:%g" "$file")
+            local owner=$(stat -c "%u:%g" "$file")
             chown "$owner" "$backup" 2>/dev/null || true
         fi
 
