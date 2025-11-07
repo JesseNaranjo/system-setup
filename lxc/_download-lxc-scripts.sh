@@ -31,7 +31,7 @@ readonly CODE_COLOR="\033[40m"
 
 # Remote repository configuration
 readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/lxc"
-readonly FILES=( "create-priv-lxc.sh" "restart-lxc.sh" "setup-lxc.sh" "start-lxc.sh" "stop-lxc.sh" )
+readonly FILES=( "config-lxc-ssh.sh" "create-priv-lxc.sh" "restart-lxc.sh" "setup-lxc.sh" "start-lxc.sh" "stop-lxc.sh" )
 
 # Print colored output
 print_info() {
