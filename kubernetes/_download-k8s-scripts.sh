@@ -154,7 +154,7 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
                 diff -u --color "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" || true
                 echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"; echo
 
-                if prompt_yes_no "→ Overwrite and run updated ${SCRIPT_FILE}?" "n"; then
+                if prompt_yes_no "→ Overwrite and run updated ${SCRIPT_FILE}?" "y"; then
                     echo ""
                     chmod +x "$TEMP_SCRIPT_FILE"
                     mv -f "$TEMP_SCRIPT_FILE" "${BASH_SOURCE[0]}"
@@ -234,7 +234,7 @@ for fname in "${FILES[@]}"; do
         echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${fname} ─────────────────────────────────────────────────────────╯${NC}"
         echo ""
 
-        if prompt_yes_no "→ Overwrite local ${fname} with remote copy?" "n"; then
+        if prompt_yes_no "→ Overwrite local ${fname} with remote copy?" "y"; then
             echo ""
             chmod +x "${tmp}"
             mv -f "${tmp}" "${fname}"
