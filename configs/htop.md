@@ -2,7 +2,7 @@
 
 ## Display options
 
-- Tree View (F5) - *will sort in groups, rather than across all processes*
+- [x] Hide userland process threads
 - [x] Highlight program "basename"
 - [x] Update process names on every refresh
 - [x] Also show CPU temperature
@@ -15,7 +15,6 @@
 
 - 2 columns 50/50
 - Column 1
-  - Date and Time [Text]
   - Hostname [Text]
   - Uptime [Text]
   - Systemd state [Text]
@@ -26,4 +25,5 @@
   - Task counter [Text]
   - Load average [Text]
   - CPUs (1/1) [Bar]
-  - Memory & Swap [Bar] ("Combined memory and swap usage")
+  - Memory
+  - Swap
