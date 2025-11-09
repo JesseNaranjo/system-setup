@@ -192,14 +192,15 @@ verify_auth() {
 # GitHub API Helper Functions
 # ============================================================================
 
-# GitHub API wrapper with throttling for mutating calls
-gh_post() {
+# GitHub API wrapper with throttling
+gh_api() {
     sleep "$THROTTLE"
     gh api "$@"
 }
 
-# GitHub GraphQL API wrapper
+# GitHub GraphQL API wrapper with throttling
 gh_gql() {
+    sleep "$THROTTLE"
     gh api graphql "$@"
 }
 
@@ -215,16 +216,18 @@ create_dest_repo() {
     # Map "internal" (source) → "private" (destination) for portability
     [[ "$visibility" == "internal" ]] && visibility="private"
 
-    if gh api -H "Accept: application/vnd.github+json" "/repos/${DST_ORG}/${name}" >/dev/null 2>&1; then
+    if gh_api -H "Accept: application/vnd.github+json" "/repos/${DST_ORG}/${name}" >/dev/null 2>&1; then
         echo "$visibility"
         return 0
     fi
 
     print_step "Creating repository ${DST_ORG}/${name} (${visibility})"
+    sleep "$THROTTLE"
     gh repo create "${DST_ORG}/${name}" "--${visibility}" >/dev/null
     ((TOTAL_REPOS_CREATED++)) || true
 
     # Enable Discussions and set default branch
+    sleep "$THROTTLE"
     gh repo edit "${DST_ORG}/${name}" --enable-discussions --default-branch development >/dev/null 2>&1 || true
     echo "$visibility"
 }
@@ -270,6 +273,7 @@ copy_wiki() {
 
     if git ls-remote "$src_wiki" &>/dev/null; then
         print_step "Copying wiki for ${name}"
+        sleep "$THROTTLE"
         gh repo edit "${DST_ORG}/${name}" --enable-wiki >/dev/null 2>&1 || true
         rm -rf "$wd"
         if git clone --bare "$src_wiki" "$wd" >/dev/null 2>&1; then
@@ -298,8 +302,8 @@ ensure_label() {
     local color="$3"
     local desc="$4"
 
-    gh api -H "Accept: application/vnd.github+json" "/repos/${DST_ORG}/${repo}/labels/${label}" >/dev/null 2>&1 && return 0
-    if gh_post -X POST "/repos/${DST_ORG}/${repo}/labels" -f name="$label" -f color="$color" -f description="${desc}" >/dev/null 2>&1; then
+    gh_api -H "Accept: application/vnd.github+json" "/repos/${DST_ORG}/${repo}/labels/${label}" >/dev/null 2>&1 && return 0
+    if gh_api -X POST "/repos/${DST_ORG}/${repo}/labels" -f name="$label" -f color="$color" -f description="${desc}" >/dev/null 2>&1; then
         ((TOTAL_LABELS_COPIED++)) || true
     fi
 }
@@ -309,7 +313,7 @@ copy_labels_and_milestones() {
     local name="$1"
 
     print_step "Copying labels for ${name}"
-    gh api --paginate "/repos/${SRC_ORG}/${name}/labels?per_page=100" \
+    gh_api --paginate "/repos/${SRC_ORG}/${name}/labels?per_page=100" \
         --jq '.[] | [.name,.color,(.description//"")] | @tsv' \
     | while IFS=$'\t' read -r LNAME LCOLOR LDESC; do
         ensure_label "$name" "$LNAME" "$LCOLOR" "$LDESC"
@@ -319,7 +323,7 @@ copy_labels_and_milestones() {
     # Build map of destination title → destination number
     declare -A DST_MS=()
     # Create any missing milestones by title
-    gh api --paginate "/repos/${SRC_ORG}/${name}/milestones?state=all&per_page=100" \
+    gh_api --paginate "/repos/${SRC_ORG}/${name}/milestones?state=all&per_page=100" \
         --jq '.[] | @base64' | while read -r row; do
         _j() { echo "$row" | base64 --decode | jq -r "$1"; }
         local TITLE=$(_j '.title')
@@ -328,13 +332,13 @@ copy_labels_and_milestones() {
         local DUE=$(_j '.due_on // empty')
 
         # Check if milestone already exists
-        if ! gh api "/repos/${DST_ORG}/${name}/milestones?state=all&per_page=100" \
+        if ! gh_api "/repos/${DST_ORG}/${name}/milestones?state=all&per_page=100" \
             --jq ".[] | select(.title==\"$TITLE\") | .number" | grep -q .; then
             # Create milestone
             args=(-X POST "/repos/${DST_ORG}/${name}/milestones" -f title="$TITLE")
             [[ -n "$DESC" ]] && args+=(-f description="$DESC")
             [[ -n "$DUE"  ]] && args+=(-f due_on="$DUE")
-            if gh_post "${args[@]}" >/dev/null 2>&1; then
+            if gh_api "${args[@]}" >/dev/null 2>&1; then
                 ((TOTAL_MILESTONES_COPIED++)) || true
             fi
         fi
@@ -349,7 +353,7 @@ copy_labels_and_milestones() {
 dest_milestone_number_by_title() {
     local name="$1"
     local title="$2"
-    gh api "/repos/${DST_ORG}/${name}/milestones?state=all&per_page=100" \
+    gh_api "/repos/${DST_ORG}/${name}/milestones?state=all&per_page=100" \
         --jq -- "map(select(.title == \$t) | .number) | first" --raw-field t="$title"
 }
 
@@ -364,7 +368,7 @@ exists_issue_number_by_title() {
     # - .[]? : safe iterate (no error on null)
     # - exclude PRs: select(has("pull_request")|not)
     # - exact title match (case-sensitive) and creation date
-    gh api --paginate "/repos/${DST_ORG}/${repo}/issues?state=all&per_page=100" 2>/dev/null \
+    gh_api --paginate "/repos/${DST_ORG}/${repo}/issues?state=all&per_page=100" 2>/dev/null \
     | jq -r --arg t "$title" --arg d "$created" '
         .[]?
         | select(has("pull_request")|not)
@@ -415,7 +419,7 @@ create_issue_in_dest() {
 
     # Create issue
     local resp="$(printf '%s' "$json" \
-           | gh api -H "Accept: application/vnd.github+json" \
+           | gh_api -H "Accept: application/vnd.github+json" \
                    -X POST "/repos/${DST_ORG}/${name}/issues" --input -)"
 
     local newnum="$(printf '%s' "$resp" | jq -r '.number')"
@@ -423,7 +427,7 @@ create_issue_in_dest() {
 
     # Close it if source was closed
     if [[ "$state" == "closed" ]]; then
-        gh api -H "Accept: application/vnd.github+json" \
+        gh_api -H "Accept: application/vnd.github+json" \
                -X PATCH "/repos/${DST_ORG}/${name}/issues/${newnum}" \
                -f state=closed >/dev/null
     fi
@@ -436,7 +440,7 @@ post_issue_comment() {
     local name="$1"
     local num="$2"
     local body="$3"
-    if gh_post -X POST "/repos/${DST_ORG}/${name}/issues/${num}/comments" \
+    if gh_api -X POST "/repos/${DST_ORG}/${name}/issues/${num}/comments" \
         -f body="$body" >/dev/null; then
         ((TOTAL_ISSUE_COMMENTS_COPIED++)) || true
     fi
@@ -448,7 +452,7 @@ copy_issues() {
     print_step "Copying issues for ${name}"
 
     # Page through all issues from source (includes PRs; we filter those out)
-    gh api --paginate "/repos/${SRC_ORG}/${name}/issues?state=all&per_page=100" 2>/dev/null \
+    gh_api --paginate "/repos/${SRC_ORG}/${name}/issues?state=all&per_page=100" 2>/dev/null \
     | jq -c '
         .[]?
         | select(has("pull_request")|not)
@@ -492,7 +496,7 @@ copy_issues() {
 
         # Copy comments for this issue
         local num=$(jq -r '.number' <<<"$row")
-        gh api --paginate "/repos/${SRC_ORG}/${name}/issues/${num}/comments?per_page=100" 2>/dev/null \
+        gh_api --paginate "/repos/${SRC_ORG}/${name}/issues/${num}/comments?per_page=100" 2>/dev/null \
         | jq -c '.[]? | {author:(.user.login // "unknown"), created_at, body:(.body // "")}' \
         | while IFS= read -r crow; do
             local CAUTH CDATE CBODY CMT
@@ -517,7 +521,7 @@ copy_prs_as_archival_issues() {
     # Ensure archival label exists
     ensure_label "$name" "$LABEL_ARCHIVED_PR" "6e5494" "Archival of original Pull Request"
 
-    gh api --paginate "/repos/${SRC_ORG}/${name}/pulls?state=all&per_page=100" \
+    gh_api --paginate "/repos/${SRC_ORG}/${name}/pulls?state=all&per_page=100" \
         --jq '.[] | @base64' \
     | while read -r row; do
         _j() { echo "$row" | base64 --decode | jq -r "$1"; }
@@ -548,15 +552,15 @@ copy_prs_as_archival_issues() {
 
         # Collect PR conversation pieces:
         # 1) PR issue-comments
-        gh api --paginate "/repos/${SRC_ORG}/${name}/issues/${PRNUM}/comments?per_page=100" \
+        gh_api --paginate "/repos/${SRC_ORG}/${name}/issues/${PRNUM}/comments?per_page=100" \
             --jq '.[] | {kind:"issue_comment",author:.user.login,created_at,body}' >"${WORKDIR}/ic.json"
 
         # 2) Review comments (diff comments)
-        gh api --paginate "/repos/${SRC_ORG}/${name}/pulls/${PRNUM}/comments?per_page=100" \
+        gh_api --paginate "/repos/${SRC_ORG}/${name}/pulls/${PRNUM}/comments?per_page=100" \
             --jq '.[] | {kind:"review_comment",author:.user.login,created_at,body:(.body//"") + "\n\n(File: \(.path), Line: \(.original_line // .line // 0))"}' >"${WORKDIR}/rc.json"
 
         # 3) Reviews
-        gh api --paginate "/repos/${SRC_ORG}/${name}/pulls/${PRNUM}/reviews?per_page=100" \
+        gh_api --paginate "/repos/${SRC_ORG}/${name}/pulls/${PRNUM}/reviews?per_page=100" \
             --jq '.[] | {kind:"review",author:.user.login,created_at,body:("[Review state: " + .state + "]\n\n" + (.body//""))}' >"${WORKDIR}/rv.json"
 
         # Merge and sort chronologically
@@ -662,7 +666,6 @@ copy_discussions() {
                 if gh_gql -f query="$cm" -F id="$newDid" -F body="$CBODY" >/dev/null 2>&1; then
                     ((TOTAL_DISCUSSION_COMMENTS_COPIED++)) || true
                 fi
-                sleep "$THROTTLE"
             done
             # Additional comment pages not handled here for simplicity (rare for most repos).
         done
@@ -678,7 +681,7 @@ process_repositories() {
     print_info "Listing repositories in ${SRC_ORG}..."
     echo ""
 
-    gh api --paginate "/orgs/${SRC_ORG}/repos?per_page=100" \
+    gh_api --paginate "/orgs/${SRC_ORG}/repos?per_page=100" \
         --jq '.[] | {name,visibility,archived,has_wiki} | @base64' \
     | while read -r row; do
         _j() { echo "$row" | base64 --decode | jq -r "$1"; }
@@ -705,6 +708,9 @@ process_repositories() {
         if [[ "$ARCH" == "true" ]]; then
             print_warning "Source repository is archived; destination remains unarchived by default"
         fi
+
+        # Add throttle between repository processing to avoid rate limits
+        sleep "$THROTTLE"
     done
 }
 
