@@ -67,6 +67,10 @@ TOTAL_PR_COMMENTS_COPIED=0
 TOTAL_DISCUSSIONS_COPIED=0
 TOTAL_DISCUSSION_COMMENTS_COPIED=0
 
+# Timing variables
+START_TIME=""
+END_TIME=""
+
 # ============================================================================
 # Output Functions
 # ============================================================================
@@ -96,6 +100,11 @@ print_header() {
 
 print_step() {
     echo -e "${BLUE}  →${NC} $1"
+}
+
+print_timestamp() {
+    local section="$1"
+    echo -e "${GRAY}[$(date +'%Y-%m-%d %H:%M:%S')] ${section}${NC}"
 }
 
 # ============================================================================
@@ -678,6 +687,7 @@ copy_discussions() {
 
 # Process all repositories in the source organization
 process_repositories() {
+    print_timestamp "Starting repository processing"
     print_info "Listing repositories in ${SRC_ORG}..."
     echo ""
 
@@ -692,17 +702,28 @@ process_repositories() {
 
         print_header "Processing repository: ${NAME}"
         ((TOTAL_REPOS_PROCESSED++)) || true
+
+        print_timestamp "Creating repository: ${NAME}"
         create_dest_repo "$NAME" "$VIS" >/dev/null
 
+        print_timestamp "Mirroring git and LFS for: ${NAME}"
         mirror_git_and_lfs "$NAME"
 
         if [[ "$HAS_WIKI" == "true" ]]; then
+            print_timestamp "Copying wiki for: ${NAME}"
             copy_wiki "$NAME"
         fi
 
+        print_timestamp "Copying labels and milestones for: ${NAME}"
         copy_labels_and_milestones "$NAME"
+
+        print_timestamp "Copying issues for: ${NAME}"
         copy_issues "$NAME"
+
+        print_timestamp "Archiving PRs for: ${NAME}"
         copy_prs_as_archival_issues "$NAME"
+
+        print_timestamp "Copying discussions for: ${NAME}"
         copy_discussions "$NAME"
 
         if [[ "$ARCH" == "true" ]]; then
@@ -719,10 +740,15 @@ process_repositories() {
 # ============================================================================
 
 main() {
+    # Record start time
+    START_TIME=$(date +%s)
+    local start_display=$(date +'%Y-%m-%d %H:%M:%S')
+
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo -e "${CYAN}GitHub Organization Copy Tool${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    print_timestamp "Migration started"
 
     validate_config
     check_dependencies
@@ -735,10 +761,22 @@ main() {
 
     process_repositories
 
+    # Record end time and calculate duration
+    END_TIME=$(date +%s)
+    local end_display=$(date +'%Y-%m-%d %H:%M:%S')
+    local duration=$((END_TIME - START_TIME))
+    local hours=$((duration / 3600))
+    local minutes=$(((duration % 3600) / 60))
+    local seconds=$((duration % 60))
+
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo -e "${CYAN}Migration Summary${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Start time:                    ${start_display}"
+    echo "End time:                      ${end_display}"
+    printf "Total duration:                %02d:%02d:%02d\n" $hours $minutes $seconds
+    echo ""
     echo "Repositories processed:        ${TOTAL_REPOS_PROCESSED}"
     echo "Repositories created:          ${TOTAL_REPOS_CREATED}"
     echo "Wikis copied:                  ${TOTAL_WIKIS_COPIED}"
