@@ -1,0 +1,86 @@
+# Logs and PIDs
+logs
+*.log
+*.log.*
+pids
+*.pid
+*.pid.lock
+*.seed
+nohup.out*
+
+# Environment files (keep examples)
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Editor configs
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+*.iml
+
+# OS-specific
+## macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+.DocumentRevisions-V100
+.TemporaryItems
+.VolumeIcon.icns
+.apdisk
+Icon?
+*.icloud
+## Linux
+*~
+## Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Caches / temps
+.cache/
+.parcel-cache/
+.turbo/
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+tmp/
+temp/
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.swp
+*.swo
+
+# Downloaded/generated scripts
+**/downloaded-scripts/
+**/downloads/
+
+# Local configuration overrides
+*-local.*
+*.local
+
+# Secrets and credentials
+*secret*
+*credential*
+*password*
+*token*
+!.github/workflows/*.yml
+!**/*.md
+
+# Runtime files
+*.sock
+*.socket
