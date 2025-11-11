@@ -1747,13 +1747,17 @@ configure_ssh_socket() {
 
     # Open editor for ssh.socket configuration
     echo ""
-    print_info "Opening systemd override editor for ssh.socket..."
-    print_info "You can customize the socket configuration here (e.g., change port, add ListenStream)"
-    print_info "Press Ctrl+X (or appropriate editor command) to save and exit when done"
+    echo -e "${YELLOW}╔═════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${YELLOW}║                                                                         ║${NC}"
+    echo -e "${YELLOW}║    You can customize the socket configuration here.                     ║${NC}"
+    echo -e "${YELLOW}║    Examples: change port, add ListenStream, etc.                        ║${NC}"
+    echo -e "${YELLOW}║                                                                         ║${NC}"
+    echo -e "${YELLOW}║    nano will open for manual configuration and adjustment.              ║${NC}"
+    echo -e "${YELLOW}║                                                                         ║${NC}"
+    echo -e "${YELLOW}╚═════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-
-    # Give user a moment to read the message
-    sleep 3
+    read -n 1 -s -r -p "Press any key to open nano and configure ssh.socket..."
+    echo ""
 
     if systemctl edit ssh.socket; then
         print_success "ssh.socket configuration saved"
