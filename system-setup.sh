@@ -692,7 +692,7 @@ add_config_if_needed() {
             backup_file "$file"
             add_change_header "$file" "$config_type"
             # Comment out old line instead of removing it
-            sed -i.bak "s/^[[:space:]]*\(${setting}\)/# \1  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$file" && rm -f "${file}.bak"
+            sed -i.bak "s/^\([[:space:]]*\)\(${setting}\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$file" && rm -f "${file}.bak"
         fi
     else
         print_info "+ Adding $description to $file"
@@ -727,7 +727,7 @@ add_alias_if_needed() {
             backup_file "$file"
             add_change_header "$file" "shell"
             # Comment out old line instead of removing it
-            sed -i.bak "s/^[[:space:]]*\(alias[[:space:]]*${alias_name}=.*\)/# \1  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$file" && rm -f "${file}.bak"
+            sed -i.bak "s/^\([[:space:]]*\)\(alias[[:space:]]*${alias_name}=.*\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$file" && rm -f "${file}.bak"
         fi
     else
         print_info "+ Adding $description alias to $file"
@@ -763,7 +763,7 @@ add_export_if_needed() {
             backup_file "$file"
             add_change_header "$file" "shell"
             # Comment out old line instead of removing it
-            sed -i.bak "s/^[[:space:]]*\(export[[:space:]]*${var_name}=.*\)/# \1  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$file" && rm -f "${file}.bak"
+            sed -i.bak "s/^\([[:space:]]*\)\(export[[:space:]]*${var_name}=.*\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$file" && rm -f "${file}.bak"
         fi
     else
         print_info "+ Adding $description export to $file"
