@@ -279,7 +279,7 @@ function Invoke-RobocopySync {
         '/R:3',           # Retry 3 times
         '/W:5',           # Wait 5 seconds between retries
         '/MT:8',          # Use 8 threads
-        '/V',             # Verbose
+        #'/V',             # Verbose
         '/ETA',           # Show ETA
         '/BYTES'          # Show sizes in bytes
     )
