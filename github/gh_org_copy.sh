@@ -104,7 +104,7 @@ print_step() {
 
 print_timestamp() {
     local section="$1"
-    echo -e "${GRAY}[$(date +'%Y-%m-%d %H:%M:%S')] ${section}${NC}"
+    echo -e "${GRAY}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} ${section}"
 }
 
 # ============================================================================
