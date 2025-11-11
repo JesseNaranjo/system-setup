@@ -1186,6 +1186,199 @@ configure_issue_network() {
     cat /etc/issue
 }
 
+# Configure shell prompt colors for system-wide configuration
+configure_shell_prompt_colors_system() {
+    local os="$1"
+
+    # Determine shell config file based on OS
+    local shell_config
+    if [[ "$os" == "macos" ]]; then
+        shell_config="/etc/zshrc"
+    else
+        shell_config="/etc/bash.bashrc"
+    fi
+
+    # Skip if config file doesn't exist
+    if [[ ! -f "$shell_config" ]]; then
+        print_warning "Shell configuration file $shell_config does not exist, skipping prompt color configuration"
+        return 0
+    fi
+
+    print_info "Configuring shell prompt colors in $shell_config..."
+
+    # OS-specific custom PS1 patterns
+    local ps1_check_pattern
+    local custom_ps1_pattern
+    if [[ "$os" == "macos" ]]; then
+        # macOS zsh prompt
+        custom_ps1_pattern="PS1='[%F{247}%m%f:%F{%(!.red.green)}%n%f] %B%F{cyan}%~%f%b %#%(!.%F{red}%B!!%b%f.) '"
+        ps1_check_pattern="$custom_ps1_pattern"
+    else
+        # Linux bash prompt - conditional for root vs non-root
+        # We'll use a marker comment to check if it's already configured
+        ps1_check_pattern="# Custom PS1 - conditional for root/non-root"
+        custom_ps1_pattern="    # Custom PS1 - conditional for root/non-root
+    if [ \"\$EUID\" -eq 0 ]; then
+        # Root user - red username with !! warning
+        PS1='[\[\e[90m\]\h\[\e[0m\]:\[\e[91m\]\u\[\e[0m\]] \[\e[96;1m\]\w\[\e[0m\] \\$\[\e[91;1m\]!!\[\e[0m\] '
+    else
+        # Non-root user - green username
+        PS1='[\[\e[90m\]\h\[\e[0m\]:\[\e[92m\]\u\[\e[0m\]] \[\e[96;1m\]\w\[\e[0m\] \\$ '
+    fi"
+    fi
+
+    # Check if we already have our custom PS1
+    if grep -qF "$ps1_check_pattern" "$shell_config" 2>/dev/null; then
+        print_success "Custom PS1 prompt already configured"
+        return 0
+    fi
+
+    # Backup the config file
+    backup_file "$shell_config"
+
+    # Check how many PS1 definitions exist
+    local ps1_count
+    ps1_count=$(grep -c "^[[:space:]]*PS1=" "$shell_config" 2>/dev/null || echo "0")
+
+    if [[ "$ps1_count" -eq 0 ]]; then
+        # No existing PS1, just add at the end
+        add_change_header "$shell_config" "shell"
+        echo "# Custom colored prompt - managed by system-setup.sh" >> "$shell_config"
+        echo "$custom_ps1_pattern" >> "$shell_config"
+        echo "" >> "$shell_config"
+        print_success "✓ Custom colored PS1 prompt configured in $shell_config"
+    elif [[ "$ps1_count" -eq 1 ]]; then
+        # Exactly one PS1 definition - comment it out and add new one immediately after
+        print_info "Commenting out existing PS1 definition..."
+
+        # Find the line number of the PS1 definition
+        local ps1_line_num
+        ps1_line_num=$(grep -n "^[[:space:]]*PS1=" "$shell_config" | cut -d: -f1)
+
+        # Comment out the line
+        sed -i.bak "${ps1_line_num}s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
+
+        # Create a temporary file with the new PS1 content
+        local temp_ps1
+        temp_ps1=$(mktemp)
+        {
+            echo ""
+            echo "    # ─────────────────────────────────────────────────────────────────────────────"
+            echo "    # shell configuration - managed by system-setup.sh"
+            echo "    # Last updated: $(date '+%Y-%m-%d %H:%M:%S')"
+            echo "    # ─────────────────────────────────────────────────────────────────────────────"
+            echo "    # Custom colored prompt - managed by system-setup.sh"
+            echo "$custom_ps1_pattern"
+        } > "$temp_ps1"
+
+        # Insert the new content after the commented line
+        sed -i.bak "${ps1_line_num}r ${temp_ps1}" "$shell_config" && rm -f "${shell_config}.bak"
+        rm -f "$temp_ps1"
+
+        print_success "✓ Custom colored PS1 prompt configured immediately after commented line"
+    else
+        # Multiple PS1 definitions - comment them all out, add at end, and prompt user
+        print_warning "Found $ps1_count PS1 definitions in $shell_config"
+        print_info "Commenting out all PS1 definitions..."
+
+        # Comment out all PS1 lines
+        sed -i.bak "s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
+
+        # Add new PS1 at the end
+        add_change_header "$shell_config" "shell"
+        echo "# Custom colored prompt - managed by system-setup.sh" >> "$shell_config"
+        echo "$custom_ps1_pattern" >> "$shell_config"
+        echo "" >> "$shell_config"
+
+        # Provide instructions and wait
+        echo ""
+        echo -e "${YELLOW}╔═════════════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${YELLOW}║                                                                         ║${NC}"
+        echo -e "${YELLOW}║    Multiple PS1 definitions were found and commented out.               ║${NC}"
+        echo -e "${YELLOW}║    The new PS1 has been added at the end of the file.                   ║${NC}"
+        echo -e "${YELLOW}║                                                                         ║${NC}"
+        echo -e "${YELLOW}║    Please review the file to ensure proper placement.                   ║${NC}"
+        echo -e "${YELLOW}║    nano will open for manual verification and adjustment.               ║${NC}"
+        echo -e "${YELLOW}║                                                                         ║${NC}"
+        echo -e "${YELLOW}╚═════════════════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        read -n 1 -s -r -p "Press any key to open nano and review $shell_config..."
+        echo ""
+
+        # Open nano for user to review/edit
+        nano "$shell_config"
+
+        print_success "✓ File reviewed and saved"
+    fi
+}
+
+# Comment out PS1 definitions in user config files (system scope only)
+configure_shell_prompt_colors_user() {
+    local os="$1"
+    local home_dir="$2"
+    local username="$3"
+
+    # Determine shell config file based on OS
+    local shell_config
+    if [[ "$os" == "macos" ]]; then
+        shell_config="${home_dir}/.zshrc"
+    else
+        shell_config="${home_dir}/.bashrc"
+    fi
+
+    # Skip if home directory doesn't exist
+    if [[ ! -d "$home_dir" ]]; then
+        return 0
+    fi
+
+    # Skip if config file doesn't exist
+    if [[ ! -f "$shell_config" ]]; then
+        return 0
+    fi
+
+    # Check if there are any uncommented PS1 definitions that we would actually modify
+    local has_ps1_to_comment=false
+    if [[ "$os" == "macos" ]]; then
+        # macOS: Check for ANY PS1 definitions
+        if grep -q "^[[:space:]]*PS1=" "$shell_config" 2>/dev/null; then
+            has_ps1_to_comment=true
+        fi
+    else
+        # Linux: Check for PS1 definitions EXCEPT terminal title ones (PS1="\[\e]0;)
+        if grep "^[[:space:]]*PS1=" "$shell_config" 2>/dev/null | grep -qv "^[[:space:]]*PS1=\"\\\\\[\\\\e\]0;"; then
+            has_ps1_to_comment=true
+        fi
+    fi
+
+    # Skip if no PS1 definitions to comment out
+    if [[ "$has_ps1_to_comment" != true ]]; then
+        # No uncommented PS1 definitions found (or only terminal title ones on Linux)
+        return 0
+    fi
+
+    print_info "Commenting out PS1 definitions in $shell_config (user: $username)..."
+
+    # Backup the config file
+    backup_file "$shell_config"
+
+    # Comment out existing PS1 definitions with OS-specific rules
+    if [[ "$os" == "macos" ]]; then
+        # macOS: Comment out ALL PS1 definitions
+        sed -i.bak "s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Commented out by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
+    else
+        # Linux: Comment out all PS1 definitions EXCEPT those starting with: PS1="\[\e]0;
+        # This preserves the terminal title escape sequences
+        sed -i.bak "/^[[:space:]]*PS1=\"\\\\\[\\\\e\]0;/! s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Commented out by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
+    fi
+
+    # Restore ownership if running as root
+    if [[ $EUID -eq 0 ]] && [[ "$username" != "root" ]]; then
+        chown "$username:$username" "$shell_config" 2>/dev/null || true
+    fi
+
+    print_success "✓ PS1 definitions commented out in $shell_config"
+}
+
 # Configure shell for a specific user
 configure_shell_for_user() {
     local os="$1"
@@ -1299,6 +1492,7 @@ configure_shell() {
         # Configure root user
         print_info "Configuring shell for root user..."
         configure_shell_for_user "$os" "/root" "root"
+        configure_shell_prompt_colors_user "$os" "/root" "root"
         echo ""
 
         # System-wide configuration: iterate over all users in /home/
@@ -1314,6 +1508,7 @@ configure_shell() {
                 local username=$(basename "$user_home")
                 print_info "Configuring shell for user: $username"
                 configure_shell_for_user "$os" "$user_home" "$username"
+                configure_shell_prompt_colors_user "$os" "$user_home" "$username"
                 echo ""
                 ((user_count++)) || true
             fi
@@ -1325,6 +1520,9 @@ configure_shell() {
             print_success "Configured shell for $user_count user(s)"
         fi
         echo ""
+
+        # Configure system-wide prompt colors
+        configure_shell_prompt_colors_system "$os"
     else
         # User-specific configuration: configure for current user only
         print_info "Configuring shell for current user..."
