@@ -309,7 +309,7 @@ modernize_apt_sources() {
     # Remove backup file if it exists
     if [[ -f /etc/apt/sources.list.bak ]]; then
         rm -f /etc/apt/sources.list.bak
-        print_success "Removed /etc/apt/sources.list.bak"
+        print_success "✓ Removed /etc/apt/sources.list.bak"
     fi
 
     # Check if the new DEB822 format file exists
@@ -514,12 +514,12 @@ install_packages() {
 
     if [[ "$os" == "macos" ]]; then
         if brew install "${packages[@]}"; then
-            print_success "All packages installed successfully"
+            print_success "✓ All packages installed successfully"
             return 0
         fi
     else
         if apt update && apt install -y "${packages[@]}"; then
-            print_success "All packages installed successfully"
+            print_success "✓ All packages installed successfully"
             return 0
         fi
     fi
@@ -683,7 +683,7 @@ add_config_if_needed() {
 
     if config_exists "$file" "$setting"; then
         if [[ "$current_value" == "$value" ]]; then
-            print_success "✓ $description already configured correctly"
+            print_success "$description already configured correctly"
             return 0
         else
             print_info "✗ $description has different value: '$current_value' (expected: '$value')"
@@ -718,7 +718,7 @@ add_alias_if_needed() {
     if config_exists "$file" "$pattern"; then
         current_value=$(get_config_value "$file" "$pattern" | sed "s/^'//; s/'$//")
         if [[ "$current_value" == "$alias_value" ]]; then
-            print_success "✓ $description alias already configured correctly"
+            print_success "$description alias already configured correctly"
             return 0
         else
             print_info "✗ $description alias has different value: '$current_value' (expected: '$alias_value')"
@@ -754,7 +754,7 @@ add_export_if_needed() {
     if config_exists "$file" "$pattern"; then
         current_value=$(get_config_value "$file" "$pattern")
         if [[ "$current_value" == "$var_value" ]]; then
-            print_success "✓ $description export already configured correctly"
+            print_success "$description export already configured correctly"
             return 0
         else
             print_info "✗ $description export has different value: '$current_value' (expected: '$var_value')"
@@ -824,7 +824,7 @@ configure_nano() {
             echo "# homebrew nano syntax definitions" >> "$config_file"
             echo "$include_line" >> "$config_file"
         else
-            print_success "✓ homebrew nano syntax definitions already configured"
+            print_success "homebrew nano syntax definitions already configured"
         fi
     fi
 
@@ -1047,7 +1047,7 @@ configure_issue_network() {
 
         # Check if update is needed - if no changes, return early
         if [[ ${#new_interfaces[@]} -eq 0 ]] && [[ ${#removed_interfaces[@]} -eq 0 ]]; then
-            print_success "✓ Network interfaces in /etc/issue are up to date"
+            print_success "Network interfaces in /etc/issue are up to date"
             return 0
         fi
 
@@ -1180,7 +1180,7 @@ configure_issue_network() {
     # Clean up temporary file
     rm -f "$temp_box"
 
-    print_success "/etc/issue updated with network interface information"
+    print_success "✓ /etc/issue updated with network interface information"
     echo ""
     print_info "Current /etc/issue content:"
     cat /etc/issue
@@ -1405,34 +1405,31 @@ configure_swap() {
         print_error "Failed to create swap file"
         return 1
     fi
-
-    print_success "- Swap file created (${swap_gb} GB)"
+    print_success "✓ Swap file created (${swap_gb} GB)"
 
     # Set correct permissions
-    print_info "- Setting permissions on swap file (chmod)..."
     if ! chmod 600 "$swapfile"; then
         print_error "Failed to set permissions on swap file"
         rm -f "$swapfile"
         return 1
     fi
+    print_success "✓ Updated permissions on swap file (chmod)"
 
     # Format as swap
-    print_info "- Formatting swap file (mkswap)..."
     if ! mkswap "$swapfile" 2>&1 | tail -n 1; then
         print_error "Failed to format swap file"
         rm -f "$swapfile"
         return 1
     fi
+    print_success "✓ Formatted swap file (mkswap)"
 
     # Enable swap
-    print_info "- Enabling swap (swapon)..."
     if ! swapon "$swapfile"; then
         print_error "Failed to enable swap"
         rm -f "$swapfile"
         return 1
     fi
-
-    print_success "Swap enabled successfully"
+    print_success "✓ Swap enabled successfully"
     echo ""
 
     # Show current swap status
@@ -1456,7 +1453,7 @@ configure_swap() {
         echo "# Added: $(date)" >> /etc/fstab
         echo "$fstab_entry" >> /etc/fstab
 
-        print_success "- Swap entry added to /etc/fstab"
+        print_success "✓ Swap entry added to /etc/fstab"
     fi
     echo ""
 
@@ -1500,8 +1497,8 @@ configure_ssh_socket() {
         print_warning "Both ssh.socket and ssh.service are enabled (conflicting configuration)"
         print_info "Disabling ssh.service to avoid conflicts..."
         if systemctl disable --now ssh.service 2>/dev/null; then
-            print_success "- ssh.service disabled and stopped"
-            print_success "- SSH is now using socket-based activation only"
+            print_success "✓ ssh.service disabled and stopped"
+            print_success "✓ SSH is now using socket-based activation only"
         else
             print_error "Could not disable ssh.service"
             return 1
@@ -1543,7 +1540,7 @@ configure_ssh_socket() {
     if [[ "$ssh_service_enabled" == true ]]; then
         print_info "Disabling ssh.service..."
         if systemctl disable --now ssh.service 2>/dev/null; then
-            print_success "- ssh.service disabled and stopped"
+            print_success "✓ ssh.service disabled and stopped"
         else
             print_warning "Could not disable ssh.service (it may not be active)"
         fi
@@ -1570,7 +1567,7 @@ configure_ssh_socket() {
     # Enable and start ssh.socket
     print_info "Enabling and starting ssh.socket..."
     if systemctl enable --now ssh.socket; then
-        print_success "- ssh.socket enabled and started"
+        print_success "✓ ssh.socket enabled and started"
         echo ""
 
         # Show status
@@ -1653,7 +1650,7 @@ configure_container_static_ip() {
     if [[ -f "$network_file" ]]; then
         if grep -q "^\[Address\]" "$network_file" 2>/dev/null; then
             has_static_ip=true
-            print_success "✓ Static IP configuration already exists in $network_file"
+            print_success "Static IP configuration already exists in $network_file"
 
             # Show configured static IPs
             local static_ips=$(grep -A 1 "^\[Address\]" "$network_file" | grep "^Address=" | cut -d= -f2)
