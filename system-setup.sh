@@ -1229,7 +1229,7 @@ configure_shell_prompt_colors_system() {
 
     # Check if we already have our custom PS1
     if grep -qF "$ps1_check_pattern" "$shell_config" 2>/dev/null; then
-        print_success "Custom PS1 prompt already configured"
+        print_success "- Custom PS1 prompt already configured"
         return 0
     fi
 
@@ -1490,7 +1490,7 @@ configure_shell() {
 
     if [[ "$scope" == "system" ]]; then
         # Configure root user
-        print_info "Configuring shell for root user..."
+        print_info "Configuring shell for root..."
         configure_shell_for_user "$os" "/root" "root"
         configure_shell_prompt_colors_user "$os" "/root" "root"
         echo ""
@@ -1551,7 +1551,7 @@ configure_swap() {
     local swap_status=$(swapon --show 2>/dev/null)
 
     if [[ -n "$swap_status" ]]; then
-        print_info "- Swap is already enabled:"
+        print_success "- Swap is already enabled:"
         echo "- $swap_status"
         return 0
     fi
@@ -1675,6 +1675,8 @@ configure_ssh_socket() {
         return 0
     fi
 
+    print_info "Checking OpenSSH Server configuration..."
+
     # Check current state of ssh.service and ssh.socket
     local ssh_service_enabled=false
     local ssh_socket_enabled=false
@@ -1705,7 +1707,7 @@ configure_ssh_socket() {
     # Case 2: ssh.socket is already enabled and ssh.service is disabled
     # Action: Nothing to do
     if [[ "$ssh_socket_enabled" == true ]]; then
-        print_info "ssh.socket is already enabled - SSH is already using socket-based activation"
+        print_success "- SSH is already using socket-based activation (ssh.socket)"
         return 0
     fi
 
