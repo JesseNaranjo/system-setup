@@ -1496,33 +1496,24 @@ configure_shell() {
         echo ""
 
         # System-wide configuration: iterate over all users in /home/
-        if [[ ! -d "/home" ]]; then
-            print_warning "/home directory does not exist, cannot configure system-wide"
-            return 1
-        fi
+        if [[ -d "/home" ]]; then
+            # Find all user home directories in /home
+            local user_count=0
+            for user_home in /home/*; do
+                if [[ -d "$user_home" ]]; then
+                    local username=$(basename "$user_home")
+                    print_info "Configuring shell for $username..."
+                    configure_shell_for_user "$os" "$user_home" "$username"
+                    configure_shell_prompt_colors_user "$os" "$user_home" "$username"
+                    echo ""
+                    ((user_count++)) || true
+                fi
+            done
 
-        # Find all user home directories in /home
-        local user_count=0
-        for user_home in /home/*; do
-            if [[ -d "$user_home" ]]; then
-                local username=$(basename "$user_home")
-                print_info "Configuring shell for user: $username"
-                configure_shell_for_user "$os" "$user_home" "$username"
-                configure_shell_prompt_colors_user "$os" "$user_home" "$username"
-                echo ""
-                ((user_count++)) || true
+            if [[ $user_count -gt 0 ]]; then
+                print_success "Configured shell for root and $user_count user(s)"
             fi
-        done
-
-        if [[ $user_count -eq 0 ]]; then
-            print_warning "No user directories found in /home/"
-        else
-            print_success "Configured shell for $user_count user(s)"
         fi
-        echo ""
-
-        # Configure system-wide prompt colors
-        configure_shell_prompt_colors_system "$os"
     else
         # User-specific configuration: configure for current user only
         print_info "Configuring shell for current user..."
@@ -1530,6 +1521,12 @@ configure_shell() {
     fi
 
     print_info "Note: Users may need to run 'source ~/.bashrc' (or ~/.zshrc) or restart their terminal for changes to take effect."
+
+    if [[ "$scope" == "system" ]]; then
+        echo ""
+        # Configure system-wide prompt colors
+        configure_shell_prompt_colors_system "$os"
+    fi
 }
 
 # Configure swap memory
