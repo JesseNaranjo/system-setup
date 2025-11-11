@@ -191,7 +191,7 @@ verify_auth() {
         exit 1
     fi
 
-    local GH_TOKEN="$(gh auth token)"
+    GH_TOKEN="$(gh auth token)"
     export GH_TOKEN
 
     print_success "GitHub CLI authenticated"
