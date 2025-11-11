@@ -683,7 +683,7 @@ add_config_if_needed() {
 
     if config_exists "$file" "$setting"; then
         if [[ "$current_value" == "$value" ]]; then
-            print_success "$description already configured correctly"
+            print_success "- $description already configured correctly"
             return 0
         else
             print_info "✗ $description has different value: '$current_value' (expected: '$value')"
@@ -718,7 +718,7 @@ add_alias_if_needed() {
     if config_exists "$file" "$pattern"; then
         current_value=$(get_config_value "$file" "$pattern" | sed "s/^'//; s/'$//")
         if [[ "$current_value" == "$alias_value" ]]; then
-            print_success "$description alias already configured correctly"
+            print_success "- $description alias already configured correctly"
             return 0
         else
             print_info "✗ $description alias has different value: '$current_value' (expected: '$alias_value')"
@@ -754,7 +754,7 @@ add_export_if_needed() {
     if config_exists "$file" "$pattern"; then
         current_value=$(get_config_value "$file" "$pattern")
         if [[ "$current_value" == "$var_value" ]]; then
-            print_success "$description export already configured correctly"
+            print_success "- $description export already configured correctly"
             return 0
         else
             print_info "✗ $description export has different value: '$current_value' (expected: '$var_value')"
@@ -1285,7 +1285,6 @@ configure_shell_for_user() {
     fi
 
     print_success "Shell configuration completed for $shell_config (user: $username)"
-    echo ""
 }
 
 # Configure shell
@@ -1293,12 +1292,14 @@ configure_shell() {
     local os="$1"
     local scope="$2"  # "user" or "system"
 
-    print_info "Configuring shell aliases..."
+    print_info "Configuring shell..."
+    echo ""
 
     if [[ "$scope" == "system" ]]; then
         # Configure root user
         print_info "Configuring shell for root user..."
         configure_shell_for_user "$os" "/root" "root"
+        echo ""
 
         # System-wide configuration: iterate over all users in /home/
         if [[ ! -d "/home" ]]; then
@@ -1306,15 +1307,14 @@ configure_shell() {
             return 1
         fi
 
-        print_info "Configuring shell for all users in /home/..."
-
         # Find all user home directories in /home
         local user_count=0
         for user_home in /home/*; do
             if [[ -d "$user_home" ]]; then
                 local username=$(basename "$user_home")
-                print_info "Processing user: $username"
+                print_info "Configuring shell for user: $username"
                 configure_shell_for_user "$os" "$user_home" "$username"
+                echo ""
                 ((user_count++)) || true
             fi
         done
@@ -1324,6 +1324,7 @@ configure_shell() {
         else
             print_success "Configured shell for $user_count user(s)"
         fi
+        echo ""
     else
         # User-specific configuration: configure for current user only
         print_info "Configuring shell for current user..."
