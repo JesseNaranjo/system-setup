@@ -129,7 +129,7 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
                     exit 0
                 else
                     echo ""
-                    rm -f $TEMP_SCRIPT_FILE
+                    rm -f "$TEMP_SCRIPT_FILE"
                     echo "→ Running local unmodified copy..."
                     echo ""
                 fi
