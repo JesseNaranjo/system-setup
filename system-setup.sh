@@ -70,25 +70,25 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
     else
         # Display large error message if neither curl nor wget is available
         echo ""
-        echo "╔═════════════════════════════════════════════════════════════════════╗"
-        echo "║                                                                     ║"
-        echo "║                  ⚠️   SELF-UPDATE NOT AVAILABLE  ⚠️                   ║"  # the extra space is intentional for alignment due to the ⚠️  character
-        echo "║                                                                     ║"
-        echo "║    Neither 'curl' nor 'wget' is installed on this system.           ║"
-        echo "║    Self-updating functionality requires one of these tools.         ║"
-        echo "║                                                                     ║"
-        echo "║    To enable self-updating, please install one of the following:    ║"
-        echo "║      • curl  (recommended)                                          ║"
-        echo "║      • wget                                                         ║"
-        echo "║                                                                     ║"
-        echo "║    Installation commands:                                           ║"
-        echo "║      macOS:    brew install curl                                    ║"
-        echo "║      Debian:   apt install curl                                     ║"
-        echo "║      RHEL:     yum install curl                                     ║"
-        echo "║                                                                     ║"
-        echo "║    Continuing with local version of the script...                   ║"
-        echo "║                                                                     ║"
-        echo "╚═════════════════════════════════════════════════════════════════════╝"
+        echo -e "${YELLOW}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${YELLOW}║                                                                             ║${NC}"
+        echo -e "${YELLOW}║                      ⚠️   SELF-UPDATE NOT AVAILABLE  ⚠️                       ║${NC}"  # the extra space is intentional for alignment due to the ⚠️  character
+        echo -e "${YELLOW}║                                                                             ║${NC}"
+        echo -e "${YELLOW}║        Neither 'curl' nor 'wget' is installed on this system.               ║${NC}"
+        echo -e "${YELLOW}║        Self-updating functionality requires one of these tools.             ║${NC}"
+        echo -e "${YELLOW}║                                                                             ║${NC}"
+        echo -e "${YELLOW}║        To enable self-updating, please install one of the following:        ║${NC}"
+        echo -e "${YELLOW}║          • curl  (recommended)                                              ║${NC}"
+        echo -e "${YELLOW}║          • wget                                                             ║${NC}"
+        echo -e "${YELLOW}║                                                                             ║${NC}"
+        echo -e "${YELLOW}║        Installation commands:                                               ║${NC}"
+        echo -e "${YELLOW}║          macOS:    brew install curl                                        ║${NC}"
+        echo -e "${YELLOW}║          Debian:   apt install curl                                         ║${NC}"
+        echo -e "${YELLOW}║          RHEL:     yum install curl                                         ║${NC}"
+        echo -e "${YELLOW}║                                                                             ║${NC}"
+        echo -e "${YELLOW}║        Continuing with local version of the script...                       ║${NC}"
+        echo -e "${YELLOW}║                                                                             ║${NC}"
+        echo -e "${YELLOW}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
         echo ""
     fi
 
@@ -482,10 +482,10 @@ modernize_apt_sources() {
         if [[ "$components_modified" == true ]]; then
             print_success "✓ Updated Components to include: non-free non-free-firmware"
         fi
-        print_success "✓ APT sources modernization complete"
+        print_success "APT sources modernization complete"
     else
         rm -f "$temp_sources"
-        print_success "APT sources already configured correctly"
+        print_success "- APT sources already configured correctly"
     fi
     echo ""
 
@@ -1058,7 +1058,7 @@ configure_issue_network() {
     # Prompt user to update
     local default_update=$([[ "$RUNNING_IN_CONTAINER" == true ]] && echo "n" || echo "y")
     print_info "This will add/update network interface IP addresses in the /etc/issue login banner."
-    if ! prompt_yes_no "Would you like to update /etc/issue?" "$default_update"; then
+    if ! prompt_yes_no "          Would you like to update /etc/issue?" "$default_update"; then
         print_info "Keeping current /etc/issue configuration."
         return 0
     fi
@@ -1200,15 +1200,15 @@ configure_shell_prompt_colors_system() {
 
         # Provide instructions and wait
         echo ""
-        echo -e "${YELLOW}╔═════════════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${YELLOW}║                                                                         ║${NC}"
-        echo -e "${YELLOW}║    Multiple PS1 definitions were found and commented out.               ║${NC}"
-        echo -e "${YELLOW}║    The new PS1 has been added at the end of the file.                   ║${NC}"
-        echo -e "${YELLOW}║                                                                         ║${NC}"
-        echo -e "${YELLOW}║    Please review the file to ensure proper placement.                   ║${NC}"
-        echo -e "${YELLOW}║    nano will open for manual verification and adjustment.               ║${NC}"
-        echo -e "${YELLOW}║                                                                         ║${NC}"
-        echo -e "${YELLOW}╚═════════════════════════════════════════════════════════════════════════╝${NC}"
+        echo -e "${YELLOW}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${YELLOW}║                                                                             ║${NC}"
+        echo -e "${YELLOW}║        Multiple PS1 definitions were found and commented out.               ║${NC}"
+        echo -e "${YELLOW}║        The new PS1 has been added at the end of the file.                   ║${NC}"
+        echo -e "${YELLOW}║                                                                             ║${NC}"
+        echo -e "${YELLOW}║        Please review the file to ensure proper placement.                   ║${NC}"
+        echo -e "${YELLOW}║        nano will open for manual verification and adjustment.               ║${NC}"
+        echo -e "${YELLOW}║                                                                             ║${NC}"
+        echo -e "${YELLOW}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
         echo ""
         read -n 1 -s -r -p "Press any key to open nano and review $shell_config..."
         echo ""
@@ -1654,14 +1654,14 @@ configure_ssh_socket() {
 
     # Open editor for ssh.socket configuration
     echo ""
-    echo -e "${YELLOW}╔═════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${YELLOW}║                                                                         ║${NC}"
-    echo -e "${YELLOW}║    You can customize the socket configuration here.                     ║${NC}"
-    echo -e "${YELLOW}║    Examples: change port, add ListenStream, etc.                        ║${NC}"
-    echo -e "${YELLOW}║                                                                         ║${NC}"
-    echo -e "${YELLOW}║    nano will open for manual configuration and adjustment.              ║${NC}"
-    echo -e "${YELLOW}║                                                                         ║${NC}"
-    echo -e "${YELLOW}╚═════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${YELLOW}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${YELLOW}║                                                                             ║${NC}"
+    echo -e "${YELLOW}║        You can customize the socket configuration here.                     ║${NC}"
+    echo -e "${YELLOW}║        Examples: change port, add ListenStream, etc.                        ║${NC}"
+    echo -e "${YELLOW}║                                                                             ║${NC}"
+    echo -e "${YELLOW}║        nano will open for manual configuration and adjustment.              ║${NC}"
+    echo -e "${YELLOW}║                                                                             ║${NC}"
+    echo -e "${YELLOW}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     read -n 1 -s -r -p "Press any key to open nano and configure ssh.socket..."
     echo ""
