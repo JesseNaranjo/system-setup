@@ -510,16 +510,39 @@ install_packages() {
         return 0
     fi
 
-    echo ""
-    print_info "Installing packages: ${packages[*]}"
-
     if [[ "$os" == "macos" ]]; then
-        if brew install "${packages[@]}"; then
-            print_success "✓ All packages installed successfully"
-            return 0
+        # Get dependencies, excluding the requested packages themselves
+        local dependencies=$(brew deps "${packages[@]}" 2>/dev/null || true)
+
+        # Get a sorted, unique list of the packages the user actually requested
+        local sorted_packages=$(printf "%s\n" "${packages[@]}" | sort -u | tr '\n' ' ')
+
+        echo "Installing:"
+        echo "  $sorted_packages"
+
+        if [[ -n "$dependencies" ]]; then
+            # Get a sorted, unique list of dependencies
+            local sorted_deps=$(printf "%s\n" $dependencies | sort -u)
+            echo ""
+            echo "Installing dependencies:"
+            # Attempt to format into columns if 'column' command is available
+            if command -v column &>/dev/null; then
+                echo "$sorted_deps" | column | sed 's/^/  /'
+            else
+                echo "  $(echo "$sorted_deps" | tr '\n' ' ')"
+            fi
+        fi
+
+        echo ""
+        if prompt_yes_no "Do you want to continue?" "y"; then
+            echo "Installing packages with brew..."
+            if brew install "${packages[@]}"; then
+                print_success "✓ All packages installed successfully"
+                return 0
+            fi
         fi
     else
-        if apt update && apt install -y "${packages[@]}"; then
+        if apt update && apt install "${packages[@]}"; then
             print_success "✓ All packages installed successfully"
             return 0
         fi
@@ -529,7 +552,7 @@ install_packages() {
     return 1
 }
 
-# Check and optionally install packages (consolidated logic)
+# Check and optionally install packages
 check_and_install_packages() {
     local os="$1"
     local packages_to_install=()
@@ -542,7 +565,7 @@ check_and_install_packages() {
         return 1
     fi
 
-    # Process each package in the list
+    # Identify all missing packages
     while IFS=: read -r display_name package; do
         if is_package_installed "$os" "$package"; then
             print_success "$display_name is already installed"
@@ -556,29 +579,14 @@ check_and_install_packages() {
         fi
     done < <(get_package_list "$os")
 
-    # Check if there are any packages to install
-    if [[ ${#packages_to_install[@]} -eq 0 ]]; then
-        echo ""
-        return 0
-    fi
-
-    # Display packages to be installed and confirm
-    echo ""
-    print_info "The following packages will be installed:"
-    for package in "${packages_to_install[@]}"; do
-        echo "          - $package"
-    done
-    echo ""
-
-    if ! prompt_yes_no "          Do you want to proceed with the installation?" "y"; then
-        print_info "Package installation cancelled"
-        echo ""
-        return 0
-    fi
-
-    # Install all selected packages at once
-    if ! install_packages "$os" "${packages_to_install[@]}"; then
-        return 1
+    # If there are packages to install, call the installer
+    if [[ ${#packages_to_install[@]} -gt 0 ]]; then
+        if ! install_packages "$os" "${packages_to_install[@]}"; then
+            # Even if installation fails, we return 0 to allow configuration of already-installed packages
+            print_error "Package installation failed or was cancelled. Continuing with configuration for any packages that are already present."
+        fi
+    else
+        print_info "No new packages to install."
     fi
 
     echo ""
