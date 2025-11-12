@@ -916,53 +916,22 @@ get_interface_type() {
     echo "wire"
 }
 
-# Configure /etc/issue with network interface information
-configure_issue_network() {
-    local os="$1"
-
-    # /etc/issue configuration is only relevant for Linux systems
-    if [[ "$os" != "linux" ]]; then
-        print_info "/etc/issue configuration is only applicable to Linux systems"
-        return 0
-    fi
-
-    print_info "Reviewing network interface information in /etc/issue..."
-
-    # Check if running inside a container
-    if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
-        print_warning "Detected container environment: /etc/issue configuration may not be useful inside containers"
-        # Don't return - still allow configuration if user wants it
-    fi
-
-    # Check if /etc/issue exists and is writable
-    if [[ ! -f /etc/issue ]]; then
-        print_warning "/etc/issue does not exist"
-        return 1
-    fi
-
-    if [[ ! -w /etc/issue ]]; then
-        print_error "No write permission to /etc/issue. Run as root."
-        return 1
-    fi
-
-    print_info "Detecting network interfaces:"
-
-    # Get list of network interfaces (excluding loopback)
-    local interfaces=()
-    local wire_interfaces=()
-    local wifi_interfaces=()
-    local other_interfaces=()
+# Helper to get network interfaces, categorized
+# Populates the global arrays: wire_interfaces, wifi_interfaces, other_interfaces
+get_network_interfaces() {
+    # Clear previous results
+    wire_interfaces=()
+    wifi_interfaces=()
+    other_interfaces=()
 
     for iface in /sys/class/net/*; do
         local iface_name=$(basename "$iface")
-
         # Skip loopback
         if [[ "$iface_name" == "lo" ]]; then
             continue
         fi
 
         local iface_type=$(get_interface_type "$iface_name")
-
         case "$iface_type" in
             wire)
                 wire_interfaces+=("$iface_name")
@@ -978,174 +947,41 @@ configure_issue_network() {
                 ;;
         esac
     done
+}
 
-    # Display detected interfaces
-    if [[ ${#wire_interfaces[@]} -gt 0 ]]; then
-        echo "          - Wired interfaces: ${wire_interfaces[*]}"
-    fi
-    if [[ ${#wifi_interfaces[@]} -gt 0 ]]; then
-        echo "          - Wireless interfaces: ${wifi_interfaces[*]}"
-    fi
-    if [[ ${#other_interfaces[@]} -gt 0 ]]; then
-        echo "          - Other interfaces: ${other_interfaces[*]}"
+# Helper to extract existing interface names from /etc/issue
+# Populates the global array: existing_interfaces
+get_existing_issue_interfaces() {
+    existing_interfaces=()
+    if [[ ! -f /etc/issue ]] || ! grep -q "║ Network Interfaces" /etc/issue; then
+        return
     fi
 
-    if [[ ${#wire_interfaces[@]} -eq 0 && ${#wifi_interfaces[@]} -eq 0 && ${#other_interfaces[@]} -eq 0 ]]; then
-        print_warning "No network interfaces detected (excluding loopback)"
-        return 0
-    fi
-
-    # Check if /etc/issue already has a network interface box and compare interfaces
-    if grep -q "║ Network Interfaces" /etc/issue; then
-        print_info "Network interfaces found in /etc/issue, checking for changes..."
-
-        # Extract interface names from current /etc/issue
-        local existing_interfaces=()
-        while IFS= read -r line; do
-            # Match lines like: "  ║ - wire: \4{eth0} / \6{eth0} (eth0)"
-            if [[ "$line" =~ \(([a-zA-Z0-9_-]+)\)[[:space:]]*$ ]]; then
-                existing_interfaces+=("${BASH_REMATCH[1]}")
-            fi
-        done < <(sed -n '/║ Network Interfaces/,/^\s*╚═/p' /etc/issue)
-
-        # Build list of current interfaces (all types combined)
-        local current_interfaces=()
-        current_interfaces+=("${wire_interfaces[@]}")
-        current_interfaces+=("${wifi_interfaces[@]}")
-        for iface_info in "${other_interfaces[@]}"; do
-            current_interfaces+=("${iface_info%%:*}")
-        done
-
-        # Check for new interfaces (in current but not in existing)
-        local new_interfaces=()
-        for iface in "${current_interfaces[@]}"; do
-            local found=false
-            for existing in "${existing_interfaces[@]}"; do
-                if [[ "$iface" == "$existing" ]]; then
-                    found=true
-                    break
-                fi
-            done
-            if [[ "$found" == false ]]; then
-                new_interfaces+=("$iface")
-            fi
-        done
-
-        # Check for removed interfaces (in existing but not in current)
-        local removed_interfaces=()
-        for existing in "${existing_interfaces[@]}"; do
-            local found=false
-            for iface in "${current_interfaces[@]}"; do
-                if [[ "$existing" == "$iface" ]]; then
-                    found=true
-                    break
-                fi
-            done
-            if [[ "$found" == false ]]; then
-                removed_interfaces+=("$existing")
-            fi
-        done
-
-        # Check if update is needed - if no changes, return early
-        if [[ ${#new_interfaces[@]} -eq 0 ]] && [[ ${#removed_interfaces[@]} -eq 0 ]]; then
-            print_success "Network interfaces in /etc/issue are up to date"
-            return 0
+    while IFS= read -r line; do
+        # Match lines like: "  ║ - wire: \4{eth0} / \6{eth0} (eth0)"
+        if [[ "$line" =~ \(([a-zA-Z0-9_-]+)\)[[:space:]]*$ ]]; then
+            existing_interfaces+=("${BASH_REMATCH[1]}")
         fi
+    done < <(sed -n '/║ Network Interfaces/,/^\s*╚═/p' /etc/issue)
+}
 
-        # Build reason message for changes
-        local update_reason=""
-        if [[ ${#new_interfaces[@]} -gt 0 ]]; then
-            update_reason="New interface(s) detected: ${new_interfaces[*]}"
-        fi
+# Helper to generate the new /etc/issue content box
+generate_issue_content() {
+    local temp_box
+    temp_box=$(mktemp)
 
-        if [[ ${#removed_interfaces[@]} -gt 0 ]]; then
-            if [[ -n "$update_reason" ]]; then
-                update_reason="${update_reason}; "
-            fi
-            update_reason="${update_reason}Interface(s) no longer exist: ${removed_interfaces[*]}"
-        fi
-
-        print_warning "$update_reason"
-    else
-        # No existing configuration
-        print_info "No network interface configuration found in /etc/issue"
-    fi
-
-    echo ""
-
-    # Prompt user to update
-    # Default to 'n' inside containers, 'y' everywhere else
-    local default_update="y"
-    if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
-        default_update="n"
-    fi
-
-    print_info "Login banner (/etc/issue) network interface configuration:"
-    echo "          - This will add network interface IP addresses to /etc/issue login banner."
-    echo "          - The addresses will be displayed dynamically at login time."
-    echo ""
-
-    if ! prompt_yes_no "          Would you like to update /etc/issue?" "$default_update"; then
-        print_info "- Keeping current /etc/issue configuration (no changes made)"
-        return 0
-    fi
-
-    echo ""
-
-    # Backup /etc/issue
-    backup_file /etc/issue
-
-    # Check if previous network section exists and track its position
-    local box_exists=false
-    local insert_line=""
-
-    if grep -q "║ Network Interfaces" /etc/issue; then
-        box_exists=true
-        print_info "Removing previous network interface configuration from /etc/issue..."
-
-        # Find line with Network Interfaces header
-        local header_line=$(grep -n "║ Network Interfaces" /etc/issue | cut -d: -f1 | head -1)
-
-        if [[ -n "$header_line" ]] && [[ $header_line -gt 1 ]]; then
-            # Find the top border (line before header)
-            local top_border=$((header_line - 1))
-            insert_line=$top_border
-
-            # Find the bottom border (line with ╚═══...), accounting for leading whitespace
-            local bottom_border=$(tail -n +$top_border /etc/issue | grep -n "^\s*╚═" | head -1 | cut -d: -f1)
-
-            if [[ -n "$bottom_border" ]]; then
-                # Calculate absolute line number of bottom border
-                bottom_border=$((top_border + bottom_border - 1))
-
-                # Delete only the box lines (from top border to bottom border)
-                sed -i.bak "${top_border},${bottom_border}d" /etc/issue && rm -f /etc/issue.bak
-            fi
-        fi
-    fi
-
-    # Add network interface section
-    print_info "Adding network interface information to /etc/issue..."
-
-    # Create temporary file with new box content
-    local temp_box=$(mktemp)
-
-    # Add box with network interfaces (left-side only, right-side open for dynamic IP lengths)
+    # Add box with network interfaces
     echo "  ╔═══════════════════════════════════════════════════════════════════════════" > "$temp_box"
     echo "  ║ Network Interfaces" >> "$temp_box"
     echo "  ╠═══════════════════════════════════════════════════════════════════════════" >> "$temp_box"
 
-    # Add wired interfaces
+    # Add wired, wireless, and other interfaces
     for iface in "${wire_interfaces[@]}"; do
         echo "  ║ - wire: \\4{${iface}} / \\6{${iface}} (${iface})" >> "$temp_box"
     done
-
-    # Add wireless interfaces
     for iface in "${wifi_interfaces[@]}"; do
         echo "  ║ - wifi: \\4{${iface}} / \\6{${iface}} (${iface})" >> "$temp_box"
     done
-
-    # Add other interfaces with their type
     for iface_info in "${other_interfaces[@]}"; do
         local iface="${iface_info%%:*}"
         local type="${iface_info##*:}"
@@ -1154,32 +990,106 @@ configure_issue_network() {
 
     echo "  ╚═══════════════════════════════════════════════════════════════════════════" >> "$temp_box"
 
-    # Insert the box at the appropriate position
-    if [[ "$box_exists" == true ]] && [[ -n "$insert_line" ]]; then
-        # Insert at the same line position where the old box was
-        # Since sed 'r' inserts after the line, we need to insert after the line before our target
-        local insert_after=$((insert_line - 1))
-        if [[ $insert_after -lt 1 ]]; then
-            # Special case: insert at beginning of file
-            cat "$temp_box" /etc/issue > /etc/issue.tmp && mv -f /etc/issue.tmp /etc/issue
-        else
-            sed -i.bak "${insert_after}r ${temp_box}" /etc/issue && rm -f /etc/issue.bak
-        fi
-    else
-        # Initial setup: append to end with blank lines for spacing
-        # Ensure there's a blank line before our section
-        if [[ -s /etc/issue ]] && [[ $(tail -c 1 /etc/issue | wc -l) -eq 0 ]]; then
-            echo "" >> /etc/issue
-        fi
+    echo "$temp_box"
+}
 
-        cat "$temp_box" >> /etc/issue
+# Configure /etc/issue with network interface information
+configure_issue_network() {
+    local os="$1"
 
-        # Add trailing blank lines for better visibility (only on initial setup)
+    # /etc/issue configuration is only relevant for Linux systems
+    if [[ "$os" != "linux" ]]; then
+        print_info "/etc/issue configuration is only applicable to Linux systems"
+        return 0
+    fi
+
+    print_info "Reviewing network interface information in /etc/issue..."
+
+    # Check if running inside a container
+    if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
+        print_warning "Detected container environment: /etc/issue configuration may not be useful inside containers"
+    fi
+
+    # Check for write permissions
+    if [[ ! -w /etc/issue ]]; then
+        print_error "No write permission to /etc/issue. Run as root."
+        return 1
+    fi
+
+    # Get current and existing interfaces
+    get_network_interfaces
+    get_existing_issue_interfaces
+
+    # Display detected interfaces
+    print_info "Detecting network interfaces:"
+    [[ ${#wire_interfaces[@]} -gt 0 ]] && echo "          - Wired interfaces: ${wire_interfaces[*]}"
+    [[ ${#wifi_interfaces[@]} -gt 0 ]] && echo "          - Wireless interfaces: ${wifi_interfaces[*]}"
+    [[ ${#other_interfaces[@]} -gt 0 ]] && echo "          - Other interfaces: ${other_interfaces[*]}"
+
+    if [[ ${#wire_interfaces[@]} -eq 0 && ${#wifi_interfaces[@]} -eq 0 && ${#other_interfaces[@]} -eq 0 ]]; then
+        print_warning "No network interfaces detected (excluding loopback)"
+        return 0
+    fi
+
+    # Compare current vs existing interfaces
+    local current_interfaces=("${wire_interfaces[@]}" "${wifi_interfaces[@]}" $(printf "%s\n" "${other_interfaces[@]}" | cut -d: -f1))
+    local new_interfaces=()
+    local removed_interfaces=()
+
+    # Find new interfaces
+    for iface in "${current_interfaces[@]}"; do
+        [[ " ${existing_interfaces[*]} " == *" $iface "* ]] || new_interfaces+=("$iface")
+    done
+
+    # Find removed interfaces
+    for existing in "${existing_interfaces[@]}"; do
+        [[ " ${current_interfaces[*]} " == *" $existing "* ]] || removed_interfaces+=("$existing")
+    done
+
+    # Check if an update is needed
+    if [[ ${#new_interfaces[@]} -eq 0 && ${#removed_interfaces[@]} -eq 0 && ${#existing_interfaces[@]} -gt 0 ]]; then
+        print_success "Network interfaces in /etc/issue are up to date"
+        return 0
+    fi
+
+    # Build reason for update
+    local update_reason=""
+    [[ ${#new_interfaces[@]} -gt 0 ]] && update_reason="New: ${new_interfaces[*]} "
+    [[ ${#removed_interfaces[@]} -gt 0 ]] && update_reason+="Removed: ${removed_interfaces[*]}"
+    [[ -n "$update_reason" ]] && print_warning "Changes detected: $update_reason" || print_info "No existing network configuration found in /etc/issue"
+
+    # Prompt user to update
+    local default_update=$([[ "$RUNNING_IN_CONTAINER" == true ]] && echo "n" || echo "y")
+    print_info "This will add/update network interface IP addresses in the /etc/issue login banner."
+    if ! prompt_yes_no "Would you like to update /etc/issue?" "$default_update"; then
+        print_info "Keeping current /etc/issue configuration."
+        return 0
+    fi
+
+    # Backup and modify /etc/issue
+    backup_file /etc/issue
+
+    # Remove old network section if it exists
+    if [[ ${#existing_interfaces[@]} -gt 0 ]]; then
+        print_info "Removing previous network interface configuration from /etc/issue..."
+        local temp_issue
+        temp_issue=$(mktemp)
+        sed '/║ Network Interfaces/,/^\s*╚═/d' /etc/issue > "$temp_issue"
+        mv "$temp_issue" /etc/issue
+    fi
+
+    # Generate and insert new content
+    local temp_box_file
+    temp_box_file=$(generate_issue_content)
+
+    # Ensure there's a blank line before our section
+    if [[ -s /etc/issue ]] && [[ $(tail -c 1 /etc/issue | wc -l) -eq 0 ]]; then
         echo "" >> /etc/issue
     fi
 
-    # Clean up temporary file
-    rm -f "$temp_box"
+    cat "$temp_box_file" >> /etc/issue
+    echo "" >> /etc/issue # Add trailing blank line
+    rm -f "$temp_box_file"
 
     print_success "✓ /etc/issue updated with network interface information"
     echo ""
