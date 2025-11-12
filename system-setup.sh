@@ -690,43 +690,38 @@ get_config_value() {
     fi
 }
 
-# Add or update a configuration line in a file. This is the new generic handler.
-# It uses a flexible pattern for finding the setting and a command to extract the current value.
+# Add or update a configuration line in a file.
 update_config_line() {
     local config_type="$1"
     local file="$2"
     local setting_pattern="$3" # Regex pattern to find the line
     local full_line="$4"       # The full line to be added/updated
     local description="$5"
-    local value_extractor="$6" # A command string to extract the value for comparison
-    local desired_value="$7"   # The desired value to compare against
 
     if config_exists "$file" "$setting_pattern"; then
-        # Setting exists, extract its value for comparison
-        local current_value=$(grep -E "^[[:space:]]*${setting_pattern}" "$file" | head -n 1 | eval "sed -E ${value_extractor}")
-
-        if [[ "$current_value" == "$desired_value" ]]; then
+        # Setting exists, check if it's already correct
+        if grep -qE "^[[:space:]]*${full_line}[[:space:]]*$" "$file"; then
             print_success "- $description already configured correctly"
             return 0
         else
-            print_info "✗ $description has different value: '$current_value' (expected: '$desired_value')"
-            print_warning "Updating $description in $file"
+            local current_value=$(grep -E "^[[:space:]]*${setting_pattern}" "$file" | head -n 1)
+            print_warning "✗ $description has different value: '$current_value' in $file"
             backup_file "$file"
             add_change_header "$file" "$config_type"
 
-            # Comment out the old line
+            # Comment out the old line and add the new one
             local temp_file
             temp_file=$(mktemp)
-            sed "s|^\([[:space:]]*\)\(${setting_pattern}.*\)|\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)|" "$file" > "$temp_file"
+            sed "s|^\([[:space:]]*\)${setting_pattern}.*|\1# & # Replaced by system-setup.sh on $(date +%Y-%m-%d)\n\1${full_line}|" "$file" > "$temp_file"
             mv "$temp_file" "$file"
+            print_success "✓ $description updated in $file"
         fi
     else
-        print_info "+ Adding $description to $file"
         backup_file "$file"
         add_change_header "$file" "$config_type"
+        echo "$full_line" >> "$file"
+        print_success "✓ $description added to $file"
     fi
-
-    echo "$full_line" >> "$file"
 }
 
 # Wrapper for simple key-value or key-only settings (e.g., nano, screen)
@@ -739,17 +734,15 @@ add_config_if_needed() {
 
     local full_setting
     if [[ -n "$value" ]]; then
-        full_setting="${setting} ${value}"
+        full_setting="set ${setting} ${value}"
     else
-        full_setting="${setting}"
+        full_setting="set ${setting}"
     fi
 
     # The pattern is the setting key itself
-    local setting_pattern="${setting}"
-    # The extractor grabs everything after the key
-    local value_extractor="'s/^[[:space:]]*${setting}[[:space:]]*//'"
+    local setting_pattern="set[[:space:]]+${setting}"
 
-    update_config_line "$config_type" "$file" "$setting_pattern" "$full_setting" "$description" "$value_extractor" "$value"
+    update_config_line "$config_type" "$file" "$setting_pattern" "$full_setting" "$description"
 }
 
 # Wrapper for shell aliases
@@ -762,10 +755,8 @@ add_alias_if_needed() {
     local full_alias="alias ${alias_name}='${alias_value}'"
     # The pattern finds 'alias name='
     local setting_pattern="alias[[:space:]]+${alias_name}="
-    # The extractor grabs the value inside the quotes
-    local value_extractor="\"s/^[[:space:]]*alias[[:space:]]+${alias_name}='//; s/'$//\""
 
-    update_config_line "shell" "$file" "$setting_pattern" "$full_alias" "$description" "$value_extractor" "$alias_value"
+    update_config_line "shell" "$file" "$setting_pattern" "$full_alias" "$description"
 }
 
 # Wrapper for shell exports
@@ -778,10 +769,8 @@ add_export_if_needed() {
     local full_export="export ${var_name}=${var_value}"
     # The pattern finds 'export NAME='
     local setting_pattern="export[[:space:]]+${var_name}="
-    # The extractor grabs everything after the '='
-    local value_extractor="'s/^[[:space:]]*export[[:space:]]+${var_name}=//'"
 
-    update_config_line "shell" "$file" "$setting_pattern" "$full_export" "$description" "$value_extractor" "$var_value"
+    update_config_line "shell" "$file" "$setting_pattern" "$full_export" "$description"
 }
 
 # Configure nano
@@ -809,18 +798,18 @@ configure_nano() {
     fi
 
     # Configure each setting individually
-    add_config_if_needed "nano" "$config_file" "set atblanks" "" "atblanks setting"
-    add_config_if_needed "nano" "$config_file" "set autoindent" "" "autoindent setting"
-    add_config_if_needed "nano" "$config_file" "set constantshow" "" "constantshow setting"
-    add_config_if_needed "nano" "$config_file" "set indicator" "" "indicator setting"
-    add_config_if_needed "nano" "$config_file" "set linenumbers" "" "line numbers setting"
-    add_config_if_needed "nano" "$config_file" "set minibar" "" "minibar setting"
-    add_config_if_needed "nano" "$config_file" "set mouse" "" "mouse support setting"
-    add_config_if_needed "nano" "$config_file" "set multibuffer" "" "multibuffer setting"
-    add_config_if_needed "nano" "$config_file" "set nonewlines" "" "nonewlines setting"
-    add_config_if_needed "nano" "$config_file" "set smarthome" "" "smarthome setting"
-    add_config_if_needed "nano" "$config_file" "set softwrap" "" "softwrap setting"
-    add_config_if_needed "nano" "$config_file" "set tabsize" "4" "tab size setting"
+    add_config_if_needed "nano" "$config_file" "atblanks" "" "atblanks setting"
+    add_config_if_needed "nano" "$config_file" "autoindent" "" "autoindent setting"
+    add_config_if_needed "nano" "$config_file" "constantshow" "" "constantshow setting"
+    add_config_if_needed "nano" "$config_file" "indicator" "" "indicator setting"
+    add_config_if_needed "nano" "$config_file" "linenumbers" "" "line numbers setting"
+    add_config_if_needed "nano" "$config_file" "minibar" "" "minibar setting"
+    add_config_if_needed "nano" "$config_file" "mouse" "" "mouse support setting"
+    add_config_if_needed "nano" "$config_file" "multibuffer" "" "multibuffer setting"
+    add_config_if_needed "nano" "$config_file" "nonewlines" "" "nonewlines setting"
+    add_config_if_needed "nano" "$config_file" "smarthome" "" "smarthome setting"
+    add_config_if_needed "nano" "$config_file" "softwrap" "" "softwrap setting"
+    add_config_if_needed "nano" "$config_file" "tabsize" "4" "tab size setting"
 
     # Add homebrew include for macOS
     if [[ "$os" == "macos" ]]; then
