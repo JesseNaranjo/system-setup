@@ -361,7 +361,7 @@ modernize_apt_sources() {
     local is_security_stanza=false
     local last_line_was_blank=false
 
-    while IFS= read -r line; do
+    while read -r line || [[ -n "$line" ]]; do
         # Detect stanza boundaries (empty lines separate stanzas)
         if [[ -z "$line" ]]; then
             if [[ ${#current_stanza_lines[@]} -gt 0 ]]; then
@@ -682,7 +682,46 @@ get_config_value() {
     fi
 }
 
-# Add configuration line only if it doesn't exist or has different value
+# Add or update a configuration line in a file. This is the new generic handler.
+# It uses a flexible pattern for finding the setting and a command to extract the current value.
+update_config_line() {
+    local config_type="$1"
+    local file="$2"
+    local setting_pattern="$3" # Regex pattern to find the line
+    local full_line="$4"       # The full line to be added/updated
+    local description="$5"
+    local value_extractor="$6" # A command string to extract the value for comparison
+    local desired_value="$7"   # The desired value to compare against
+
+    if config_exists "$file" "$setting_pattern"; then
+        # Setting exists, extract its value for comparison
+        local current_value=$(grep -E "^[[:space:]]*${setting_pattern}" "$file" | head -n 1 | eval "sed -E ${value_extractor}")
+
+        if [[ "$current_value" == "$desired_value" ]]; then
+            print_success "- $description already configured correctly"
+            return 0
+        else
+            print_info "✗ $description has different value: '$current_value' (expected: '$desired_value')"
+            print_warning "Updating $description in $file"
+            backup_file "$file"
+            add_change_header "$file" "$config_type"
+
+            # Comment out the old line
+            local temp_file
+            temp_file=$(mktemp)
+            sed "s|^\([[:space:]]*\)\(${setting_pattern}.*\)|\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)|" "$file" > "$temp_file"
+            mv "$temp_file" "$file"
+        fi
+    else
+        print_info "+ Adding $description to $file"
+        backup_file "$file"
+        add_change_header "$file" "$config_type"
+    fi
+
+    echo "$full_line" >> "$file"
+}
+
+# Wrapper for simple key-value or key-only settings (e.g., nano, screen)
 add_config_if_needed() {
     local config_type="$1"
     local file="$2"
@@ -697,100 +736,44 @@ add_config_if_needed() {
         full_setting="${setting}"
     fi
 
-    local current_value=$(get_config_value "$file" "$setting")
+    # The pattern is the setting key itself
+    local setting_pattern="${setting}"
+    # The extractor grabs everything after the key
+    local value_extractor="'s/^[[:space:]]*${setting}[[:space:]]*//'"
 
-    if config_exists "$file" "$setting"; then
-        if [[ "$current_value" == "$value" ]]; then
-            print_success "- $description already configured correctly"
-            return 0
-        else
-            print_info "✗ $description has different value: '$current_value' (expected: '$value')"
-            print_warning "Updating $description in $file"
-            # Backup and add header before making changes
-            backup_file "$file"
-            add_change_header "$file" "$config_type"
-            # Comment out old line instead of removing it
-            sed -i.bak "s/^\([[:space:]]*\)\(${setting}\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$file" && rm -f "${file}.bak"
-        fi
-    else
-        print_info "+ Adding $description to $file"
-        # Backup and add header before making changes
-        backup_file "$file"
-        add_change_header "$file" "$config_type"
-    fi
-
-    echo "$full_setting" >> "$file"
+    update_config_line "$config_type" "$file" "$setting_pattern" "$full_setting" "$description" "$value_extractor" "$value"
 }
 
-# Add alias only if it doesn't exist or has different value
+# Wrapper for shell aliases
 add_alias_if_needed() {
     local file="$1"
     local alias_name="$2"
     local alias_value="$3"
     local description="$4"
 
-    local pattern="alias[[:space:]]+${alias_name}="
     local full_alias="alias ${alias_name}='${alias_value}'"
-    local current_value
+    # The pattern finds 'alias name='
+    local setting_pattern="alias[[:space:]]+${alias_name}="
+    # The extractor grabs the value inside the quotes
+    local value_extractor="\"s/^[[:space:]]*alias[[:space:]]+${alias_name}='//; s/'$//\""
 
-    if config_exists "$file" "$pattern"; then
-        current_value=$(get_config_value "$file" "$pattern" | sed "s/^'//; s/'$//")
-        if [[ "$current_value" == "$alias_value" ]]; then
-            print_success "- $description alias already configured correctly"
-            return 0
-        else
-            print_info "✗ $description alias has different value: '$current_value' (expected: '$alias_value')"
-            print_warning "Updating $description alias in $file"
-            # Backup and add header before making changes
-            backup_file "$file"
-            add_change_header "$file" "shell"
-            # Comment out old line instead of removing it
-            sed -i.bak "s/^\([[:space:]]*\)\(alias[[:space:]]*${alias_name}=.*\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$file" && rm -f "${file}.bak"
-        fi
-    else
-        print_info "+ Adding $description alias to $file"
-        # Backup and add header before making changes
-        backup_file "$file"
-        add_change_header "$file" "shell"
-    fi
-
-    echo "$full_alias" >> "$file"
+    update_config_line "shell" "$file" "$setting_pattern" "$full_alias" "$description" "$value_extractor" "$alias_value"
 }
 
-# Add export only if it doesn't exist or has different value
-# Add export only if it doesn't exist or has different value
+# Wrapper for shell exports
 add_export_if_needed() {
     local file="$1"
     local var_name="$2"
     local var_value="$3"
     local description="$4"
 
-    local pattern="export[[:space:]]+${var_name}="
     local full_export="export ${var_name}=${var_value}"
-    local current_value
+    # The pattern finds 'export NAME='
+    local setting_pattern="export[[:space:]]+${var_name}="
+    # The extractor grabs everything after the '='
+    local value_extractor="'s/^[[:space:]]*export[[:space:]]+${var_name}=//'"
 
-    if config_exists "$file" "$pattern"; then
-        current_value=$(get_config_value "$file" "$pattern")
-        if [[ "$current_value" == "$var_value" ]]; then
-            print_success "- $description export already configured correctly"
-            return 0
-        else
-            print_info "✗ $description export has different value: '$current_value' (expected: '$var_value')"
-            print_warning "Updating $description export in $file"
-            # Backup and add header before making changes
-            backup_file "$file"
-            add_change_header "$file" "shell"
-            # Comment out old line instead of removing it
-            sed -i.bak "s/^\([[:space:]]*\)\(export[[:space:]]*${var_name}=.*\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$file" && rm -f "${file}.bak"
-        fi
-    else
-        print_info "+ Adding $description export to $file"
-        # Backup and add header before making changes
-        backup_file "$file"
-        add_change_header "$file" "shell"
-    fi
-
-    echo "$full_export" >> "$file"
+    update_config_line "shell" "$file" "$setting_pattern" "$full_export" "$description" "$value_extractor" "$var_value"
 }
 
 # Configure nano
