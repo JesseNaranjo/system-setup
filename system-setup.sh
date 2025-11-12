@@ -143,8 +143,9 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
 fi
 
 # Global variables
-BACKED_UP_FILES=""
-HEADER_ADDED_FILES=""
+BACKED_UP_FILES=()
+CREATED_BACKUP_FILES=()
+HEADER_ADDED_FILES=()
 NANO_INSTALLED=false
 SCREEN_INSTALLED=false
 OPENSSH_SERVER_INSTALLED=false
@@ -587,9 +588,17 @@ check_and_install_packages() {
 # Backup file if it exists (only once per session)
 backup_file() {
     local file="$1"
+    local already_backed_up=false
 
     # Check if already backed up in this session
-    if [[ "$BACKED_UP_FILES" == *"$file"* ]]; then
+    for backed_up_file in "${BACKED_UP_FILES[@]}"; do
+        if [[ "$backed_up_file" == "$file" ]]; then
+            already_backed_up=true
+            break
+        fi
+    done
+
+    if [[ "$already_backed_up" == true ]]; then
         return 0
     fi
 
@@ -612,7 +621,8 @@ backup_file() {
         fi
 
         print_backup "- Created backup: $backup"
-        BACKED_UP_FILES="${BACKED_UP_FILES} ${file}"
+        BACKED_UP_FILES+=("$file")
+        CREATED_BACKUP_FILES+=("$backup")
     fi
 }
 
@@ -620,9 +630,17 @@ backup_file() {
 add_change_header() {
     local file="$1"
     local config_type="$2"  # "nano", "screen", or "shell"
+    local already_added=false
 
     # Check if header already added in this session
-    if [[ "$HEADER_ADDED_FILES" == *"$file"* ]]; then
+    for added_file in "${HEADER_ADDED_FILES[@]}"; do
+        if [[ "$added_file" == "$file" ]]; then
+            already_added=true
+            break
+        fi
+    done
+
+    if [[ "$already_added" == true ]]; then
         return 0
     fi
 
@@ -643,7 +661,7 @@ add_change_header() {
     echo "" >> "$file"
 
     # Mark this file as having header added
-    HEADER_ADDED_FILES="$HEADER_ADDED_FILES $file"
+    HEADER_ADDED_FILES+=("$file")
 }
 
 # Check if a configuration line exists in a file
@@ -1969,6 +1987,35 @@ EOF
     print_success "Static IP configuration complete"
 }
 
+# Print a summary of all changes made
+print_summary() {
+    if [[ ${#BACKED_UP_FILES[@]} -eq 0 && ${#CREATED_BACKUP_FILES[@]} -eq 0 ]]; then
+        print_info "No files were modified during this session."
+        return
+    fi
+
+    echo ""
+    print_info "─────────────────── Session Summary ───────────────────"
+    echo ""
+
+    if [[ ${#BACKED_UP_FILES[@]} -gt 0 ]]; then
+        print_success "Files Modified:"
+        for file in "${BACKED_UP_FILES[@]}"; do
+            echo "          - $file"
+        done
+        echo ""
+    fi
+
+    if [[ ${#CREATED_BACKUP_FILES[@]} -gt 0 ]]; then
+        print_backup "Backup Files Created:"
+        for file in "${CREATED_BACKUP_FILES[@]}"; do
+            echo "          - $file"
+        done
+        echo ""
+    fi
+    print_info "───────────────────────────────────────────────────────"
+}
+
 # Main function
 main() {
     print_info "System Setup and Configuration Script (Idempotent Mode)"
@@ -2098,6 +2145,10 @@ main() {
 
     print_success "Setup complete!"
     echo ""
+
+    print_summary
+    echo ""
+
     print_info "The script made only necessary changes to bring your configuration up to date."
     print_info "You may need to restart your terminal or source your shell configuration file for all changes to take effect."
 }
