@@ -289,203 +289,130 @@ track_special_packages() {
 modernize_apt_sources() {
     local os="$1"
 
-    # Only run on Linux systems
-    if [[ "$os" != "linux" ]]; then
-        return 0
-    fi
-
-    # Only run if apt is available
-    if ! command -v apt &>/dev/null; then
+    # Only run on Linux systems with apt
+    if [[ "$os" != "linux" ]] || ! command -v apt &>/dev/null; then
         return 0
     fi
 
     print_info "Modernizing APT sources configuration..."
 
-    # Run apt modernize-sources
+    # 1. Run apt modernize-sources
     if ! apt modernize-sources 2>/dev/null; then
-        print_warning "apt modernize-sources failed or is not available"
+        print_warning "apt modernize-sources failed or is not available. Skipping."
         return 0
     fi
 
-    # Remove backup file if it exists
+    # 2. Remove backup file
     if [[ -f /etc/apt/sources.list.bak ]]; then
         rm -f /etc/apt/sources.list.bak
         print_success "✓ Removed /etc/apt/sources.list.bak"
     fi
 
-    # Check if the new DEB822 format file exists
     local sources_file="/etc/apt/sources.list.d/debian.sources"
     if [[ ! -f "$sources_file" ]]; then
-        print_warning "DEB822 sources file not found at $sources_file"
+        print_warning "DEB822 sources file not found at $sources_file. Skipping."
         return 0
     fi
 
-    # Read the current Suites line and extract the release name
-    local suites_line=$(grep -E "^Suites:" "$sources_file" | head -n 1)
+    # Extract the release name (e.g., "bookworm")
+    local release=$(grep -m 1 "^Suites:" "$sources_file" | sed -E 's/^Suites:\s*([a-z]+).*/\1/')
 
-    if [[ -z "$suites_line" ]]; then
-        print_warning "Could not find Suites line in $sources_file"
-        return 0
-    fi
-
-    # Extract the first suite name (the release)
-    local release=$(echo "$suites_line" | sed -E 's/^Suites:\s*([a-z]+).*/\1/')
-
-    # Validate release name
-    local valid_releases=("bookworm" "trixie" "forky" "duke")
-    local is_valid_release=false
-    for valid_rel in "${valid_releases[@]}"; do
-        if [[ "$release" == "$valid_rel" ]]; then
-            is_valid_release=true
-            break
-        fi
-    done
-
-    if [[ "$is_valid_release" != true ]]; then
-        local releases_list=$(IFS=', '; echo "${valid_releases[*]}")
-        print_warning "Release '$release' is not a recognized Debian release ($releases_list)"
+    if [[ -z "$release" ]]; then
+        print_warning "Could not determine Debian release from $sources_file. Skipping."
         return 0
     fi
 
     print_info "Detected Debian release: $release"
 
-    # Create a temporary file for the new sources configuration
+    # Backup the original sources file before making changes
+    backup_file "$sources_file"
+
+    # Create a temporary file for the new, cleaned-up content
     local temp_sources=$(mktemp)
 
-    # Process the file: buffer each stanza and process based on content
-    local suites_modified=false
-    local components_modified=false
-    local current_stanza_lines=()
-    local skip_current_stanza=false
-    local is_release_stanza=false
-    local is_security_stanza=false
-    local last_line_was_blank=false
+    # Use a robust awk script to parse and modify the stanzas
+    awk -v release="$release" '
+        # Use blank lines as the record separator to process stanza by stanza
+        BEGIN { RS = "" }
 
-    while read -r line || [[ -n "$line" ]]; do
-        # Detect stanza boundaries (empty lines separate stanzas)
-        if [[ -z "$line" ]]; then
-            if [[ ${#current_stanza_lines[@]} -gt 0 ]]; then
-                # End of a stanza - write it out if not skipped
-                if [[ "$skip_current_stanza" != true ]]; then
-                    for stanza_line in "${current_stanza_lines[@]}"; do
-                        echo "$stanza_line" >> "$temp_sources"
-                    done
-                    # Write the empty line separator only if we haven't just written one
-                    if [[ "$last_line_was_blank" != true ]]; then
-                        echo "$line" >> "$temp_sources"
-                        last_line_was_blank=true
-                    fi
-                fi
+        {
+            # Skip empty records that can result from multiple blank lines
+            if (NF == 0) { next }
 
-                # Reset for next stanza
-                current_stanza_lines=()
-                skip_current_stanza=false
-                is_release_stanza=false
-                is_security_stanza=false
-            else
-                # Empty line between stanzas or at beginning - only write if not duplicate
-                if [[ "$last_line_was_blank" != true ]]; then
-                    echo "$line" >> "$temp_sources"
-                    last_line_was_blank=true
-                fi
-            fi
-            continue
-        fi
+            # --- Pass 1: Parse the stanza into an associative array ---
+            # This preserves all key-value pairs for logic, and raw lines for reconstruction
+            delete stanza_kv
+            delete raw_lines
+            num_lines = 0
+            has_components = 0
+            # Use FS="\n" to iterate over lines within the record
+            n = split($0, lines, "\n")
+            for (i = 1; i <= n; i++) {
+                line = lines[i]
+                raw_lines[++num_lines] = line
+                if (split(line, parts, /:[[:space:]]*/) == 2) {
+                    stanza_kv[parts[1]] = parts[2]
+                    if (parts[1] == "Components") {
+                        has_components = 1
+                    }
+                }
+            }
 
-        # Non-empty line, reset blank line tracking
-        last_line_was_blank=false
+            # --- Pass 2: Apply Logic ---
+            # Decide whether to skip this stanza entirely.
+            # We skip standalone "updates" or "backports" stanzas because we merge them
+            # into the main release stanza.
+            if (stanza_kv["Suites"] == release "-updates" || stanza_kv["Suites"] == release "-backports") {
+                next # Skip this record
+            }
 
-        # Check if this is a Suites line to identify the stanza type
-        if [[ "$line" =~ ^Suites: ]]; then
-            local current_stanza_suite=$(echo "$line" | sed -E 's/^Suites:\s*//')
+            # --- Pass 3: Reconstruct and Print the Stanza ---
+            # Iterate through the original raw lines to preserve order, comments, and formatting.
+            # Modify specific lines as needed.
+            components_modified = 0
+            for (i = 1; i <= num_lines; i++) {
+                line = raw_lines[i]
 
-            # Check if this stanza should be skipped (updates or backports only)
-            if [[ "$current_stanza_suite" == "${release}-updates" ]] || [[ "$current_stanza_suite" == "${release}-backports" ]]; then
-                skip_current_stanza=true
-            fi
+                # Check if this is the main release stanza (but not security)
+                is_main_stanza = 0
+                if (stanza_kv["URIs"] ~ /deb\.debian\.org\/debian/ && stanza_kv["URIs"] !~ /security/) {
+                    is_main_stanza = 1
+                }
 
-            # Check if this is the main release stanza (contains the release name)
-            if [[ "$current_stanza_suite" =~ (^|[[:space:]])${release}([[:space:]]|$) ]]; then
-                is_release_stanza=true
-            fi
+                if (is_main_stanza && line ~ /^Suites:/) {
+                    # Modify the Suites line for the main stanza
+                    print "Suites: " release " " release "-updates " release "-backports"
+                } else if (line ~ /^Components:/) {
+                    # Modify any existing Components line
+                    print "Components: main contrib non-free non-free-firmware"
+                    components_modified = 1
+                } else {
+                    # Print all other lines unchanged
+                    print line
+                }
+            }
 
-            # Check if this is the security stanza
-            if [[ "$current_stanza_suite" == "${release}-security" ]]; then
-                is_security_stanza=true
-            fi
-        fi
+            # If the stanza had no Components line at all, add one at the end.
+            # This ensures every stanza gets the correct components.
+            if (has_components == 0) {
+                print "Components: main contrib non-free non-free-firmware"
+            }
 
-        # Skip processing lines if this stanza is marked to skip
-        if [[ "$skip_current_stanza" == true ]]; then
-            continue
-        fi
+            # Print a blank line to separate this stanza from the next one
+            print ""
+        }
+    ' "$sources_file" > "$temp_sources"
 
-        # Process lines based on type
-        if [[ "$line" =~ ^Suites: ]]; then
-            if [[ "$is_release_stanza" == true ]]; then
-                # Modify the release stanza - check if updates and backports are already present
-                local new_line="$line"
-                if [[ ! "$line" =~ ${release}-updates ]]; then
-                    new_line="$new_line ${release}-updates"
-                    suites_modified=true
-                fi
-                if [[ ! "$line" =~ ${release}-backports ]]; then
-                    new_line="$new_line ${release}-backports"
-                    suites_modified=true
-                fi
-                current_stanza_lines+=("$new_line")
-            else
-                # Keep Suites lines in other stanzas unchanged
-                current_stanza_lines+=("$line")
-            fi
-        elif [[ "$line" =~ ^Components: ]]; then
-            if [[ "$is_release_stanza" == true ]] || [[ "$is_security_stanza" == true ]]; then
-                # Modify the release/security stanzas - only Components
-                local new_line="$line"
-                if [[ ! "$line" =~ (^|[[:space:]])non-free([[:space:]]|$) ]]; then
-                    new_line="$new_line non-free"
-                    components_modified=true
-                fi
-                if [[ ! "$line" =~ non-free-firmware ]]; then
-                    new_line="$new_line non-free-firmware"
-                    components_modified=true
-                fi
-                current_stanza_lines+=("$new_line")
-            else
-                # Keep Components lines in other stanzas unchanged
-                current_stanza_lines+=("$line")
-            fi
-        else
-            # Keep non-Suite/non-Components lines as-is
-            current_stanza_lines+=("$line")
-        fi
-    done < "$sources_file"
 
-    # Handle the last stanza if file doesn't end with empty line
-    if [[ ${#current_stanza_lines[@]} -gt 0 ]] && [[ "$skip_current_stanza" != true ]]; then
-        for stanza_line in "${current_stanza_lines[@]}"; do
-            echo "$stanza_line" >> "$temp_sources"
-        done
-    fi
-
-    # Replace the original file with the modified one
-    if [[ "$suites_modified" == true ]] || [[ "$components_modified" == true ]]; then
-        # Backup the original
-        backup_file "$sources_file"
-
-        # Replace with new content
-        mv "$temp_sources" "$sources_file"
-
-        if [[ "$suites_modified" == true ]]; then
-            print_success "✓ Updated Suites to include: $release ${release}-updates ${release}-backports"
-        fi
-        if [[ "$components_modified" == true ]]; then
-            print_success "✓ Updated Components to include: non-free non-free-firmware"
-        fi
-        print_success "APT sources modernization complete"
+    # Replace the original file if changes were made
+    if ! diff -q "$sources_file" "$temp_sources" >/dev/null; then
+        # Use cat to avoid permission issues with mv
+        cat "$temp_sources" > "$sources_file"
+        rm "$temp_sources"
+        print_success "✓ APT sources file ($sources_file) modernized successfully."
     else
-        rm -f "$temp_sources"
-        print_success "- APT sources already configured correctly"
+        rm "$temp_sources"
+        print_success "- APT sources file ($sources_file) is already modern."
     fi
     echo ""
 
