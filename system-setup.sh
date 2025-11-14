@@ -351,8 +351,10 @@ modernize_apt_sources() {
                 line = lines[i]
                 raw_lines[++num_lines] = line
                 if (split(line, parts, /:[[:space:]]+/) == 2) {
-                    stanza_kv[parts[1]] = parts[2]
-                    if (parts[1] == "Components") {
+                    key = parts[1]
+                    value = parts[2]
+                    stanza_kv[key] = value
+                    if (key == "Components") {
                         has_components = 1
                     }
                 }
@@ -633,10 +635,21 @@ update_config_line() {
             backup_file "$file"
             add_change_header "$file" "$config_type"
 
-            # Comment out the old line and add the new one
-            local temp_file
-            temp_file=$(mktemp)
-            sed "s|^\([[:space:]]*\)${setting_pattern}.*|\1# & # Replaced by system-setup.sh on $(date +%Y-%m-%d)\n\1${full_line}|" "$file" > "$temp_file"
+            local temp_file=$(mktemp)
+
+            # Use awk to find the line, comment it, and append the new line
+            awk -v pattern="^[[:space:]]*${setting_pattern}" -v new_line="${full_line}" '
+            $0 ~ pattern {
+                match($0, /^[[:space:]]*/);
+                indent = substr($0, RSTART, RLENGTH);
+                print indent "# " substr($0, RLENGTH + 1) " # Replaced by system-setup.sh on " strftime("%Y-%m-%d");
+                print indent new_line;
+                next;
+            }
+            { print }
+            ' "$file" > "$temp_file"
+
+            # Replace the original file with the updated temporary file
             mv "$temp_file" "$file"
             print_success "✓ $description updated in $file"
         fi
