@@ -920,105 +920,75 @@ generate_issue_content() {
 # Configure /etc/issue with network interface information
 configure_issue_network() {
     local os="$1"
+    local issue_file="/etc/issue"
 
-    # /etc/issue configuration is only relevant for Linux systems
-    if [[ "$os" != "linux" ]]; then
-        print_info "/etc/issue configuration is only applicable to Linux systems"
-        return 0
+    # This feature is only for Linux and not in containers
+    if [[ "$os" != "linux" ]] || [[ "$RUNNING_IN_CONTAINER" == true ]]; then
+        print_info "$issue_file network info is only for non-containerized Linux systems. Skipping."
+        return
     fi
 
-    print_info "Reviewing network interface information in /etc/issue..."
-
-    # Check if running inside a container
-    if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
-        print_warning "Detected container environment: /etc/issue configuration may not be useful inside containers"
+    if [[ ! -w "$issue_file" ]]; then
+        print_error "No write permission for $issue_file. Run as root to configure network info."
+        return
     fi
 
-    # Check for write permissions
-    if [[ ! -w /etc/issue ]]; then
-        print_error "No write permission to /etc/issue. Run as root."
-        return 1
-    fi
+    print_info "Configuring network interfaces in $issue_file..."
 
-    # Get current and existing interfaces
+    # Get current and previously configured interfaces
     get_network_interfaces
     get_existing_issue_interfaces
 
-    # Display detected interfaces
-    print_info "Detecting network interfaces:"
-    [[ ${#wire_interfaces[@]} -gt 0 ]] && echo "          - Wired interfaces: ${wire_interfaces[*]}"
-    [[ ${#wifi_interfaces[@]} -gt 0 ]] && echo "          - Wireless interfaces: ${wifi_interfaces[*]}"
-    [[ ${#other_interfaces[@]} -gt 0 ]] && echo "          - Other interfaces: ${other_interfaces[*]}"
+    # Compare current interfaces with existing ones to see if an update is needed
+    local current_ifaces=$(printf "%s\n" "${wire_interfaces[@]}" "${wifi_interfaces[@]}" "${other_interfaces[@]%%:*}" | sort)
+    local existing_ifaces=$(printf "%s\n" "${existing_interfaces[@]}" | sort)
 
-    if [[ ${#wire_interfaces[@]} -eq 0 && ${#wifi_interfaces[@]} -eq 0 && ${#other_interfaces[@]} -eq 0 ]]; then
-        print_warning "No network interfaces detected (excluding loopback)"
-        return 0
+    if [[ "$current_ifaces" == "$existing_ifaces" ]]; then
+        print_success "- Network interfaces in $issue_file are already up-to-date"
+        return
     fi
 
-    # Compare current vs existing interfaces
-    local current_interfaces=("${wire_interfaces[@]}" "${wifi_interfaces[@]}" $(printf "%s\n" "${other_interfaces[@]}" | cut -d: -f1))
-    local new_interfaces=()
-    local removed_interfaces=()
+    print_info "Network interface changes detected. Updating $issue_file..."
+    echo "          - Displayed: $existing_ifaces"
+    echo "          - Current:  $current_ifaces"
 
-    # Find new interfaces
-    for iface in "${current_interfaces[@]}"; do
-        [[ " ${existing_interfaces[*]} " == *" $iface "* ]] || new_interfaces+=("$iface")
-    done
+    # Backup the file before making changes
+    backup_file "$issue_file"
 
-    # Find removed interfaces
-    for existing in "${existing_interfaces[@]}"; do
-        [[ " ${current_interfaces[*]} " == *" $existing "* ]] || removed_interfaces+=("$existing")
-    done
+    # Generate the new network info box content
+    local temp_box_path=$(generate_issue_content)
+    local new_content=$(<"$temp_box_path")
+    rm -f "$temp_box_path"
 
-    # Check if an update is needed
-    if [[ ${#new_interfaces[@]} -eq 0 && ${#removed_interfaces[@]} -eq 0 && ${#existing_interfaces[@]} -gt 0 ]]; then
-        print_success "Network interfaces in /etc/issue are up to date"
-        return 0
-    fi
-
-    # Build reason for update
-    local update_reason=""
-    [[ ${#new_interfaces[@]} -gt 0 ]] && update_reason="New: ${new_interfaces[*]} "
-    [[ ${#removed_interfaces[@]} -gt 0 ]] && update_reason+="Removed: ${removed_interfaces[*]}"
-    [[ -n "$update_reason" ]] && print_warning "Changes detected: $update_reason" || print_info "No existing network configuration found in /etc/issue"
-
-    # Prompt user to update
-    local default_update=$([[ "$RUNNING_IN_CONTAINER" == true ]] && echo "n" || echo "y")
-    print_info "This will add/update network interface IP addresses in the /etc/issue login banner."
-    if ! prompt_yes_no "          Would you like to update /etc/issue?" "$default_update"; then
-        print_info "Keeping current /etc/issue configuration."
-        return 0
-    fi
-
-    # Backup and modify /etc/issue
-    backup_file /etc/issue
-
-    # Remove old network section if it exists
-    if [[ ${#existing_interfaces[@]} -gt 0 ]]; then
-        print_info "Removing previous network interface configuration from /etc/issue..."
+    # If the marker doesn't exist, add the box at the end of the file.
+    if ! grep -q "║ Network Interfaces" "$issue_file"; then
+        echo -e "\n$new_content" >> "$issue_file"
+        print_success "✓ Added network interface info to $issue_file"
+    else
+        # If the marker exists, replace the entire block.
         local temp_issue
         temp_issue=$(mktemp)
-        sed '/║ Network Interfaces/,/^\s*╚═/d' /etc/issue > "$temp_issue"
-        mv "$temp_issue" /etc/issue
+        # Use awk to replace the block between the start and end markers
+        awk -v new_content="$new_content" '
+            BEGIN { printing=1 }
+            /║ Network Interfaces/ {
+                if (printing) {
+                    print new_content
+                    printing=0
+                }
+            }
+            /╚═.*═╝/ {
+                if (!printing) {
+                    printing=1
+                    next
+                }
+            }
+            printing { print }
+        ' "$issue_file" > "$temp_issue"
+
+        mv "$temp_issue" "$issue_file"
+        print_success "✓ Updated network interface info in $issue_file"
     fi
-
-    # Generate and insert new content
-    local temp_box_file
-    temp_box_file=$(generate_issue_content)
-
-    # Ensure there's a blank line before our section
-    if [[ -s /etc/issue ]] && [[ $(tail -c 1 /etc/issue | wc -l) -eq 0 ]]; then
-        echo "" >> /etc/issue
-    fi
-
-    cat "$temp_box_file" >> /etc/issue
-    echo "" >> /etc/issue # Add trailing blank line
-    rm -f "$temp_box_file"
-
-    print_success "✓ /etc/issue updated with network interface information"
-    echo ""
-    print_info "Current /etc/issue content:"
-    cat /etc/issue
 }
 
 # Configure shell prompt colors for system-wide configuration
@@ -1051,8 +1021,8 @@ configure_shell_prompt_colors_system() {
     else
         # Linux bash prompt - conditional for root vs non-root
         # We'll use a marker comment to check if it's already configured
-        ps1_check_pattern="# Custom PS1 - conditional for root/non-root"
-        custom_ps1_pattern="    # Custom PS1 - conditional for root/non-root
+        ps1_check_pattern="# Custom PS1 prompt - conditional for root/non-root"
+        custom_ps1_pattern="    # Custom PS1 prompt - conditional for root/non-root
     if [ \"\$EUID\" -eq 0 ]; then
         # Root user - red username with !! warning
         PS1='[\[\e[90m\]\h\[\e[0m\]:\[\e[91m\]\u\[\e[0m\]] \[\e[96;1m\]\w\[\e[0m\] \\$\[\e[91;1m\]!!\[\e[0m\] '
@@ -1078,10 +1048,10 @@ configure_shell_prompt_colors_system() {
     if [[ "$ps1_count" -eq 0 ]]; then
         # No existing PS1, just add at the end
         add_change_header "$shell_config" "shell"
-        echo "# Custom colored prompt - managed by system-setup.sh" >> "$shell_config"
+        echo "# Custom PS1 prompt - managed by system-setup.sh" >> "$shell_config"
         echo "$custom_ps1_pattern" >> "$shell_config"
         echo "" >> "$shell_config"
-        print_success "✓ Custom colored PS1 prompt configured in $shell_config"
+        print_success "✓ Custom PS1 prompt configured in $shell_config"
     elif [[ "$ps1_count" -eq 1 ]]; then
         # Exactly one PS1 definition - comment it out and add new one immediately after
         print_info "Commenting out existing PS1 definition..."
@@ -1102,7 +1072,7 @@ configure_shell_prompt_colors_system() {
             echo "    # shell configuration - managed by system-setup.sh"
             echo "    # Last updated: $(date '+%Y-%m-%d %H:%M:%S')"
             echo "    # ─────────────────────────────────────────────────────────────────────────────"
-            echo "    # Custom colored prompt - managed by system-setup.sh"
+            echo "    # Custom PS1 prompt - managed by system-setup.sh"
             echo "$custom_ps1_pattern"
         } > "$temp_ps1"
 
@@ -1110,7 +1080,7 @@ configure_shell_prompt_colors_system() {
         sed -i.bak "${ps1_line_num}r ${temp_ps1}" "$shell_config" && rm -f "${shell_config}.bak"
         rm -f "$temp_ps1"
 
-        print_success "✓ Custom colored PS1 prompt configured immediately after commented line"
+        print_success "✓ Custom PS1 prompt configured in $shell_config"
     else
         # Multiple PS1 definitions - comment them all out, add at end, and prompt user
         print_warning "Found $ps1_count PS1 definitions in $shell_config"
@@ -1121,7 +1091,7 @@ configure_shell_prompt_colors_system() {
 
         # Add new PS1 at the end
         add_change_header "$shell_config" "shell"
-        echo "# Custom colored prompt - managed by system-setup.sh" >> "$shell_config"
+        echo "# Custom PS1 prompt - managed by system-setup.sh" >> "$shell_config"
         echo "$custom_ps1_pattern" >> "$shell_config"
         echo "" >> "$shell_config"
 
@@ -1684,22 +1654,20 @@ configure_container_static_ip() {
     local network_file="/etc/systemd/network/10-${primary_interface}.network"
     local has_static_ip=false
 
-    if [[ -f "$network_file" ]]; then
-        if grep -q "^\[Address\]" "$network_file" 2>/dev/null; then
-            has_static_ip=true
-            print_success "Static IP configuration already exists in $network_file"
+    if [[ -f "$network_file" ]] &&  grep -q "^\[Address\]" "$network_file" 2>/dev/null; then
+        has_static_ip=true
+        print_success "Static IP configuration already exists in $network_file"
 
-            # Show configured static IPs
-            local static_ips=$(grep -A 1 "^\[Address\]" "$network_file" | grep "^Address=" | cut -d= -f2)
-            if [[ -n "$static_ips" ]]; then
-                echo "          - Configured static IP(s):"
-                while IFS= read -r ip; do
-                    echo "            • $ip"
-                done <<< "$static_ips"
-            fi
-            echo ""
-            return 0
+        # Show configured static IPs
+        local static_ips=$(grep -A 1 "^\[Address\]" "$network_file" | grep "^Address=" | cut -d= -f2)
+        if [[ -n "$static_ips" ]]; then
+            echo "          - Configured static IP(s):"
+            while IFS= read -r ip; do
+                echo "            • $ip"
+            done <<< "$static_ips"
         fi
+        echo ""
+        return 0
     fi
 
     echo ""
