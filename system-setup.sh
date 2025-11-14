@@ -350,7 +350,7 @@ modernize_apt_sources() {
             for (i = 1; i <= n; i++) {
                 line = lines[i]
                 raw_lines[++num_lines] = line
-                if (split(line, parts, /:[[:space:]]*/) == 2) {
+                if (split(line, parts, /:[[:space:]]+/) == 2) {
                     stanza_kv[parts[1]] = parts[2]
                     if (parts[1] == "Components") {
                         has_components = 1
@@ -358,12 +358,15 @@ modernize_apt_sources() {
                 }
             }
 
-            # --- Pass 2: Apply Logic ---
-            # Decide whether to skip this stanza entirely.
-            # We skip standalone "updates" or "backports" stanzas because we merge them
-            # into the main release stanza.
-            if (stanza_kv["Suites"] == release "-updates" || stanza_kv["Suites"] == release "-backports") {
-                next # Skip this record
+            # into the main release stanza. We identify the main stanza by checking that
+            # it is for the detected release and is NOT a security or other special URI.
+            is_main_release_stanza = 0
+            if (stanza_kv["Suites"] == release && stanza_kv["URIs"] ~ /deb\.debian\.org\/debian\/?$/ && stanza_kv["URIs"] !~ /security/) {
+                is_main_release_stanza = 1
+            }
+
+            if (!is_main_release_stanza && (stanza_kv["Suites"] == release "-updates" || stanza_kv["Suites"] == release "-backports")) {
+                next # Skip standalone updates/backports records
             }
 
             # --- Pass 3: Reconstruct and Print the Stanza ---
@@ -373,13 +376,7 @@ modernize_apt_sources() {
             for (i = 1; i <= num_lines; i++) {
                 line = raw_lines[i]
 
-                # Check if this is the main release stanza (but not security)
-                is_main_stanza = 0
-                if (stanza_kv["URIs"] ~ /deb\.debian\.org\/debian/ && stanza_kv["URIs"] !~ /security/) {
-                    is_main_stanza = 1
-                }
-
-                if (is_main_stanza && line ~ /^Suites:/) {
+                if (is_main_release_stanza && line ~ /^Suites:/) {
                     # Modify the Suites line for the main stanza
                     print "Suites: " release " " release "-updates " release "-backports"
                 } else if (line ~ /^Components:/) {
@@ -392,8 +389,8 @@ modernize_apt_sources() {
                 }
             }
 
-            # If the stanza had no Components line at all, add one at the end.
-            # This ensures every stanza gets the correct components.
+            # If a stanza that we are processing did not have a Components line, add one.
+            # This ensures, for example, that the security stanza also gets non-free.
             if (has_components == 0) {
                 print "Components: main contrib non-free non-free-firmware"
             }
@@ -1053,9 +1050,6 @@ configure_shell_prompt_colors_system() {
         echo "" >> "$shell_config"
         print_success "✓ Custom PS1 prompt configured in $shell_config"
     elif [[ "$ps1_count" -eq 1 ]]; then
-        # Exactly one PS1 definition - comment it out and add new one immediately after
-        print_info "Commenting out existing PS1 definition..."
-
         # Find the line number of the PS1 definition
         local ps1_line_num
         ps1_line_num=$(grep -n "^[[:space:]]*PS1=" "$shell_config" | cut -d: -f1)
@@ -1084,7 +1078,6 @@ configure_shell_prompt_colors_system() {
     else
         # Multiple PS1 definitions - comment them all out, add at end, and prompt user
         print_warning "Found $ps1_count PS1 definitions in $shell_config"
-        print_info "Commenting out all PS1 definitions..."
 
         # Comment out all PS1 lines
         sed -i.bak "s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
