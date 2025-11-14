@@ -860,6 +860,9 @@ get_network_interfaces() {
             wifi)
                 wifi_interfaces+=("$iface_name")
                 ;;
+            veth)
+                # Skip virtual ethernet interfaces
+                ;;
             loopback)
                 # Skip loopback
                 ;;
