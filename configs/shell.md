@@ -8,23 +8,24 @@ Depending on your OS and shell flavor, these may need to be done in **one** of s
 
 ```
 # Aliases to help avoid some mistakes:
-alias cp='cp -aiv'
-alias mkdir='mkdir -v'
-alias mv='mv -iv'
-alias rm='rm -Iv'
+alias cp="cp -aiv"
+alias mkdir="mkdir -v"
+alias mv="mv -iv"
+alias rm="rm -Iv"
 
-alias chmod='chmod -vv'
-alias chown='chown -vv'
+alias chmod="chmod -vv"
+alias chown="chown -vv"
 
 # Misc aliases:
+alias diff="diff --color"
 alias lsblk='lsblk -o "NAME,FSTYPE,FSVER,LABEL,FSAVAIL,SIZE,FSUSE%,MOUNTPOINTS,UUID"'
-alias lxc-ls='lxc-ls -f'
+alias lxc-ls="lxc-ls -f"
 alias screen="screen -T $TERM"
 
 # 7z compression helpers
-alias 7z-ultra1='7z a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on -mmt'
-alias 7z-ultra2='7z a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt'
-alias 7z-ultra3='7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt'
+alias 7z-ultra1="7z a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on -mmt"
+alias 7z-ultra2="7z a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt"
+alias 7z-ultra3="7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt"
 ```
 
 ## safety first
@@ -32,13 +33,13 @@ alias 7z-ultra3='7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -m
 Add:
 ```bash
 # Aliases to help avoid some mistakes:
-alias cp='cp -aiv'
-alias mkdir='mkdir -v'
-alias mv='mv -iv'
-alias rm='rm -Iv'
+alias cp="cp -aiv"
+alias mkdir="mkdir -v"
+alias mv="mv -iv"
+alias rm="rm -Iv"
 
-alias chmod='chmod -vv'
-alias chown='chown -vv'
+alias chmod="chmod -vv"
+alias chown="chown -vv"
 ```
 - `-a` - `cp` only, copy file attributes, ctime, and mtime
 - `-i` - interactive, any overwrites will ask for confirmation
@@ -85,6 +86,12 @@ alias ls="ls -AFGHhl"
 ```
 - `G` - displays color (**macOS only**, equivalent to `CLICOLOR=YES`)
 
+## `diff`
+
+```
+alias diff="diff --color"
+```
+
 ## `lsblk`
 
 ```
@@ -94,7 +101,7 @@ alias lsblk='lsblk -o "NAME,FSTYPE,FSVER,LABEL,FSAVAIL,SIZE,FSUSE%,MOUNTPOINTS,U
 ## `lxc-ls`
 
 ```
-alias lxc-ls='lxc-ls -f'
+alias lxc-ls="lxc-ls -f"
 ```
 
 ## `screen`
@@ -106,9 +113,9 @@ alias screen="screen -T $TERM"
 ## `7z` compression helpers
 
 ```
-alias 7z-ultra1='7z a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on -mmt'
-alias 7z-ultra2='7z a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt'
-alias 7z-ultra3='7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt'
+alias 7z-ultra1="7z a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on -mmt"
+alias 7z-ultra2="7z a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt"
+alias 7z-ultra3="7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt"
 ```
 
 <sup>Note: keep in mind that 7-zip on macOS (installed via Homebrew) is called using `7zz` (rather than `7z`).</sup>
