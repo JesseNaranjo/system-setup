@@ -637,16 +637,20 @@ update_config_line() {
 
             local temp_file=$(mktemp)
 
-            # Use awk to find the line, comment it, and append the new line
+            # Use awk to find the line, comment it, and append the new line at the end of the file
             awk -v pattern="^[[:space:]]*${setting_pattern}" -v new_line="${full_line}" '
+            BEGIN { found=0 }
             $0 ~ pattern {
-                match($0, /^[[:space:]]*/);
-                indent = substr($0, RSTART, RLENGTH);
-                print indent "# " substr($0, RLENGTH + 1) " # Replaced by system-setup.sh on " strftime("%Y-%m-%d");
-                print indent new_line;
+                print "# " $0 " # Replaced by system-setup.sh on " strftime("%Y-%m-%d");
+                found=1;
                 next;
             }
             { print }
+            END {
+                if (found) {
+                    print new_line;
+                }
+            }
             ' "$file" > "$temp_file"
 
             # Replace the original file with the updated temporary file
