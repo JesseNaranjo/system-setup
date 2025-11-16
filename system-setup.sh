@@ -465,7 +465,7 @@ install_packages() {
         fi
 
         echo ""
-        if prompt_yes_no "Do you want to continue?" "y"; then
+        if prompt_yes_no "Continue?" "y"; then
             echo "Installing packages with brew..."
             if brew install "${packages[@]}"; then
                 print_success "✓ All packages installed successfully"
@@ -473,6 +473,7 @@ install_packages() {
             fi
         fi
     else
+        # apt install will show packages and dependencies to install automatically
         if apt update && apt install "${packages[@]}"; then
             print_success "✓ All packages installed successfully"
             return 0
