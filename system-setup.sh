@@ -675,13 +675,18 @@ add_config_if_needed() {
 
     local full_setting
     if [[ -n "$value" ]]; then
-        full_setting="set ${setting} ${value}"
+        full_setting="${setting} ${value}"
     else
-        full_setting="set ${setting}"
+        full_setting="${setting}"
     fi
 
     # The pattern is the setting key itself
-    local setting_pattern="set[[:space:]]+${setting}"
+    if [[ $setting =~ ^[[:space:]]*set[[:space:]]+ ]]; then
+        local setting_key=${setting#set }
+        local setting_pattern="^[[:space:]]*set[[:space:]]+${setting_key}"
+    else
+        local setting_pattern="^[[:space:]]*${setting}"
+    fi
 
     update_config_line "$config_type" "$file" "$setting_pattern" "$full_setting" "$description"
 }
@@ -739,18 +744,18 @@ configure_nano() {
     fi
 
     # Configure each setting individually
-    add_config_if_needed "nano" "$config_file" "atblanks" "" "atblanks setting"
-    add_config_if_needed "nano" "$config_file" "autoindent" "" "autoindent setting"
-    add_config_if_needed "nano" "$config_file" "constantshow" "" "constantshow setting"
-    add_config_if_needed "nano" "$config_file" "indicator" "" "indicator setting"
-    add_config_if_needed "nano" "$config_file" "linenumbers" "" "line numbers setting"
-    add_config_if_needed "nano" "$config_file" "minibar" "" "minibar setting"
-    add_config_if_needed "nano" "$config_file" "mouse" "" "mouse support setting"
-    add_config_if_needed "nano" "$config_file" "multibuffer" "" "multibuffer setting"
-    add_config_if_needed "nano" "$config_file" "nonewlines" "" "nonewlines setting"
-    add_config_if_needed "nano" "$config_file" "smarthome" "" "smarthome setting"
-    add_config_if_needed "nano" "$config_file" "softwrap" "" "softwrap setting"
-    add_config_if_needed "nano" "$config_file" "tabsize" "4" "tab size setting"
+    add_config_if_needed "nano" "$config_file" "set atblanks" "" "atblanks setting"
+    add_config_if_needed "nano" "$config_file" "set autoindent" "" "autoindent setting"
+    add_config_if_needed "nano" "$config_file" "set constantshow" "" "constantshow setting"
+    add_config_if_needed "nano" "$config_file" "set indicator" "" "indicator setting"
+    add_config_if_needed "nano" "$config_file" "set linenumbers" "" "line numbers setting"
+    add_config_if_needed "nano" "$config_file" "set minibar" "" "minibar setting"
+    add_config_if_needed "nano" "$config_file" "set mouse" "" "mouse support setting"
+    add_config_if_needed "nano" "$config_file" "set multibuffer" "" "multibuffer setting"
+    add_config_if_needed "nano" "$config_file" "set nonewlines" "" "nonewlines setting"
+    add_config_if_needed "nano" "$config_file" "set smarthome" "" "smarthome setting"
+    add_config_if_needed "nano" "$config_file" "set softwrap" "" "softwrap setting"
+    add_config_if_needed "nano" "$config_file" "set tabsize" "4" "tab size setting"
 
     # Add homebrew include for macOS
     if [[ "$os" == "macos" ]]; then
