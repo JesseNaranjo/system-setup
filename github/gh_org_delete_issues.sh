@@ -218,10 +218,8 @@ process_issue() {
     fi
 
     # Try deletion if requested
-    if [[ $REALLY_DELETE -eq 1 ]]; then
-        if attempt_delete_issue "$repo_name" "$num"; then
-            return 0
-        fi
+    if [[ $REALLY_DELETE -eq 1 ]] && attempt_delete_issue "$repo_name" "$num"; then
+        return 0
     fi
 
     # Close the issue
