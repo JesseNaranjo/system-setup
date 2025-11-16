@@ -21,6 +21,7 @@ set -euo pipefail
 readonly BLUE='\033[0;34m'
 readonly GRAY='\033[0;90m'
 readonly GREEN='\033[0;32m'
+readonly MAGENTA='\033[0;35m'
 readonly RED='\033[0;31m'
 readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m' # No Color
@@ -143,6 +144,7 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
 fi
 
 # Global variables
+DEBUG_MODE=false
 BACKED_UP_FILES=()
 CREATED_BACKUP_FILES=()
 HEADER_ADDED_FILES=()
@@ -196,6 +198,10 @@ detect_container() {
 # Print colored output
 print_backup() {
     echo -e "${GRAY}[ BACKUP] $1${NC}"
+}
+
+print_debug() {
+    echo -e "${MAGENTA}[  DEBUG] $1${NC}"
 }
 
 print_error() {
@@ -622,6 +628,15 @@ update_config_line() {
     local setting_pattern="$3" # Regex pattern to find the line
     local full_line="$4"       # The full line to be added/updated
     local description="$5"
+
+    if [[ "$DEBUG_MODE" == true && $full_line =~ ls ]]; then
+        print_debug "update_config_line called with:"
+        print_debug "  config_type: $config_type"
+        print_debug "  file: $file"
+        print_debug "  setting_pattern: $setting_pattern"
+        print_debug "  full_line: $full_line"
+        print_debug "  description: $description"
+    fi
 
     if config_exists "$file" "$setting_pattern"; then
         # Setting exists, check if it's already correct
@@ -1817,6 +1832,11 @@ print_summary() {
 main() {
     print_info "System Setup and Configuration Script (Idempotent Mode)"
     echo "          ======================================================="
+
+    if [[ $# -ne 0 && $1 == "--debug" ]]; then
+        DEBUG_MODE=true
+        print_debug "- DEBUG MODE ENABLED"
+    fi
 
     local os=$(detect_os)
     echo "          - Detected OS: $os"
