@@ -324,9 +324,6 @@ modernize_apt_sources() {
 
     print_info "Detected Debian release: $release"
 
-    # Backup the original sources file before making changes
-    backup_file "$sources_file"
-
     # Create a temporary file for the new, cleaned-up content
     local temp_sources=$(mktemp)
 
@@ -405,6 +402,8 @@ modernize_apt_sources() {
 
     # Replace the original file if changes were made
     if ! diff -q "$sources_file" "$temp_sources" >/dev/null; then
+        # Backup the original sources file before making changes
+        backup_file "$sources_file"
         # Use cat to avoid permission issues with mv
         cat "$temp_sources" > "$sources_file"
         rm "$temp_sources"
