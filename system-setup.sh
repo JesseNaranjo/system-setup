@@ -194,6 +194,14 @@ detect_container() {
 }
 
 # Print colored output
+print_backup() {
+    echo -e "${GRAY}[ BACKUP] $1${NC}"
+}
+
+print_error() {
+    echo -e "${RED}[  ERROR]${NC} $1"
+}
+
 print_info() {
     echo -e "${BLUE}[   INFO]${NC} $1"
 }
@@ -204,14 +212,6 @@ print_success() {
 
 print_warning() {
     echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[  ERROR]${NC} $1"
-}
-
-print_backup() {
-    echo -e "${GRAY}[ BACKUP] $1${NC}"
 }
 
 # Check if a package is installed (unified for both macOS and Linux)
@@ -1582,7 +1582,7 @@ configure_ssh_socket() {
     echo ""
 
     if systemctl edit ssh.socket; then
-        print_success "ssh.socket configuration saved"
+        print_success "✓ ssh.socket configuration saved"
     else
         print_error "Failed to edit ssh.socket configuration"
         return 1
@@ -1802,7 +1802,7 @@ print_summary() {
     echo ""
 
     if [[ ${#BACKED_UP_FILES[@]} -gt 0 ]]; then
-        print_success "Files Modified:"
+        print_success "${GREEN}Files Modified:${NC}"
         for file in "${BACKED_UP_FILES[@]}"; do
             echo "          - $file"
         done
