@@ -912,8 +912,7 @@ get_existing_issue_interfaces() {
 
 # Helper to generate the new /etc/issue content box
 generate_issue_content() {
-    local temp_box
-    temp_box=$(mktemp)
+    local temp_box=$(mktemp)
 
     # Add box with network interfaces
     echo "  ╔═══════════════════════════════════════════════════════════════════════════" > "$temp_box"
@@ -987,8 +986,7 @@ configure_issue_network() {
         print_success "✓ Added network interface info to $issue_file"
     else
         # If the marker exists, replace the entire block.
-        local temp_issue
-        temp_issue=$(mktemp)
+        local temp_issue=$(mktemp)
         # Use awk to replace the block between the start and end markers
         awk -v new_content="$new_content" '
             BEGIN { printing=1 }
@@ -1063,8 +1061,7 @@ configure_shell_prompt_colors_system() {
     backup_file "$shell_config"
 
     # Check how many PS1 definitions exist
-    local ps1_count
-    ps1_count=$(grep -c "^[[:space:]]*PS1=" "$shell_config" 2>/dev/null || echo "0")
+    local ps1_count=$(grep -c "^[[:space:]]*PS1=" "$shell_config" 2>/dev/null || echo "0")
 
     if [[ "$ps1_count" -eq 0 ]]; then
         # No existing PS1, just add at the end
@@ -1075,15 +1072,13 @@ configure_shell_prompt_colors_system() {
         print_success "✓ Custom PS1 prompt configured in $shell_config"
     elif [[ "$ps1_count" -eq 1 ]]; then
         # Find the line number of the PS1 definition
-        local ps1_line_num
-        ps1_line_num=$(grep -n "^[[:space:]]*PS1=" "$shell_config" | cut -d: -f1)
+        local ps1_line_num=$(grep -n "^[[:space:]]*PS1=" "$shell_config" | cut -d: -f1)
 
         # Comment out the line
         sed -i.bak "${ps1_line_num}s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
 
         # Create a temporary file with the new PS1 content
-        local temp_ps1
-        temp_ps1=$(mktemp)
+        local temp_ps1=$(mktemp)
         {
             echo ""
             echo "    # ─────────────────────────────────────────────────────────────────────────────"
