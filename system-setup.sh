@@ -1047,28 +1047,38 @@ configure_shell_prompt_colors_system() {
     print_info "Configuring shell prompt colors in $shell_config..."
 
     # OS-specific custom PS1 patterns
-    local ps1_check_pattern
+    local ps1_check_patterns=()
     local custom_ps1_pattern
     if [[ "$os" == "macos" ]]; then
         # macOS zsh prompt
-        custom_ps1_pattern="PS1='[%F{247}%m%f:%F{%(!.red.green)}%n%f] %B%F{cyan}%~%f%b %#%(!.%F{red}%B!!%b%f.) '"
-        ps1_check_pattern="$custom_ps1_pattern"
+        custom_ps1_pattern="PS1=\"[%F{247}%m%f:%F{%(!.red.green)}%n%f] %B%F{cyan}%~%f%b %#%(!.%F{red}%B!!%b%f.) \""
+        ps1_check_patterns=("$custom_ps1_pattern")
     else
         # Linux bash prompt - conditional for root vs non-root
         # We'll use a marker comment to check if it's already configured
-        ps1_check_pattern="# Custom PS1 prompt - conditional for root/non-root"
-        custom_ps1_pattern="    # Custom PS1 prompt - conditional for root/non-root
+        local bash_prompt_root="PS1=\"\${debian_chroot:+(\$debian_chroot)}[\[\e[90m\]\h\[\e[0m\]:\[\e[91m\]\u\[\e[0m\]] \[\e[96;1m\]\w\[\e[0m\] \\$\[\e[91;1m\]!!\[\e[0m\] \""
+        local bash_prompt_non_root="PS1=\"\${debian_chroot:+(\$debian_chroot)}[\[\e[90m\]\h\[\e[0m\]:\[\e[92m\]\u\[\e[0m\]] \[\e[96;1m\]\w\[\e[0m\] \\$ \""
+        ps1_check_patterns=("$bash_prompt_root" "$bash_prompt_non_root")
+        custom_ps1_pattern="
     if [ \"\$EUID\" -eq 0 ]; then
         # Root user - red username with !! warning
-        PS1='[\[\e[90m\]\h\[\e[0m\]:\[\e[91m\]\u\[\e[0m\]] \[\e[96;1m\]\w\[\e[0m\] \\$\[\e[91;1m\]!!\[\e[0m\] '
+        $bash_prompt_root
     else
         # Non-root user - green username
-        PS1='[\[\e[90m\]\h\[\e[0m\]:\[\e[92m\]\u\[\e[0m\]] \[\e[96;1m\]\w\[\e[0m\] \\$ '
+        $bash_prompt_non_root
     fi"
     fi
 
     # Check if we already have our custom PS1
-    if grep -qF "$ps1_check_pattern" "$shell_config" 2>/dev/null; then
+    local all_patterns_found=true
+    for pattern in "${ps1_check_patterns[@]}"; do
+        if ! grep -qF "$pattern" "$shell_config" 2>/dev/null; then
+            all_patterns_found=false
+            break
+        fi
+    done
+
+    if [[ "$all_patterns_found" == true ]]; then
         print_success "- Custom PS1 prompt already configured"
         return 0
     fi
@@ -1082,9 +1092,10 @@ configure_shell_prompt_colors_system() {
     if [[ "$ps1_count" -eq 0 ]]; then
         # No existing PS1, just add at the end
         add_change_header "$shell_config" "shell"
-        echo "# Custom PS1 prompt - managed by system-setup.sh" >> "$shell_config"
-        echo "$custom_ps1_pattern" >> "$shell_config"
-        echo "" >> "$shell_config"
+        {
+            echo "# Custom PS1 prompt - managed by system-setup.sh"
+            echo "$custom_ps1_pattern"
+        } >> "$shell_config"
         print_success "✓ Custom PS1 prompt configured in $shell_config"
     elif [[ "$ps1_count" -eq 1 ]]; then
         # Find the line number of the PS1 definition
@@ -1095,12 +1106,8 @@ configure_shell_prompt_colors_system() {
 
         # Create a temporary file with the new PS1 content
         local temp_ps1=$(mktemp)
+        add_change_header "$temp_ps1" "shell"
         {
-            echo ""
-            echo "    # ─────────────────────────────────────────────────────────────────────────────"
-            echo "    # shell configuration - managed by system-setup.sh"
-            echo "    # Last updated: $(date '+%Y-%m-%d %H:%M:%S')"
-            echo "    # ─────────────────────────────────────────────────────────────────────────────"
             echo "    # Custom PS1 prompt - managed by system-setup.sh"
             echo "$custom_ps1_pattern"
         } > "$temp_ps1"
@@ -1119,9 +1126,10 @@ configure_shell_prompt_colors_system() {
 
         # Add new PS1 at the end
         add_change_header "$shell_config" "shell"
-        echo "# Custom PS1 prompt - managed by system-setup.sh" >> "$shell_config"
-        echo "$custom_ps1_pattern" >> "$shell_config"
-        echo "" >> "$shell_config"
+        {
+            echo "# Custom PS1 prompt - managed by system-setup.sh"
+            echo "$custom_ps1_pattern"
+        } >> "$shell_config"
 
         # Provide instructions and wait
         echo ""
