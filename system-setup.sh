@@ -145,6 +145,7 @@ fi
 
 # Global variables
 DEBUG_MODE=false
+DETECTED_OS=""
 BACKED_UP_FILES=()
 CREATED_BACKUP_FILES=()
 HEADER_ADDED_FILES=()
@@ -153,14 +154,14 @@ SCREEN_INSTALLED=false
 OPENSSH_SERVER_INSTALLED=false
 RUNNING_IN_CONTAINER=false
 
-# Detect OS
+# Detect OS and populate DETECTED_OS global variable
 detect_os() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo "macos"
+        DETECTED_OS="macos"
     elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        echo "linux"
+        DETECTED_OS="linux"
     else
-        echo "unknown"
+        DETECTED_OS="unknown"
     fi
 }
 
@@ -222,10 +223,9 @@ print_warning() {
 
 # Check if a package is installed (unified for both macOS and Linux)
 is_package_installed() {
-    local os="$1"
-    local package="$2"
+    local package="$1"
 
-    if [[ "$os" == "macos" ]]; then
+    if [[ "$DETECTED_OS" == "macos" ]]; then
         brew list "$package" &>/dev/null
     else
         dpkg -l "$package" 2>/dev/null | grep -q "^ii"
@@ -234,9 +234,7 @@ is_package_installed() {
 
 # Verify package manager is available
 verify_package_manager() {
-    local os="$1"
-
-    if [[ "$os" == "macos" ]]; then
+    if [[ "$DETECTED_OS" == "macos" ]]; then
         if ! command -v brew &>/dev/null; then
             print_error "Homebrew is not installed. Please install it from https://brew.sh"
             return 1
@@ -252,9 +250,7 @@ verify_package_manager() {
 
 # Get package definitions for the given OS
 get_package_list() {
-    local os="$1"
-
-    if [[ "$os" == "macos" ]]; then
+    if [[ "$DETECTED_OS" == "macos" ]]; then
         # macOS packages (brew)
         echo "7-zip:sevenzip"
         echo "ca-certificates:ca-certificates"
@@ -293,10 +289,8 @@ track_special_packages() {
 # Modernize APT sources configuration (Debian/Ubuntu)
 # Converts old sources.list format to DEB822 format and configures non-free components
 modernize_apt_sources() {
-    local os="$1"
-
     # Only run on Linux systems with apt
-    if [[ "$os" != "linux" ]] || ! command -v apt &>/dev/null; then
+    if [[ "$DETECTED_OS" != "linux" ]] || ! command -v apt &>/dev/null; then
         return 0
     fi
 
@@ -433,15 +427,13 @@ modernize_apt_sources() {
 
 # Install packages based on OS
 install_packages() {
-    local os="$1"
-    shift
     local packages=("$@")
 
     if [[ ${#packages[@]} -eq 0 ]]; then
         return 0
     fi
 
-    if [[ "$os" == "macos" ]]; then
+    if [[ "$DETECTED_OS" == "macos" ]]; then
         # Get dependencies, excluding the requested packages themselves
         local dependencies=$(brew deps "${packages[@]}" 2>/dev/null || true)
 
@@ -486,20 +478,19 @@ install_packages() {
 
 # Check and optionally install packages
 check_and_install_packages() {
-    local os="$1"
     local packages_to_install=()
 
     print_info "Checking for required packages..."
     echo ""
 
     # Verify package manager availability
-    if ! verify_package_manager "$os"; then
+    if ! verify_package_manager; then
         return 1
     fi
 
     # Identify all missing packages
     while IFS=: read -r display_name package; do
-        if is_package_installed "$os" "$package"; then
+        if is_package_installed "$package"; then
             print_success "$display_name is already installed"
             track_special_packages "$package"
         else
@@ -736,8 +727,7 @@ add_export_if_needed() {
 
 # Configure nano
 configure_nano() {
-    local os="$1"
-    local scope="$2"  # "user" or "system"
+    local scope="$1"  # "user" or "system"
 
     print_info "Configuring nano..."
 
@@ -773,7 +763,7 @@ configure_nano() {
     add_config_if_needed "nano" "$config_file" "set tabsize" "4" "tab size setting"
 
     # Add homebrew include for macOS
-    if [[ "$os" == "macos" ]]; then
+    if [[ "$DETECTED_OS" == "macos" ]]; then
         local include_line='include "/opt/homebrew/share/nano/*.nanorc"'
         if ! config_exists "$config_file" "$include_line"; then
             print_info "+ Adding homebrew nano syntax definitions to $config_file"
@@ -792,8 +782,7 @@ configure_nano() {
 
 # Configure GNU screen
 configure_screen() {
-    local os="$1"
-    local scope="$2"  # "user" or "system"
+    local scope="$1"  # "user" or "system"
 
     print_info "Configuring GNU screen..."
 
@@ -955,11 +944,10 @@ generate_issue_content() {
 
 # Configure /etc/issue with network interface information
 configure_issue_network() {
-    local os="$1"
     local issue_file="/etc/issue"
 
     # This feature is only for Linux and not in containers
-    if [[ "$os" != "linux" ]] || [[ "$RUNNING_IN_CONTAINER" == true ]]; then
+    if [[ "$DETECTED_OS" != "linux" ]] || [[ "$RUNNING_IN_CONTAINER" == true ]]; then
         print_info "$issue_file network info is only for non-containerized Linux systems. Skipping."
         return
     fi
@@ -1028,11 +1016,9 @@ configure_issue_network() {
 
 # Configure shell prompt colors for system-wide configuration
 configure_shell_prompt_colors_system() {
-    local os="$1"
-
     # Determine shell config file based on OS
     local shell_config
-    if [[ "$os" == "macos" ]]; then
+    if [[ "$DETECTED_OS" == "macos" ]]; then
         shell_config="/etc/zshrc"
     else
         shell_config="/etc/bash.bashrc"
@@ -1049,7 +1035,7 @@ configure_shell_prompt_colors_system() {
     # OS-specific custom PS1 patterns
     local ps1_check_patterns=()
     local custom_ps1_pattern
-    if [[ "$os" == "macos" ]]; then
+    if [[ "$DETECTED_OS" == "macos" ]]; then
         # macOS zsh prompt
         custom_ps1_pattern="PS1=\"[%F{247}%m%f:%F{%(!.red.green)}%n%f] %B%F{cyan}%~%f%b %#%(!.%F{red}%B!!%b%f.) \""
         ps1_check_patterns=("$custom_ps1_pattern")
@@ -1155,13 +1141,12 @@ configure_shell_prompt_colors_system() {
 
 # Comment out PS1 definitions in user config files (system scope only)
 configure_shell_prompt_colors_user() {
-    local os="$1"
-    local home_dir="$2"
-    local username="$3"
+    local home_dir="$1"
+    local username="$2"
 
     # Determine shell config file based on OS
     local shell_config
-    if [[ "$os" == "macos" ]]; then
+    if [[ "$DETECTED_OS" == "macos" ]]; then
         shell_config="${home_dir}/.zshrc"
     else
         shell_config="${home_dir}/.bashrc"
@@ -1179,7 +1164,7 @@ configure_shell_prompt_colors_user() {
 
     # Check if there are any uncommented PS1 definitions that we would actually modify
     local has_ps1_to_comment=false
-    if [[ "$os" == "macos" ]]; then
+    if [[ "$DETECTED_OS" == "macos" ]]; then
         # macOS: Check for ANY PS1 definitions
         if grep -q "^[[:space:]]*PS1=" "$shell_config" 2>/dev/null; then
             has_ps1_to_comment=true
@@ -1203,7 +1188,7 @@ configure_shell_prompt_colors_user() {
     backup_file "$shell_config"
 
     # Comment out existing PS1 definitions with OS-specific rules
-    if [[ "$os" == "macos" ]]; then
+    if [[ "$DETECTED_OS" == "macos" ]]; then
         # macOS: Comment out ALL PS1 definitions
         sed -i.bak "s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Commented out by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
     else
@@ -1222,13 +1207,12 @@ configure_shell_prompt_colors_user() {
 
 # Configure shell for a specific user
 configure_shell_for_user() {
-    local os="$1"
-    local home_dir="$2"
-    local username="$3"
+    local home_dir="$1"
+    local username="$2"
 
     # Determine shell config file
     local shell_config
-    if [[ "$os" == "macos" ]]; then
+    if [[ "$DETECTED_OS" == "macos" ]]; then
         shell_config="${home_dir}/.zshrc"
     else
         shell_config="${home_dir}/.bashrc"
@@ -1271,7 +1255,7 @@ configure_shell_for_user() {
     add_alias_if_needed "$shell_config" "chown" "chown -vv" "verbose chown"
 
     # OS-specific ls configuration
-    if [[ "$os" == "macos" ]]; then
+    if [[ "$DETECTED_OS" == "macos" ]]; then
         if ! grep -q "macOS ls configuration" "$shell_config" 2>/dev/null; then
             echo "" >> "$shell_config"
             echo "# macOS ls configuration" >> "$shell_config"
@@ -1299,7 +1283,7 @@ configure_shell_for_user() {
     fi
 
     # 7z compression helpers
-    if [[ "$os" == "macos" ]]; then
+    if [[ "$DETECTED_OS" == "macos" ]]; then
         if ! grep -q "7z compression helpers (macOS" "$shell_config" 2>/dev/null; then
             echo "" >> "$shell_config"
             echo "# 7z compression helpers (macOS - using 7zz)" >> "$shell_config"
@@ -1327,8 +1311,7 @@ configure_shell_for_user() {
 
 # Configure shell
 configure_shell() {
-    local os="$1"
-    local scope="$2"  # "user" or "system"
+    local scope="$1"  # "user" or "system"
 
     print_info "Configuring shell..."
     echo ""
@@ -1336,8 +1319,8 @@ configure_shell() {
     if [[ "$scope" == "system" ]]; then
         # Configure root user
         print_info "Configuring shell for root..."
-        configure_shell_for_user "$os" "/root" "root"
-        configure_shell_prompt_colors_user "$os" "/root" "root"
+        configure_shell_for_user "/root" "root"
+        configure_shell_prompt_colors_user "/root" "root"
         echo ""
 
         # System-wide configuration: iterate over all users in /home/
@@ -1348,8 +1331,8 @@ configure_shell() {
                 if [[ -d "$user_home" ]]; then
                     local username=$(basename "$user_home")
                     print_info "Configuring shell for $username..."
-                    configure_shell_for_user "$os" "$user_home" "$username"
-                    configure_shell_prompt_colors_user "$os" "$user_home" "$username"
+                    configure_shell_for_user "$user_home" "$username"
+                    configure_shell_prompt_colors_user "$user_home" "$username"
                     echo ""
                     ((user_count++)) || true
                 fi
@@ -1362,7 +1345,7 @@ configure_shell() {
     else
         # User-specific configuration: configure for current user only
         print_info "Configuring shell for current user..."
-        configure_shell_for_user "$os" "$HOME" "$(whoami)"
+        configure_shell_for_user "$HOME" "$(whoami)"
     fi
 
     print_info "Note: Users may need to run 'source ~/.bashrc' (or ~/.zshrc) or restart their terminal for changes to take effect."
@@ -1370,16 +1353,14 @@ configure_shell() {
     if [[ "$scope" == "system" ]]; then
         echo ""
         # Configure system-wide prompt colors
-        configure_shell_prompt_colors_system "$os"
+        configure_shell_prompt_colors_system
     fi
 }
 
 # Configure swap memory
 configure_swap() {
-    local os="$1"
-
     # Swap configuration is only relevant for Linux systems
-    if [[ "$os" != "linux" ]]; then
+    if [[ "$DETECTED_OS" != "linux" ]]; then
         print_info "Swap configuration is only applicable to Linux systems"
         return 0
     fi
@@ -1506,10 +1487,8 @@ configure_swap() {
 
 # Configure SSH to use socket-based activation instead of service
 configure_ssh_socket() {
-    local os="$1"
-
     # SSH socket configuration is only relevant for Linux systems with systemd
-    if [[ "$os" != "linux" ]]; then
+    if [[ "$DETECTED_OS" != "linux" ]]; then
         print_info "SSH socket configuration is only applicable to Linux systems with systemd"
         return 0
     fi
@@ -1632,10 +1611,8 @@ configure_ssh_socket() {
 
 # Configure static IP address for containers
 configure_container_static_ip() {
-    local os="$1"
-
     # Only applicable for Linux containers
-    if [[ "$os" != "linux" ]]; then
+    if [[ "$DETECTED_OS" != "linux" ]]; then
         return 0
     fi
 
@@ -1851,10 +1828,10 @@ main() {
         print_debug "- DEBUG MODE ENABLED"
     fi
 
-    local os=$(detect_os)
-    echo "          - Detected OS: $os"
+    detect_os
+    echo "          - Detected OS: $DETECTED_OS"
 
-    if [[ "$os" == "unknown" ]]; then
+    if [[ "$DETECTED_OS" == "unknown" ]]; then
         print_error "Unknown operating system. This script supports Linux and macOS."
         exit 1
     fi
@@ -1866,20 +1843,20 @@ main() {
 
         # Offer to configure static IP for containers
         echo ""
-        configure_container_static_ip "$os"
+        configure_container_static_ip
     fi
     echo ""
 
     # Modernize APT sources (Linux only)
-    if [[ "$os" == "linux" ]]; then
-        modernize_apt_sources "$os"
+    if [[ "$DETECTED_OS" == "linux" ]]; then
+        modernize_apt_sources
         echo ""
     fi
 
     # Check and install packages
     print_info "Step 1: Package Management"
     print_info "---------------------------"
-    if ! check_and_install_packages "$os"; then
+    if ! check_and_install_packages; then
         print_error "Package management failed. Continuing with configuration for installed packages..."
     fi
     echo ""
@@ -1933,7 +1910,7 @@ main() {
 
     # Configure each component
     if [[ "$NANO_INSTALLED" == true ]]; then
-        configure_nano "$os" "$scope"
+        configure_nano "$scope"
         echo ""
     else
         print_info "Skipping nano configuration (not installed)"
@@ -1941,7 +1918,7 @@ main() {
     fi
 
     if [[ "$SCREEN_INSTALLED" == true ]]; then
-        configure_screen "$os" "$scope"
+        configure_screen "$scope"
         echo ""
     else
         print_info "Skipping screen configuration (not installed)"
@@ -1950,23 +1927,23 @@ main() {
 
     # Configure /etc/issue with network interfaces if system scope (Linux only)
     if [[ "$scope" == "system" ]]; then
-        configure_issue_network "$os"
+        configure_issue_network
         echo ""
     fi
 
-    configure_shell "$os" "$scope"
+    configure_shell "$scope"
     echo ""
 
     # Configure swap memory if system scope (Linux only)
     if [[ "$scope" == "system" ]]; then
-        configure_swap "$os"
+        configure_swap
         echo ""
     fi
 
     # Configure OpenSSH Server if installed (Linux only, system scope only)
     if [[ "$scope" == "system" ]]; then
         if [[ "$OPENSSH_SERVER_INSTALLED" == true ]]; then
-            configure_ssh_socket "$os"
+            configure_ssh_socket
         else
             print_info "Skipping OpenSSH Server configuration (not installed)"
         fi
