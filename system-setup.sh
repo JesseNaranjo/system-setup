@@ -112,7 +112,7 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
 
         if [[ "$DOWNLOAD_SUCCESS" == true ]]; then
             if diff -u "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
-                echo "  ✓ ${SCRIPT_FILE} is already up-to-date"
+                echo -e "${GREEN}  ✓ ${SCRIPT_FILE} is already up-to-date${NC}"
                 echo ""
             else
                 echo -e "${LINE_COLOR}╭───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╮${NC}${CODE_COLOR}"
@@ -131,13 +131,13 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
                 else
                     echo ""
                     rm -f "$TEMP_SCRIPT_FILE"
-                    echo "→ Running local unmodified copy..."
+                    echo -e "${YELLOW}→ Running local unmodified copy...${NC}"
                     echo ""
                 fi
             fi
         else
-            echo "  ✖ Download failed — skipping $SCRIPT_FILE"
-            echo "  → Running local unmodified copy..."
+            echo -e "${RED}  ✖ Download failed — skipping $SCRIPT_FILE${NC}"
+            echo -e "${YELLOW}  → Running local unmodified copy...${NC}"
             echo ""
         fi
     fi
