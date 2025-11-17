@@ -42,9 +42,11 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0, Mandatory = $false)]
+    [ValidateNotNullOrEmpty()]
     [string]$LocalDir,
 
     [Parameter(Position = 1, Mandatory = $false)]
+    [ValidateNotNullOrEmpty()]
     [string]$RemoteDir,
 
     [Parameter(Mandatory = $false)]
@@ -57,6 +59,9 @@ param(
 
 # Requires PowerShell 7+
 #Requires -Version 7.0
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Continue'  # Allow robocopy errors to be handled gracefully
 
 # Script metadata
 $Script:ScriptName = $MyInvocation.MyCommand.Name
@@ -122,8 +127,14 @@ function Write-Log {
         [string]$Message
     )
 
-    $logMessage = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
-    Add-Content -Path $LogFile -Value $logMessage -ErrorAction SilentlyContinue
+    try {
+        $logMessage = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
+        Add-Content -Path $LogFile -Value $logMessage -ErrorAction Stop
+    }
+    catch {
+        # If logging fails, just continue - don't break the script
+        Write-Verbose "Failed to write to log: $($_.Exception.Message)"
+    }
 }
 
 function Show-Usage {
