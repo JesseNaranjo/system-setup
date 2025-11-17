@@ -196,6 +196,70 @@ detect_container() {
     RUNNING_IN_CONTAINER=false
 }
 
+# Check if we have necessary privileges for the operation
+# Returns: 0 if privileges are sufficient, 1 otherwise
+check_privileges() {
+    local operation="$1"  # "package_install", "system_config", or "apt_operations"
+
+    if [[ "$operation" == "package_install" ]]; then
+        if [[ "$DETECTED_OS" == "linux" ]]; then
+            # Linux requires root for apt
+            if [[ $EUID -ne 0 ]]; then
+                return 1
+            fi
+        fi
+        # macOS doesn't need root for brew
+    elif [[ "$operation" == "system_config" ]] || [[ "$operation" == "apt_operations" ]]; then
+        # System-wide config and apt operations need root on Linux
+        if [[ "$DETECTED_OS" == "linux" ]] && [[ $EUID -ne 0 ]]; then
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# Run command with appropriate privileges (macOS only - uses sudo for system operations)
+# On Linux, script should already be running as root for system operations
+run_elevated() {
+    if [[ $EUID -eq 0 ]]; then
+        # Already running as root, just execute
+        "$@"
+    else
+        if [[ "$DETECTED_OS" == "macos" ]]; then
+            # On macOS, use sudo for system changes
+            sudo "$@"
+        else
+            # On Linux, shouldn't get here (should already be root for system operations)
+            print_error "Insufficient privileges to run: $*"
+            return 1
+        fi
+    fi
+}
+
+# Check if a file operation needs elevation (macOS-specific)
+# Returns 0 if elevation needed, 1 if not
+needs_elevation() {
+    local file="$1"
+
+    # If already root or running Linux (which should already be root), no elevation needed
+    if [[ $EUID -eq 0 ]] || [[ "$OSTYPE" == "linux"* ]]; then
+        return 1
+    fi
+
+    # Check if file is in a system directory
+    if [[ "$file" == /etc/* ]] || [[ "$file" == /usr/* ]] || [[ "$file" == /var/* ]]; then
+        return 0
+    fi
+
+    # Check if parent directory requires elevated permissions
+    local dir=$(dirname "$file")
+    if [[ ! -w "$dir" ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
 # Print colored output
 print_backup() {
     echo -e "${GRAY}[ BACKUP] $1${NC}"
@@ -291,6 +355,12 @@ track_special_packages() {
 modernize_apt_sources() {
     # Only run on Linux systems with apt
     if [[ "$DETECTED_OS" != "linux" ]] || ! command -v apt &>/dev/null; then
+        return 0
+    fi
+
+    # Requires root privileges on Linux
+    if ! check_privileges "apt_operations"; then
+        print_warning "Skipping APT sources modernization (requires root privileges)"
         return 0
     fi
 
@@ -479,6 +549,7 @@ install_packages() {
 # Check and optionally install packages
 check_and_install_packages() {
     local packages_to_install=()
+    local can_install=true
 
     print_info "Checking for required packages..."
     echo ""
@@ -488,6 +559,13 @@ check_and_install_packages() {
         return 1
     fi
 
+    # Check if we can install packages
+    if ! check_privileges "package_install"; then
+        can_install=false
+        print_warning "Cannot install packages without root privileges (will only detect installed packages)"
+        echo ""
+    fi
+
     # Identify all missing packages
     while IFS=: read -r display_name package; do
         if is_package_installed "$package"; then
@@ -495,21 +573,25 @@ check_and_install_packages() {
             track_special_packages "$package"
         else
             print_warning "$display_name is not installed"
-            if prompt_yes_no "          - Would you like to install $display_name?" "n"; then
-                packages_to_install+=("$package")
-                track_special_packages "$package"
+            if [[ "$can_install" == true ]]; then
+                if prompt_yes_no "          - Would you like to install $display_name?" "n"; then
+                    packages_to_install+=("$package")
+                    track_special_packages "$package"
+                fi
             fi
         fi
-    done < <(get_package_list "$os")
+    done < <(get_package_list)
 
-    # If there are packages to install, call the installer
+    # If there are packages to install and we have privileges, call the installer
     if [[ ${#packages_to_install[@]} -gt 0 ]]; then
-        if ! install_packages "$os" "${packages_to_install[@]}"; then
+        if [[ "$can_install" == true ]] &&  ! install_packages "${packages_to_install[@]}"; then
             # Even if installation fails, we return 0 to allow configuration of already-installed packages
             print_error "Package installation failed or was cancelled. Continuing with configuration for any packages that are already present."
         fi
     else
-        print_info "No new packages to install."
+        if [[ "$can_install" == true ]]; then
+            print_info "No new packages to install."
+        fi
     fi
 
     echo ""
@@ -537,14 +619,22 @@ backup_file() {
         local backup="${file}.backup.$(date +%Y%m%d_%H%M%S)"
 
         # Copy file with preserved permissions (-p flag)
-        cp -p "$file" "$backup"
+        if needs_elevation "$file"; then
+            sudo cp -p "$file" "$backup"
+        else
+            cp -p "$file" "$backup"
+        fi
 
         # Preserve ownership (requires appropriate permissions)
         # Get the owner and group of the original file
         if [[ "$OSTYPE" == "darwin"* ]]; then
             # macOS stat syntax
             local owner=$(stat -f "%u:%g" "$file")
-            chown "$owner" "$backup" 2>/dev/null || true
+            if needs_elevation "$file"; then
+                sudo chown "$owner" "$backup" 2>/dev/null || true
+            else
+                chown "$owner" "$backup" 2>/dev/null || true
+            fi
         else
             # Linux stat syntax
             local owner=$(stat -c "%u:%g" "$file")
@@ -575,21 +665,29 @@ add_change_header() {
         return 0
     fi
 
-    # Add header before changes
-    echo "" >> "$file"
+    # Prepare header content
+    local header_content=""
+    header_content+=$'\n'
     case "$config_type" in
         nano)
-            echo "# nano configuration - managed by system-setup.sh" >> "$file"
+            header_content+="# nano configuration - managed by system-setup.sh"$'\n'
             ;;
         screen)
-            echo "# GNU screen configuration - managed by system-setup.sh" >> "$file"
+            header_content+="# GNU screen configuration - managed by system-setup.sh"$'\n'
             ;;
         shell)
-            echo "# Shell configuration - managed by system-setup.sh" >> "$file"
+            header_content+="# Shell configuration - managed by system-setup.sh"$'\n'
             ;;
     esac
-    echo "# Updated: $(date)" >> "$file"
-    echo "" >> "$file"
+    header_content+="# Updated: $(date)"$'\n'
+    header_content+=$'\n'
+
+    # Add header before changes
+    if needs_elevation "$file"; then
+        echo "$header_content" | sudo tee -a "$file" > /dev/null
+    else
+        echo "$header_content" >> "$file"
+    fi
 
     # Mark this file as having header added
     HEADER_ADDED_FILES+=("$file")
@@ -660,13 +758,21 @@ update_config_line() {
             ' "$file" > "$temp_file"
 
             # Replace the original file with the updated temporary file
-            mv "$temp_file" "$file"
+            if needs_elevation "$file"; then
+                sudo mv "$temp_file" "$file"
+            else
+                mv "$temp_file" "$file"
+            fi
             print_success "✓ $description updated in $file"
         fi
     else
         backup_file "$file"
         add_change_header "$file" "$config_type"
-        echo "$full_line" >> "$file"
+        if needs_elevation "$file"; then
+            echo "$full_line" | sudo tee -a "$file" > /dev/null
+        else
+            echo "$full_line" >> "$file"
+        fi
         print_success "✓ $description added to $file"
     fi
 }
@@ -734,10 +840,6 @@ configure_nano() {
     local config_file
     if [[ "$scope" == "system" ]]; then
         config_file="/etc/nanorc"
-        if [[ ! -w "/etc" ]]; then
-            print_error "No write permission to /etc. Run as root or choose user scope."
-            return 1
-        fi
     else
         config_file="$HOME/.nanorc"
     fi
@@ -745,7 +847,12 @@ configure_nano() {
     # Create config file if it doesn't exist
     if [[ ! -f "$config_file" ]]; then
         print_info "Creating new nano configuration file: $config_file"
-        touch "$config_file"
+        if [[ "$scope" == "system" ]] && [[ "$DETECTED_OS" == "macos" ]] && [[ $EUID -ne 0 ]]; then
+            # On macOS with system scope, use sudo to create the file
+            run_elevated touch "$config_file"
+        else
+            touch "$config_file"
+        fi
     fi
 
     # Configure each setting individually
@@ -769,9 +876,16 @@ configure_nano() {
             print_info "+ Adding homebrew nano syntax definitions to $config_file"
             backup_file "$config_file"
             add_change_header "$config_file" "nano"
-            echo "" >> "$config_file"
-            echo "# homebrew nano syntax definitions" >> "$config_file"
-            echo "$include_line" >> "$config_file"
+
+            if needs_elevation "$config_file"; then
+                echo "" | sudo tee -a "$config_file" > /dev/null
+                echo "# homebrew nano syntax definitions" | sudo tee -a "$config_file" > /dev/null
+                echo "$include_line" | sudo tee -a "$config_file" > /dev/null
+            else
+                echo "" >> "$config_file"
+                echo "# homebrew nano syntax definitions" >> "$config_file"
+                echo "$include_line" >> "$config_file"
+            fi
         else
             print_success "homebrew nano syntax definitions already configured"
         fi
@@ -789,10 +903,6 @@ configure_screen() {
     local config_file
     if [[ "$scope" == "system" ]]; then
         config_file="/etc/screenrc"
-        if [[ ! -w "/etc" ]]; then
-            print_error "No write permission to /etc. Run as root or choose user scope."
-            return 1
-        fi
     else
         config_file="$HOME/.screenrc"
     fi
@@ -800,7 +910,12 @@ configure_screen() {
     # Create config file if it doesn't exist
     if [[ ! -f "$config_file" ]]; then
         print_info "Creating new screen configuration file: $config_file"
-        touch "$config_file"
+        if [[ "$scope" == "system" ]] && [[ "$DETECTED_OS" == "macos" ]] && [[ $EUID -ne 0 ]]; then
+            # On macOS with system scope, use sudo to create the file
+            run_elevated touch "$config_file"
+        else
+            touch "$config_file"
+        fi
     fi
 
     # Configure each setting individually
@@ -952,8 +1067,9 @@ configure_issue_network() {
         return
     fi
 
-    if [[ ! -w "$issue_file" ]]; then
-        print_error "No write permission for $issue_file. Run as root to configure network info."
+    # Should already be covered by system scope check, but verify
+    if ! check_privileges "system_config"; then
+        print_error "No privileges to configure $issue_file. This should not happen."
         return
     fi
 
@@ -1904,6 +2020,16 @@ main() {
             exit 1
             ;;
     esac
+
+    # Verify privileges for system-wide configuration on Linux
+    if [[ "$scope" == "system" ]]; then
+        if ! check_privileges "system_config"; then
+            echo ""
+            print_error "System-wide configuration requires root privileges on Linux"
+            print_info "Please re-run the script with: sudo $0"
+            exit 1
+        fi
+    fi
 
     print_info "Using scope: $scope"
     echo ""
