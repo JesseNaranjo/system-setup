@@ -604,7 +604,7 @@ backup_file() {
     local already_backed_up=false
 
     # Check if already backed up in this session
-    for backed_up_file in "${BACKED_UP_FILES[@]}"; do
+    for backed_up_file in "${BACKED_UP_FILES[@]+"${BACKED_UP_FILES[@]}"}"; do
         if [[ "$backed_up_file" == "$file" ]]; then
             already_backed_up=true
             break
@@ -654,7 +654,7 @@ add_change_header() {
     local already_added=false
 
     # Check if header already added in this session
-    for added_file in "${HEADER_ADDED_FILES[@]}"; do
+    for added_file in "${HEADER_ADDED_FILES[@]+"${HEADER_ADDED_FILES[@]}"}"; do
         if [[ "$added_file" == "$file" ]]; then
             already_added=true
             break
@@ -1040,13 +1040,13 @@ generate_issue_content() {
     echo "  ╠═══════════════════════════════════════════════════════════════════════════" >> "$temp_box"
 
     # Add wired, wireless, and other interfaces
-    for iface in "${wire_interfaces[@]}"; do
+    for iface in "${wire_interfaces[@]+"${wire_interfaces[@]}"}"; do
         echo "  ║ - wire: \\4{${iface}} / \\6{${iface}} (${iface})" >> "$temp_box"
     done
-    for iface in "${wifi_interfaces[@]}"; do
+    for iface in "${wifi_interfaces[@]+"${wifi_interfaces[@]}"}"; do
         echo "  ║ - wifi: \\4{${iface}} / \\6{${iface}} (${iface})" >> "$temp_box"
     done
-    for iface_info in "${other_interfaces[@]}"; do
+    for iface_info in "${other_interfaces[@]+"${other_interfaces[@]}"}"; do
         local iface="${iface_info%%:*}"
         local type="${iface_info##*:}"
         echo "  ║ - ${type}: \\4{${iface}} / \\6{${iface}} (${iface})" >> "$temp_box"
@@ -1837,7 +1837,7 @@ configure_container_static_ip() {
             # Validate IP address octets (0-255)
             local valid=true
             IFS='.' read -ra OCTETS <<< "$static_ip"
-            for octet in "${OCTETS[@]}"; do
+            for octet in "${OCTETS[@]+"${OCTETS[@]}"}"; do
                 if [[ $octet -gt 255 ]]; then
                     valid=false
                     break
@@ -1918,7 +1918,7 @@ print_summary() {
 
     if [[ ${#BACKED_UP_FILES[@]} -gt 0 ]]; then
         print_success "${GREEN}Files Modified:${NC}"
-        for file in "${BACKED_UP_FILES[@]}"; do
+        for file in "${BACKED_UP_FILES[@]+"${BACKED_UP_FILES[@]}"}"; do
             echo "          - $file"
         done
         echo ""
@@ -1926,7 +1926,7 @@ print_summary() {
 
     if [[ ${#CREATED_BACKUP_FILES[@]} -gt 0 ]]; then
         print_backup "Backup Files Created:"
-        for file in "${CREATED_BACKUP_FILES[@]}"; do
+        for file in "${CREATED_BACKUP_FILES[@]+"${CREATED_BACKUP_FILES[@]}"}"; do
             echo "          - $file"
         done
         echo ""
