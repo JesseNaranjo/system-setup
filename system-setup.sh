@@ -839,7 +839,11 @@ configure_nano() {
 
     local config_file
     if [[ "$scope" == "system" ]]; then
-        config_file="/etc/nanorc"
+        if [[ "$DETECTED_OS" == "macos" ]]; then
+            config_file="/opt/homebrew/etc/nanorc"
+        else
+            config_file="/etc/nanorc"
+        fi
     else
         config_file="$HOME/.nanorc"
     fi
