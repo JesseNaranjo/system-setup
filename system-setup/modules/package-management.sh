@@ -80,6 +80,7 @@ check_and_install_packages() {
 
     # Verify package manager availability
     if ! verify_package_manager; then
+        print_warning "No supported package manager found on this system."
         return 1
     fi
 
