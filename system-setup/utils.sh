@@ -397,7 +397,7 @@ update_config_line() {
             return 0
         else
             local current_value=$(grep -E "^[[:space:]]*${setting_pattern}" "$file" | head -n 1)
-            print_warning "✗ $description has different value: '$current_value' in $file"
+            print_warning "✖ $description has different value: '$current_value' in $file"
             backup_file "$file"
             add_change_header "$file" "$config_type"
 

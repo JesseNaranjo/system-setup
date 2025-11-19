@@ -26,13 +26,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=utils.sh
 source "${SCRIPT_DIR}/utils.sh"
 
-# ============================================================================
-# Self-Update Functionality
-# ============================================================================
+readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/system-setup"
 
-# List of all scripts to download/update
+# List of module scripts to download/update (excludes system-setup.sh)
 get_script_list() {
-    echo "system-setup.sh"
     echo "utils.sh"
     echo "modules/modernize-apt-sources.sh"
     echo "modules/package-management.sh"
@@ -43,24 +40,26 @@ get_script_list() {
     echo "modules/system-configuration-issue.sh"
 }
 
-# Download and check for updates on all scripts
-self_update() {
-    local REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/system-setup"
-    local updated_count=0
-    local failed_count=0
+# ============================================================================
+# Self-Update Functionality
+# ============================================================================
 
-    # Check for curl or wget availability
-    DOWNLOAD_CMD=""
+# Detect available download command (curl or wget)
+# Sets global DOWNLOAD_CMD variable
+detect_download_cmd() {
     if command -v curl &>/dev/null; then
         DOWNLOAD_CMD="curl"
+        return 0
     elif command -v wget &>/dev/null; then
         DOWNLOAD_CMD="wget"
+        return 0
     else
+        DOWNLOAD_CMD=""
         # Display large error message if neither curl nor wget is available
         echo ""
         echo -e "${YELLOW}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
         echo -e "${YELLOW}║                                                                             ║${NC}"
-        echo -e "${YELLOW}║                      ⚠️   SELF-UPDATE NOT AVAILABLE  ⚠️                       ║${NC}"
+        echo -e "${YELLOW}║                        ⚠️   UPDATES NOT AVAILABLE  ⚠️                         ║${NC}"
         echo -e "${YELLOW}║                                                                             ║${NC}"
         echo -e "${YELLOW}║        Neither 'curl' nor 'wget' is installed on this system.               ║${NC}"
         echo -e "${YELLOW}║        Self-updating functionality requires one of these tools.             ║${NC}"
@@ -78,10 +77,98 @@ self_update() {
         echo -e "${YELLOW}║                                                                             ║${NC}"
         echo -e "${YELLOW}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
         echo ""
+        return 1
+    fi
+}
+
+# Check for updates to system-setup.sh itself
+# This function only updates the main script and will restart if updated
+self_update() {
+    local SCRIPT_FILE="system-setup.sh"
+    local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
+    local TEMP_SCRIPT_FILE="$(mktemp)"
+
+    print_info "Checking for ${SCRIPT_FILE} updates..."
+    echo "          ▶ Fetching ${REMOTE_BASE}/${SCRIPT_FILE}..."
+
+    local DOWNLOAD_SUCCESS=false
+    local HTTP_STATUS=""
+
+    if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
+        HTTP_STATUS=$(curl -H 'Cache-Control: no-cache, no-store' -o "${TEMP_SCRIPT_FILE}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${SCRIPT_FILE}" 2>/dev/null || echo "000")
+        if [[ "$HTTP_STATUS" == "200" ]]; then
+            # Validate that we got a script, not an error page
+            if head -n 1 "${TEMP_SCRIPT_FILE}" | grep -q "^#!/"; then
+                DOWNLOAD_SUCCESS=true
+            else
+                print_error "Invalid content received (not a script)"
+            fi
+        elif [[ "$HTTP_STATUS" == "429" ]]; then
+            print_error "Rate limited by GitHub (HTTP 429)"
+        elif [[ "$HTTP_STATUS" != "000" ]]; then
+            print_error "HTTP ${HTTP_STATUS} error"
+        fi
+    elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
+        if wget --no-cache --no-cookies -O "${TEMP_SCRIPT_FILE}" -q "${REMOTE_BASE}/${SCRIPT_FILE}" 2>/dev/null; then
+            # Validate that we got a script, not an error page
+            if head -n 1 "${TEMP_SCRIPT_FILE}" | grep -q "^#!/"; then
+                DOWNLOAD_SUCCESS=true
+            else
+                print_error "Invalid content received (not a script)"
+            fi
+        fi
+    fi
+
+    if [[ "$DOWNLOAD_SUCCESS" != true ]]; then
+        print_error "Download failed for ${SCRIPT_FILE}"
+        rm -f "${TEMP_SCRIPT_FILE}"
+        echo ""
+        return 1
+    fi
+
+    # Compare and handle differences
+    if diff -u "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
+        print_success "${SCRIPT_FILE} is already up-to-date"
+        rm -f "${TEMP_SCRIPT_FILE}"
+        echo ""
         return 0
     fi
 
-    # Check each script for updates
+    # Show diff
+    echo ""
+    echo -e "${LINE_COLOR}╭────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
+    diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" || true
+    echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
+    echo ""
+
+    if prompt_yes_no "→ Overwrite and restart with updated ${SCRIPT_FILE}?" "y"; then
+        echo ""
+        chmod +x "${TEMP_SCRIPT_FILE}"
+        mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"
+        print_success "Updated ${SCRIPT_FILE}"
+        echo ""
+        print_info "Restarting with updated version..."
+        echo ""
+        export scriptUpdated=1
+        exec "${SCRIPT_DIR}/system-setup.sh" "$@"
+        exit 0
+    else
+        print_warning "Skipped ${SCRIPT_FILE} update"
+        rm -f "${TEMP_SCRIPT_FILE}"
+    fi
+    echo ""
+}
+
+# Update all module scripts (utils.sh and modules/*)
+update_modules() {
+    local updated_count=0
+    local skipped_count=0
+    local failed_count=0
+
+    print_info "Checking for module updates..."
+    echo ""
+
+    # Check each module script for updates
     while IFS= read -r script_path; do
         local SCRIPT_FILE="$script_path"
         local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
@@ -91,108 +178,90 @@ self_update() {
         local script_dir=$(dirname "$LOCAL_SCRIPT")
         mkdir -p "$script_dir"
 
-        echo "▶ Fetching ${REMOTE_BASE}/${SCRIPT_FILE}..."
+        print_info "Checking ${SCRIPT_FILE}..."
+        echo "          ▶ Fetching ${REMOTE_BASE}/${SCRIPT_FILE}..."
 
-        DOWNLOAD_SUCCESS=false
+        local DOWNLOAD_SUCCESS=false
+        local HTTP_STATUS=""
+
         if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-            if curl -H 'Cache-Control: no-cache, no-store' -o "${TEMP_SCRIPT_FILE}" -fsSL "${REMOTE_BASE}/${SCRIPT_FILE}"; then
-                DOWNLOAD_SUCCESS=true
+            HTTP_STATUS=$(curl -H 'Cache-Control: no-cache, no-store' -o "${TEMP_SCRIPT_FILE}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${SCRIPT_FILE}" 2>/dev/null || echo "000")
+            if [[ "$HTTP_STATUS" == "200" ]]; then
+                # Validate that we got a script, not an error page
+                if head -n 1 "${TEMP_SCRIPT_FILE}" | grep -q "^#!/"; then
+                    DOWNLOAD_SUCCESS=true
+                else
+                    print_error "Invalid content received (not a script) — skipping ${SCRIPT_FILE}"
+                fi
+            elif [[ "$HTTP_STATUS" == "429" ]]; then
+                print_error "✖ Rate limited by GitHub (HTTP 429) — skipping ${SCRIPT_FILE}"
+            elif [[ "$HTTP_STATUS" != "000" ]]; then
+                print_error "✖ HTTP ${HTTP_STATUS} error — skipping ${SCRIPT_FILE}"
             fi
         elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
-            if wget --no-cache --no-cookies -O "${TEMP_SCRIPT_FILE}" -q "${REMOTE_BASE}/${SCRIPT_FILE}"; then
-                DOWNLOAD_SUCCESS=true
+            if wget --no-cache --no-cookies -O "${TEMP_SCRIPT_FILE}" -q "${REMOTE_BASE}/${SCRIPT_FILE}" 2>/dev/null; then
+                # Validate that we got a script, not an error page
+                if head -n 1 "${TEMP_SCRIPT_FILE}" | grep -q "^#!/"; then
+                    DOWNLOAD_SUCCESS=true
+                else
+                    print_error "✖ Invalid content received (not a script) — skipping ${SCRIPT_FILE}"
+                fi
             fi
         fi
 
-        if [[ "$DOWNLOAD_SUCCESS" == true ]]; then
-            # Check if local file exists and compare
-            if [[ -f "$LOCAL_SCRIPT" ]]; then
-                if diff -u "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
-                    echo -e "${GREEN}  ✓ ${SCRIPT_FILE} is already up-to-date${NC}"
-                    rm -f "${TEMP_SCRIPT_FILE}"
-                else
-                    echo -e "${YELLOW}  ⚠ Updates found for ${SCRIPT_FILE}${NC}"
-                    ((updated_count++)) || true
-                    # Store temp file for later processing
-                    mv "${TEMP_SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}.${SCRIPT_FILE//\//_}"
-                fi
-            else
-                # New file, doesn't exist locally
-                echo -e "${YELLOW}  + New file: ${SCRIPT_FILE}${NC}"
-                ((updated_count++)) || true
-                mv "${TEMP_SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}.${SCRIPT_FILE//\//_}"
-            fi
-        else
-            echo -e "${RED}  ✖ Download failed — skipping ${SCRIPT_FILE}${NC}"
-            rm -f "${TEMP_SCRIPT_FILE}"
+        if [[ "$DOWNLOAD_SUCCESS" != true ]]; then
+            print_error "✖ Download failed — skipping ${SCRIPT_FILE}"
             ((failed_count++)) || true
+            rm -f "${TEMP_SCRIPT_FILE}"
+            echo ""
+            continue
+        fi
+
+        # Create file if it doesn't exist
+        if [[ ! -f "${LOCAL_SCRIPT}" ]]; then
+            touch "${LOCAL_SCRIPT}"
+        fi
+
+        # Compare and handle differences
+        if diff -u "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
+            print_success "${SCRIPT_FILE} is already up-to-date"
+            rm -f "${TEMP_SCRIPT_FILE}"
+            echo ""
+        else
+            echo ""
+            echo -e "${LINE_COLOR}╭────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
+            diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" || true
+            echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
+            echo ""
+
+            if prompt_yes_no "→ Overwrite local ${SCRIPT_FILE} with remote copy?" "y"; then
+                echo ""
+                chmod +x "${TEMP_SCRIPT_FILE}"
+                mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"
+                print_success "Replaced ${SCRIPT_FILE}"
+                ((updated_count++)) || true
+            else
+                print_warning "Skipped ${SCRIPT_FILE}"
+                ((skipped_count++)) || true
+                rm -f "${TEMP_SCRIPT_FILE}"
+            fi
+            echo ""
         fi
     done < <(get_script_list)
 
+    # Display final statistics
+    echo ""
+    echo "============================================================================"
+    print_info "Module Update Summary"
+    echo "============================================================================"
+    echo -e "${GREEN}Updated:${NC}  ${updated_count} file(s)"
+    echo -e "${YELLOW}Skipped:${NC}  ${skipped_count} file(s)"
+    echo -e "${RED}Failed:${NC}   ${failed_count} file(s)"
+    echo "============================================================================"
     echo ""
 
-    # If there are updates, ask user if they want to apply them
-    if [[ $updated_count -gt 0 ]]; then
-        echo -e "${YELLOW}Found updates for $updated_count script(s)${NC}"
-        echo ""
-
-        if prompt_yes_no "Would you like to view the changes and apply updates?" "y"; then
-            echo ""
-            # Show diffs and apply updates
-            while IFS= read -r script_path; do
-                local SCRIPT_FILE="$script_path"
-                local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
-                local TEMP_FILE="/tmp/$(basename "$(mktemp)").${SCRIPT_FILE//\//_}"
-
-                if [[ -f "$TEMP_FILE" ]]; then
-                    echo -e "${LINE_COLOR}╭───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╮${NC}"
-
-                    if [[ -f "$LOCAL_SCRIPT" ]]; then
-                        diff -u --color "${LOCAL_SCRIPT}" "${TEMP_FILE}" || true
-                    else
-                        echo -e "${GREEN}New file${NC}"
-                        cat "${TEMP_FILE}"
-                    fi
-
-                    echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
-                    echo ""
-
-                    if prompt_yes_no "Apply this update?" "y"; then
-                        chmod +x "$TEMP_FILE"
-                        mv -f "$TEMP_FILE" "$LOCAL_SCRIPT"
-                        echo -e "${GREEN}  ✓ Updated ${SCRIPT_FILE}${NC}"
-                    else
-                        rm -f "$TEMP_FILE"
-                        echo -e "${YELLOW}  - Skipped ${SCRIPT_FILE}${NC}"
-                    fi
-                    echo ""
-                fi
-            done < <(get_script_list)
-
-            echo -e "${GREEN}Update process complete${NC}"
-            echo ""
-
-            if prompt_yes_no "Restart system-setup.sh with the updated version?" "y"; then
-                echo ""
-                export scriptUpdated=1
-                exec "${SCRIPT_DIR}/system-setup.sh" "$@"
-                exit 0
-            fi
-        else
-            # Clean up temp files
-            while IFS= read -r script_path; do
-                local SCRIPT_FILE="$script_path"
-                local TEMP_FILE="/tmp/$(basename "$(mktemp)").${SCRIPT_FILE//\//_}"
-                rm -f "$TEMP_FILE"
-            done < <(get_script_list)
-
-            echo ""
-            echo -e "${YELLOW}→ Running local unmodified copies...${NC}"
-            echo ""
-        fi
-    elif [[ $failed_count -eq 0 ]]; then
-        echo -e "${GREEN}All scripts are up-to-date${NC}"
-        echo ""
+    if [[ $failed_count -gt 0 ]]; then
+        return 1
     fi
 }
 
@@ -201,9 +270,15 @@ self_update() {
 # ============================================================================
 
 main() {
-    # Only run self-update if not already updated in this session
-    if [[ ${scriptUpdated:-0} -eq 0 ]]; then
-        self_update "$@"
+    # Detect download command (curl or wget) for update functionality
+    if detect_download_cmd; then
+        # Only run self-update if not already updated in this session
+        if [[ ${scriptUpdated:-0} -eq 0 ]]; then
+            self_update "$@"
+        fi
+
+        # Always check for module updates (not skipped by scriptUpdated) if download cmd available
+        update_modules
     fi
 
     print_info "System Setup and Configuration Script (Idempotent Mode)"
@@ -254,17 +329,17 @@ main() {
     if [[ "$NANO_INSTALLED" == true ]]; then
         echo "          ✓ nano editor settings"
     else
-        echo "          ✗ nano editor (not installed, will be skipped)"
+        echo "          ✖ nano editor (not installed, will be skipped)"
     fi
     if [[ "$SCREEN_INSTALLED" == true ]]; then
         echo "          ✓ GNU screen settings"
     else
-        echo "          ✗ GNU screen (not installed, will be skipped)"
+        echo "          ✖ GNU screen (not installed, will be skipped)"
     fi
     if [[ "$OPENSSH_SERVER_INSTALLED" == true ]]; then
         echo "          ✓ OpenSSH Server (socket-based activation option)"
     else
-        echo "          ✗ OpenSSH Server (not installed, will be skipped)"
+        echo "          ✖ OpenSSH Server (not installed, will be skipped)"
     fi
     echo "          ✓ Shell aliases and configurations"
     echo ""
