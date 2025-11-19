@@ -31,23 +31,28 @@ readonly CODE_COLOR="\033[40m"
 
 # Remote repository configuration
 readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/llm"
-readonly FILES=( "ollama-remote.sh" "ollama-screen.sh" )
+
+# List of script files to download/update (excludes _download-ollama-scripts.sh)
+get_script_list() {
+    echo "ollama-remote.sh"
+    echo "ollama-screen.sh"
+}
 
 # Print colored output
 print_info() {
-    echo -e "${BLUE}[   INFO]${NC} $1"
+    echo -e "${BLUE}[ INFO    ]${NC} $1"
 }
 
 print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}[ SUCCESS ]${NC} $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${YELLOW}[ WARNING ]${NC} $1"
 }
 
 print_error() {
-    echo -e "${RED}[  ERROR]${NC} $1"
+    echo -e "${RED}[ ERROR   ]${NC} $1"
 }
 
 # Prompt user for yes/no confirmation
@@ -78,192 +83,232 @@ prompt_yes_no() {
     fi
 }
 
-# ============================================================================
-# Check for Download Tools
-# ============================================================================
-# Check for curl or wget availability
-DOWNLOAD_CMD=""
-if command -v curl &>/dev/null; then
-    DOWNLOAD_CMD="curl"
-elif command -v wget &>/dev/null; then
-    DOWNLOAD_CMD="wget"
-else
-    # Display large error message if neither curl nor wget is available
-    echo ""
-    echo "╔═════════════════════════════════════════════════════════════════════╗"
-    echo "║                                                                     ║"
-    echo "║                  ⚠️   SELF-UPDATE NOT AVAILABLE  ⚠️                   ║"  # the extra space is intentional for alignment due to the ⚠️  character
-    echo "║                                                                     ║"
-    echo "║    Neither 'curl' nor 'wget' is installed on this system.           ║"
-    echo "║    Self-updating functionality requires one of these tools.         ║"
-    echo "║                                                                     ║"
-    echo "║    To enable self-updating, please install one of the following:    ║"
-    echo "║      • curl  (recommended)                                          ║"
-    echo "║      • wget                                                         ║"
-    echo "║                                                                     ║"
-    echo "║    Installation commands:                                           ║"
-    echo "║      macOS:    brew install curl                                    ║"
-    echo "║      Debian:   sudo apt install curl                                ║"
-    echo "║      RHEL:     sudo yum install curl                                ║"
-    echo "║                                                                     ║"
-    echo "║    Continuing with local version of the script...                   ║"
-    echo "║                                                                     ║"
-    echo "╚═════════════════════════════════════════════════════════════════════╝"
-    echo ""
-fi
+# Download a script file from the remote repository
+# Args: $1 = script filename (relative path), $2 = output file path
+# Returns: 0 on success, 1 on failure
+download_script() {
+    local script_file="$1"
+    local output_file="$2"
+    local http_status=""
 
-# ============================================================================
-# Self-Update Section
-# ============================================================================
-# This section checks for updates to this script itself before proceeding.
-# It downloads the latest version from GitHub and offers to replace the local
-# copy if changes are detected.
+    print_info "Fetching ${script_file}..."
+    echo "            ▶ ${REMOTE_BASE}/${script_file}..."
 
-if [[ ${scriptUpdated:-0} -eq 0 ]]; then
-    readonly SCRIPT_FILE="_download-ollama-scripts.sh"
-    TEMP_SCRIPT_FILE="$(mktemp)"
-    trap 'rm -f "${TEMP_SCRIPT_FILE}"' EXIT     # ensure cleanup on script exit
-
-    # Proceed with self-update if a download command is available
-    if [[ -n "$DOWNLOAD_CMD" ]]; then
-        print_info "Checking for updates to ${SCRIPT_FILE}..."
-        echo "            ▶ Fetching ${REMOTE_BASE}/${SCRIPT_FILE}..."
-
-        DOWNLOAD_SUCCESS=false
-        if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-            # -H header, -o file path, -f fail-on-HTTP-error, -s silent, -S show errors, -L follow redirects
-            if curl -H 'Cache-Control: no-cache, no-store' -o "${TEMP_SCRIPT_FILE}" -fsSL "${REMOTE_BASE}/${SCRIPT_FILE}"; then
-                DOWNLOAD_SUCCESS=true
-            fi
-        elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
-            # --no-cache, -O output file, -q quiet, --show-progress
-            if wget --no-cache --no-cookies -O "${TEMP_SCRIPT_FILE}" -q "${REMOTE_BASE}/${SCRIPT_FILE}"; then
-                DOWNLOAD_SUCCESS=true
-            fi
-        fi
-
-        if [[ "$DOWNLOAD_SUCCESS" == true ]]; then
-            if diff -u "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
-                print_success "- ${SCRIPT_FILE} is already up-to-date"
-                rm -f "${TEMP_SCRIPT_FILE}"
-                echo ""
-            else
-                echo -e "${LINE_COLOR}╭───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╮${NC}${CODE_COLOR}"
-                cat "${TEMP_SCRIPT_FILE}"
-                echo -e "${NC}${LINE_COLOR}╰────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
-                diff -u --color "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" || true
-                echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"; echo
-
-                if prompt_yes_no "→ Overwrite and run updated ${SCRIPT_FILE}?" "y"; then
-                    echo ""
-                    chmod +x "$TEMP_SCRIPT_FILE"
-                    mv -f "$TEMP_SCRIPT_FILE" "${BASH_SOURCE[0]}"
-                    export scriptUpdated=1
-                    exec "${BASH_SOURCE[0]}" "$@"
-                    exit 0
-                else
-                    rm -f "${TEMP_SCRIPT_FILE}"
-                    print_info "Running local unmodified copy..."
-                    echo ""
-                fi
-            fi
-        else
-            print_error "Download failed — skipping $SCRIPT_FILE"
-            rm -f "${TEMP_SCRIPT_FILE}"
-            print_info "Running local unmodified copy..."
-            echo ""
-        fi
-    fi
-fi
-
-# ============================================================================
-# Download Ollama Scripts Section
-# ============================================================================
-# This section downloads all Ollama management scripts from the remote repository.
-# For each script, it shows a diff if changes are detected and prompts for
-# confirmation before overwriting.
-
-print_info "Starting Ollama scripts download..."
-echo ""
-
-# Track statistics
-UPDATED_COUNT=0
-SKIPPED_COUNT=0
-FAILED_COUNT=0
-
-for fname in "${FILES[@]}"; do
-    tmp="$(mktemp)"                   # secure, race-free temp file
-
-    print_info "Checking ${fname}..."
-    echo "            ▶ Fetching ${REMOTE_BASE}/${fname}..."
-
-    DOWNLOAD_SUCCESS=false
     if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-        # -H header, -o file path, -f fail-on-HTTP-error, -s silent, -S show errors, -L follow redirects
-        if curl -H 'Cache-Control: no-cache, no-store' -o "${tmp}" -fsSL "${REMOTE_BASE}/${fname}"; then
-            DOWNLOAD_SUCCESS=true
+        http_status=$(curl -H 'Cache-Control: no-cache, no-store' -o "${output_file}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${script_file}" 2>/dev/null || echo "000")
+        if [[ "$http_status" == "200" ]]; then
+            # Validate that we got a script, not an error page
+            # Check first 10 lines for shebang to handle files with leading comments/blank lines
+            if head -n 10 "${output_file}" | grep -q "^#!/"; then
+                return 0
+            else
+                print_error "✖ Invalid content received (not a script)"
+                return 1
+            fi
+        elif [[ "$http_status" == "429" ]]; then
+            print_error "✖ Rate limited by GitHub (HTTP 429)"
+            return 1
+        elif [[ "$http_status" != "000" ]]; then
+            print_error "✖ HTTP ${http_status} error"
+            return 1
+        else
+            print_error "✖ Download failed"
+            return 1
         fi
     elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
-        # --no-cache, -O output file, -q quiet
-        if wget --no-cache --no-cookies -O "${tmp}" -q "${REMOTE_BASE}/${fname}"; then
-            DOWNLOAD_SUCCESS=true
-        fi
-    fi
-
-    if [[ "$DOWNLOAD_SUCCESS" != true ]]; then
-        print_error "Download failed — skipping $fname"
-        ((FAILED_COUNT++)) || true
-        rm -f "${tmp}"
-        echo ""
-        continue
-    fi
-
-    # Create file if it doesn't exist
-    if [[ ! -f "${fname}" ]]; then
-        touch "${fname}"
-    fi
-
-    if diff -u "${fname}" "${tmp}" > /dev/null 2>&1; then
-        print_success "${fname} is already up-to-date"
-        rm -f "${tmp}"
-        echo ""
-    else
-        echo ""
-        echo -e "${LINE_COLOR}╭────────────────────────────────────────────────── Δ detected in ${fname} ──────────────────────────────────────────────────╮${NC}"
-        diff -u --color "${fname}" "${tmp}" || true
-        echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${fname} ─────────────────────────────────────────────────────────╯${NC}"
-        echo ""
-
-        if prompt_yes_no "→ Overwrite local ${fname} with remote copy?" "y"; then
-            echo ""
-            chmod +x "${tmp}"
-            mv -f "${tmp}" "${fname}"
-            print_success "Replaced ${fname}"
-            ((UPDATED_COUNT++)) || true
+        if wget --no-cache --no-cookies -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null; then
+            # Validate that we got a script, not an error page
+            # Check first 10 lines for shebang to handle files with leading comments/blank lines
+            if head -n 10 "${output_file}" | grep -q "^#!/"; then
+                return 0
+            else
+                print_error "✖ Invalid content received (not a script)"
+                return 1
+            fi
         else
-            print_warning "Skipped ${fname}"
-            ((SKIPPED_COUNT++)) || true
-            rm -f "${tmp}"
+            print_error "✖ Download failed"
+            return 1
         fi
-        echo ""
     fi
-done
+
+    return 1
+}
 
 # ============================================================================
-# Summary Section
+# Self-Update Functionality
 # ============================================================================
-# Display final statistics of the download operation
 
-echo ""
-echo "============================================================================"
-print_info "Download Summary"
-echo "============================================================================"
-echo -e "${GREEN}Updated:${NC}  ${UPDATED_COUNT} file(s)"
-echo -e "${YELLOW}Skipped:${NC}  ${SKIPPED_COUNT} file(s)"
-echo -e "${RED}Failed:${NC}   ${FAILED_COUNT} file(s)"
-echo "============================================================================"
-echo ""
+# Detect available download command (curl or wget)
+# Sets global DOWNLOAD_CMD variable
+detect_download_cmd() {
+    if command -v curl &>/dev/null; then
+        DOWNLOAD_CMD="curl"
+        return 0
+    elif command -v wget &>/dev/null; then
+        DOWNLOAD_CMD="wget"
+        return 0
+    else
+        DOWNLOAD_CMD=""
+        # Display large error message if neither curl nor wget is available
+        echo ""
+        echo -e "            ${YELLOW}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "            ${YELLOW}║                                                                             ║${NC}"
+        echo -e "            ${YELLOW}║                        ⚠️   UPDATES NOT AVAILABLE  ⚠️                         ║${NC}"
+        echo -e "            ${YELLOW}║                                                                             ║${NC}"
+        echo -e "            ${YELLOW}║        Neither 'curl' nor 'wget' is installed on this system.               ║${NC}"
+        echo -e "            ${YELLOW}║        Self-updating functionality requires one of these tools.             ║${NC}"
+        echo -e "            ${YELLOW}║                                                                             ║${NC}"
+        echo -e "            ${YELLOW}║        To enable self-updating, please install one of the following:        ║${NC}"
+        echo -e "            ${YELLOW}║          • curl  (recommended)                                              ║${NC}"
+        echo -e "            ${YELLOW}║          • wget                                                             ║${NC}"
+        echo -e "            ${YELLOW}║                                                                             ║${NC}"
+        echo -e "            ${YELLOW}║        Installation commands:                                               ║${NC}"
+        echo -e "            ${YELLOW}║          macOS:    brew install curl                                        ║${NC}"
+        echo -e "            ${YELLOW}║          Debian:   apt install curl                                         ║${NC}"
+        echo -e "            ${YELLOW}║          RHEL:     yum install curl                                         ║${NC}"
+        echo -e "            ${YELLOW}║                                                                             ║${NC}"
+        echo -e "            ${YELLOW}║        Continuing with local version of the scripts...                      ║${NC}"
+        echo -e "            ${YELLOW}║                                                                             ║${NC}"
+        echo -e "            ${YELLOW}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        return 1
+    fi
+}
 
-if [[ $FAILED_COUNT -gt 0 ]]; then
-    exit 1
+# Check for updates to _download-ollama-scripts.sh itself
+# This function only updates the main script and will restart if updated
+self_update() {
+    local SCRIPT_FILE="_download-ollama-scripts.sh"
+    local LOCAL_SCRIPT="${BASH_SOURCE[0]}"
+    local TEMP_SCRIPT_FILE="$(mktemp)"
+
+    if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
+        rm -f "${TEMP_SCRIPT_FILE}"
+        echo ""
+        return 1
+    fi
+
+    # Compare and handle differences
+    if diff -u "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
+        print_success "- ${SCRIPT_FILE} is already up-to-date"
+        rm -f "${TEMP_SCRIPT_FILE}"
+        echo ""
+        return 0
+    fi
+
+    # Show diff
+    echo ""
+    echo -e "${LINE_COLOR}╭────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
+    diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" || true
+    echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
+    echo ""
+
+    if prompt_yes_no "→ Overwrite and restart with updated ${SCRIPT_FILE}?" "y"; then
+        echo ""
+        chmod +x "${TEMP_SCRIPT_FILE}"
+        mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"
+        print_success "✓ Updated ${SCRIPT_FILE}"
+        echo ""
+        print_info "Restarting with updated version..."
+        echo ""
+        export scriptUpdated=1
+        exec "${LOCAL_SCRIPT}" "$@"
+        exit 0
+    else
+        print_warning "Skipped ${SCRIPT_FILE} update"
+        rm -f "${TEMP_SCRIPT_FILE}"
+    fi
+    echo ""
+}
+
+# Update all script files (managed scripts)
+# Downloads each script and prompts user to replace if different
+# Continues processing all scripts even if some downloads fail
+# Returns: 1 if any downloads failed, 0 otherwise
+update_modules() {
+    local uptodate_count=0
+    local updated_count=0
+    local skipped_count=0
+    local failed_count=0
+
+    print_info "Checking for Ollama script updates..."
+    echo ""
+
+    # Check each script for updates
+    while IFS= read -r script_path; do
+        local SCRIPT_FILE="$script_path"
+        local LOCAL_SCRIPT="${SCRIPT_FILE}"
+        local TEMP_SCRIPT_FILE="$(mktemp)"
+
+        if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
+            echo "            (skipping ${SCRIPT_FILE})"
+            ((failed_count++)) || true
+            rm -f "${TEMP_SCRIPT_FILE}"
+            echo ""
+            continue
+        fi
+
+        # Create file if it doesn't exist
+        if [[ ! -f "${LOCAL_SCRIPT}" ]]; then
+            touch "${LOCAL_SCRIPT}"
+        fi
+
+        # Compare and handle differences
+        if diff -u "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
+            print_success "- ${SCRIPT_FILE} is already up-to-date"
+            ((uptodate_count++)) || true
+            rm -f "${TEMP_SCRIPT_FILE}"
+            echo ""
+        else
+            echo ""
+            echo -e "${LINE_COLOR}╭────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
+            diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" || true
+            echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
+            echo ""
+
+            if prompt_yes_no "→ Overwrite local ${SCRIPT_FILE} with remote copy?" "y"; then
+                echo ""
+                chmod +x "${TEMP_SCRIPT_FILE}"
+                mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"
+                print_success "✓ Replaced ${SCRIPT_FILE}"
+                ((updated_count++)) || true
+            else
+                print_warning "Skipped ${SCRIPT_FILE}"
+                ((skipped_count++)) || true
+                rm -f "${TEMP_SCRIPT_FILE}"
+            fi
+            echo ""
+        fi
+    done < <(get_script_list)
+
+    # Display final statistics
+    echo ""
+    echo "============================================================================"
+    print_info "Ollama Script Update Summary"
+    echo "============================================================================"
+    echo -e "${BLUE}Up-to-date:${NC}  ${uptodate_count} file(s)"
+    echo -e "${GREEN}Updated:${NC}     ${updated_count} file(s)"
+    echo -e "${YELLOW}Skipped:${NC}     ${skipped_count} file(s)"
+    echo -e "${RED}Failed:${NC}      ${failed_count} file(s)"
+    echo "============================================================================"
+    echo ""
+
+    if [[ $failed_count -gt 0 ]]; then
+        return 1
+    fi
+}
+
+# ============================================================================
+# Main Orchestration
+# ============================================================================
+
+# Detect download command (curl or wget) for update functionality
+if detect_download_cmd; then
+    # Only run self-update if not already updated in this session
+    if [[ ${scriptUpdated:-0} -eq 0 ]]; then
+        self_update "$@"
+    fi
+
+    # Always check for module updates (not skipped by scriptUpdated) if download cmd available
+    update_modules
 fi
