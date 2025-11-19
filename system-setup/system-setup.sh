@@ -40,6 +40,57 @@ get_script_list() {
     echo "modules/system-configuration-issue.sh"
 }
 
+# Download a script file from the remote repository
+# Args: $1 = script filename (relative path), $2 = output file path
+# Returns: 0 on success, 1 on failure
+download_script() {
+    local script_file="$1"
+    local output_file="$2"
+    local http_status=""
+
+    print_info "Fetching ${script_file}..."
+    echo "          ▶ ${REMOTE_BASE}/${script_file}..."
+
+    if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
+        http_status=$(curl -H 'Cache-Control: no-cache, no-store' -o "${output_file}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${script_file}" 2>/dev/null || echo "000")
+        if [[ "$http_status" == "200" ]]; then
+            # Validate that we got a script, not an error page
+            # Check first 10 lines for shebang to handle files with leading comments/blank lines
+            if head -n 10 "${output_file}" | grep -q "^#!/"; then
+                return 0
+            else
+                print_error "✖ Invalid content received (not a script)"
+                return 1
+            fi
+        elif [[ "$http_status" == "429" ]]; then
+            print_error "✖ Rate limited by GitHub (HTTP 429)"
+            return 1
+        elif [[ "$http_status" != "000" ]]; then
+            print_error "✖ HTTP ${http_status} error"
+            return 1
+        else
+            print_error "✖ Download failed"
+            return 1
+        fi
+    elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
+        if wget --no-cache --no-cookies -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null; then
+            # Validate that we got a script, not an error page
+            # Check first 10 lines for shebang to handle files with leading comments/blank lines
+            if head -n 10 "${output_file}" | grep -q "^#!/"; then
+                return 0
+            else
+                print_error "✖ Invalid content received (not a script)"
+                return 1
+            fi
+        else
+            print_error "✖ Download failed"
+            return 1
+        fi
+    fi
+
+    return 1
+}
+
 # ============================================================================
 # Self-Update Functionality
 # ============================================================================
@@ -88,39 +139,7 @@ self_update() {
     local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
     local TEMP_SCRIPT_FILE="$(mktemp)"
 
-    print_info "Checking for ${SCRIPT_FILE} updates..."
-    echo "          ▶ Fetching ${REMOTE_BASE}/${SCRIPT_FILE}..."
-
-    local DOWNLOAD_SUCCESS=false
-    local HTTP_STATUS=""
-
-    if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-        HTTP_STATUS=$(curl -H 'Cache-Control: no-cache, no-store' -o "${TEMP_SCRIPT_FILE}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${SCRIPT_FILE}" 2>/dev/null || echo "000")
-        if [[ "$HTTP_STATUS" == "200" ]]; then
-            # Validate that we got a script, not an error page
-            if head -n 1 "${TEMP_SCRIPT_FILE}" | grep -q "^#!/"; then
-                DOWNLOAD_SUCCESS=true
-            else
-                print_error "Invalid content received (not a script)"
-            fi
-        elif [[ "$HTTP_STATUS" == "429" ]]; then
-            print_error "Rate limited by GitHub (HTTP 429)"
-        elif [[ "$HTTP_STATUS" != "000" ]]; then
-            print_error "HTTP ${HTTP_STATUS} error"
-        fi
-    elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
-        if wget --no-cache --no-cookies -O "${TEMP_SCRIPT_FILE}" -q "${REMOTE_BASE}/${SCRIPT_FILE}" 2>/dev/null; then
-            # Validate that we got a script, not an error page
-            if head -n 1 "${TEMP_SCRIPT_FILE}" | grep -q "^#!/"; then
-                DOWNLOAD_SUCCESS=true
-            else
-                print_error "Invalid content received (not a script)"
-            fi
-        fi
-    fi
-
-    if [[ "$DOWNLOAD_SUCCESS" != true ]]; then
-        print_error "Download failed for ${SCRIPT_FILE}"
+    if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
         rm -f "${TEMP_SCRIPT_FILE}"
         echo ""
         return 1
@@ -128,7 +147,7 @@ self_update() {
 
     # Compare and handle differences
     if diff -u "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
-        print_success "${SCRIPT_FILE} is already up-to-date"
+        print_success "- ${SCRIPT_FILE} is already up-to-date"
         rm -f "${TEMP_SCRIPT_FILE}"
         echo ""
         return 0
@@ -145,7 +164,7 @@ self_update() {
         echo ""
         chmod +x "${TEMP_SCRIPT_FILE}"
         mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"
-        print_success "Updated ${SCRIPT_FILE}"
+        print_success "✓ Updated ${SCRIPT_FILE}"
         echo ""
         print_info "Restarting with updated version..."
         echo ""
@@ -160,6 +179,9 @@ self_update() {
 }
 
 # Update all module scripts (utils.sh and modules/*)
+# Downloads each module script and prompts user to replace if different
+# Continues processing all modules even if some downloads fail
+# Returns: 1 if any downloads failed, 0 otherwise
 update_modules() {
     local updated_count=0
     local skipped_count=0
@@ -175,42 +197,11 @@ update_modules() {
         local TEMP_SCRIPT_FILE="$(mktemp)"
 
         # Ensure the local directory exists
-        local script_dir=$(dirname "$LOCAL_SCRIPT")
+        local script_dir="$(dirname "$LOCAL_SCRIPT")"
         mkdir -p "$script_dir"
 
-        print_info "Checking ${SCRIPT_FILE}..."
-        echo "          ▶ Fetching ${REMOTE_BASE}/${SCRIPT_FILE}..."
-
-        local DOWNLOAD_SUCCESS=false
-        local HTTP_STATUS=""
-
-        if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-            HTTP_STATUS=$(curl -H 'Cache-Control: no-cache, no-store' -o "${TEMP_SCRIPT_FILE}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${SCRIPT_FILE}" 2>/dev/null || echo "000")
-            if [[ "$HTTP_STATUS" == "200" ]]; then
-                # Validate that we got a script, not an error page
-                if head -n 1 "${TEMP_SCRIPT_FILE}" | grep -q "^#!/"; then
-                    DOWNLOAD_SUCCESS=true
-                else
-                    print_error "Invalid content received (not a script) — skipping ${SCRIPT_FILE}"
-                fi
-            elif [[ "$HTTP_STATUS" == "429" ]]; then
-                print_error "✖ Rate limited by GitHub (HTTP 429) — skipping ${SCRIPT_FILE}"
-            elif [[ "$HTTP_STATUS" != "000" ]]; then
-                print_error "✖ HTTP ${HTTP_STATUS} error — skipping ${SCRIPT_FILE}"
-            fi
-        elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
-            if wget --no-cache --no-cookies -O "${TEMP_SCRIPT_FILE}" -q "${REMOTE_BASE}/${SCRIPT_FILE}" 2>/dev/null; then
-                # Validate that we got a script, not an error page
-                if head -n 1 "${TEMP_SCRIPT_FILE}" | grep -q "^#!/"; then
-                    DOWNLOAD_SUCCESS=true
-                else
-                    print_error "✖ Invalid content received (not a script) — skipping ${SCRIPT_FILE}"
-                fi
-            fi
-        fi
-
-        if [[ "$DOWNLOAD_SUCCESS" != true ]]; then
-            print_error "✖ Download failed — skipping ${SCRIPT_FILE}"
+        if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
+            echo "          (skipping ${SCRIPT_FILE})"
             ((failed_count++)) || true
             rm -f "${TEMP_SCRIPT_FILE}"
             echo ""
@@ -224,7 +215,7 @@ update_modules() {
 
         # Compare and handle differences
         if diff -u "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
-            print_success "${SCRIPT_FILE} is already up-to-date"
+            print_success "- ${SCRIPT_FILE} is already up-to-date"
             rm -f "${TEMP_SCRIPT_FILE}"
             echo ""
         else
@@ -238,7 +229,7 @@ update_modules() {
                 echo ""
                 chmod +x "${TEMP_SCRIPT_FILE}"
                 mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"
-                print_success "Replaced ${SCRIPT_FILE}"
+                print_success "✓ Replaced ${SCRIPT_FILE}"
                 ((updated_count++)) || true
             else
                 print_warning "Skipped ${SCRIPT_FILE}"
