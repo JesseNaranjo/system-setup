@@ -151,7 +151,7 @@ configure_swap() {
 # Main Execution
 # ============================================================================
 
-main() {
+main_configure_swap() {
     # Detect OS if not already detected
     if [[ -z "$DETECTED_OS" ]]; then
         detect_os
@@ -167,5 +167,5 @@ main() {
 
 # Run main function if script is executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
+    main_configure_swap "$@"
 fi

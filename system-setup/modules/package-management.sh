@@ -133,7 +133,7 @@ check_and_install_packages() {
 
     # If there are packages to install and we have privileges, call the installer
     if [[ ${#packages_to_install[@]} -gt 0 ]]; then
-        if [[ "$can_install" == true ]] &&  ! install_packages "${packages_to_install[@]}"; then
+        if [[ "$can_install" == true ]] && ! install_packages "${packages_to_install[@]}"; then
             # Even if installation fails, we return 0 to allow configuration of already-installed packages
             print_error "Package installation failed or was cancelled. Continuing with configuration for any packages that are already present."
         fi
@@ -151,7 +151,7 @@ check_and_install_packages() {
 # Main Execution
 # ============================================================================
 
-main() {
+main_manage_packages() {
     # Detect OS if not already detected
     if [[ -z "$DETECTED_OS" ]]; then
         detect_os
@@ -162,5 +162,5 @@ main() {
 
 # Run main function if script is executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
+    main_manage_packages "$@"
 fi

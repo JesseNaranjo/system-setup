@@ -475,7 +475,7 @@ configure_shell() {
 # Main Execution
 # ============================================================================
 
-main() {
+main_configure_system() {
     local scope="$1"
 
     # Validate scope parameter is provided
@@ -517,5 +517,5 @@ main() {
 
 # Run main function if script is executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
+    main_configure_system "$@"
 fi

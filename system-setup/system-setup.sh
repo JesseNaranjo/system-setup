@@ -295,20 +295,23 @@ main() {
 
         # Offer to configure static IP for containers
         echo ""
-        "${SCRIPT_DIR}/modules/configure-container-static-ip.sh"
+        source "${SCRIPT_DIR}/modules/configure-container-static-ip.sh"
+        main_configure_container_static_ip
     fi
     echo ""
 
     # Step 1: Modernize APT sources (Linux only)
     if [[ "$DETECTED_OS" == "linux" ]]; then
-        "${SCRIPT_DIR}/modules/modernize-apt-sources.sh"
+        source "${SCRIPT_DIR}/modules/modernize-apt-sources.sh"
+        main_modernize_apt_sources
         echo ""
     fi
 
     # Step 2: Package Management
     print_info "Step 1: Package Management"
     print_info "---------------------------"
-    if ! "${SCRIPT_DIR}/modules/package-management.sh"; then
+    source "${SCRIPT_DIR}/modules/package-management.sh"
+    if ! main_manage_packages; then
         print_error "Package management failed. Continuing with configuration for installed packages..."
     fi
     echo ""
@@ -371,12 +374,14 @@ main() {
     echo ""
 
     # Step 3: System Configuration (nano, screen, shell)
-    "${SCRIPT_DIR}/modules/system-configuration.sh" "$scope"
+    source "${SCRIPT_DIR}/modules/system-configuration.sh"
+    main_configure_system "$scope"
     echo ""
 
     # Step 4: Swap configuration (system scope only, Linux only)
     if [[ "$scope" == "system" ]]; then
-        "${SCRIPT_DIR}/modules/system-configuration-swap.sh"
+        source "${SCRIPT_DIR}/modules/system-configuration-swap.sh"
+        main_configure_swap
         echo ""
     fi
 
@@ -386,7 +391,8 @@ main() {
     # Step 6: OpenSSH Server configuration (system scope only, Linux only)
     if [[ "$scope" == "system" ]]; then
         if [[ "$OPENSSH_SERVER_INSTALLED" == true ]]; then
-            "${SCRIPT_DIR}/modules/system-configuration-openssh-server.sh"
+            source "${SCRIPT_DIR}/modules/system-configuration-openssh-server.sh"
+            main_configure_openssh_server
         else
             print_info "Skipping OpenSSH Server configuration (not installed)"
         fi
@@ -395,7 +401,8 @@ main() {
 
     # Step 7: /etc/issue configuration (system scope only, Linux only)
     if [[ "$scope" == "system" ]]; then
-        "${SCRIPT_DIR}/modules/system-configuration-issue.sh"
+        source "${SCRIPT_DIR}/modules/system-configuration-issue.sh"
+        main_configure_issue
         echo ""
     fi
 

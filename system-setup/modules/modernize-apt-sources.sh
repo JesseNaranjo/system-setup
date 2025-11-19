@@ -168,7 +168,7 @@ modernize_apt_sources() {
 # Main Execution
 # ============================================================================
 
-main() {
+main_modernize_apt_sources() {
     # Detect OS if not already detected
     if [[ -z "$DETECTED_OS" ]]; then
         detect_os
@@ -179,5 +179,5 @@ main() {
 
 # Run main function if script is executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
+    main_modernize_apt_sources "$@"
 fi
