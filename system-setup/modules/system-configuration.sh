@@ -19,22 +19,27 @@ source "${SCRIPT_DIR}/utils.sh"
 # Nano Configuration
 # ============================================================================
 
+get_nano_config_file() {
+    local scope="$1"  # "user" or "system"
+
+    if [[ "$scope" == "system" ]]; then
+        if [[ "$DETECTED_OS" == "macos" ]]; then
+            echo "/opt/homebrew/etc/nanorc"
+        else
+            echo "/etc/nanorc"
+        fi
+    else
+        echo "$HOME/.nanorc"
+    fi
+}
+
 # Configure nano
 configure_nano() {
     local scope="$1"  # "user" or "system"
 
     print_info "Configuring nano..."
 
-    local config_file
-    if [[ "$scope" == "system" ]]; then
-        if [[ "$DETECTED_OS" == "macos" ]]; then
-            config_file="/opt/homebrew/etc/nanorc"
-        else
-            config_file="/etc/nanorc"
-        fi
-    else
-        config_file="$HOME/.nanorc"
-    fi
+    local config_file=$(get_nano_config_file "$scope")
 
     # Create config file if it doesn't exist
     if [[ ! -f "$config_file" ]]; then
@@ -90,18 +95,23 @@ configure_nano() {
 # Screen Configuration
 # ============================================================================
 
+get_screen_config_file() {
+    local scope="$1"  # "user" or "system"
+
+    if [[ "$scope" == "system" ]]; then
+        echo "/etc/screenrc"
+    else
+        echo "$HOME/.screenrc"
+    fi
+}
+
 # Configure GNU screen
 configure_screen() {
     local scope="$1"  # "user" or "system"
 
     print_info "Configuring GNU screen..."
 
-    local config_file
-    if [[ "$scope" == "system" ]]; then
-        config_file="/etc/screenrc"
-    else
-        config_file="$HOME/.screenrc"
-    fi
+    local config_file=$(get_screen_config_file "$scope")
 
     # Create config file if it doesn't exist
     if [[ ! -f "$config_file" ]]; then
@@ -476,7 +486,7 @@ configure_shell() {
 # ============================================================================
 
 main_configure_system() {
-    local scope="$1"
+    local scope="${1:-}"
 
     # Validate scope parameter is provided
     if [[ -z "$scope" ]]; then
@@ -501,13 +511,23 @@ main_configure_system() {
         detect_os
     fi
 
+    # Verify package manager availability
+    if verify_package_manager; then
+        # Identify all installed special packages
+        while IFS=: read -r display_name package; do
+            if is_package_installed "$package"; then
+                track_special_packages "$package"
+            fi
+        done < <(get_package_list)
+    fi
+
     # Configure components based on what's installed
-    if [[ "$NANO_INSTALLED" == true ]]; then
+    if [[ "$NANO_INSTALLED" == true ]] || [[ -f $(get_nano_config_file "$scope") ]]; then
         configure_nano "$scope"
         echo ""
     fi
 
-    if [[ "$SCREEN_INSTALLED" == true ]]; then
+    if [[ "$SCREEN_INSTALLED" == true ]] || [[ -f $(get_screen_config_file "$scope") ]]; then
         configure_screen "$scope"
         echo ""
     fi

@@ -19,31 +19,6 @@ source "${SCRIPT_DIR}/utils.sh"
 # Package Management Functions
 # ============================================================================
 
-# Get package definitions for the given OS
-get_package_list() {
-    if [[ "$DETECTED_OS" == "macos" ]]; then
-        # macOS packages (brew)
-        echo "7-zip:sevenzip"
-        echo "ca-certificates:ca-certificates"
-        echo "Git:git"
-        echo "htop:htop"
-        echo "Nano Editor:nano"
-        echo "Ollama:ollama"
-        echo "Screen (GNU):screen"
-    else
-        # Linux packages (apt)
-        echo "7-zip:7zip"
-        echo "aptitude:aptitude"
-        echo "ca-certificates:ca-certificates"
-        echo "cURL:curl"
-        echo "Git:git"
-        echo "htop:htop"
-        echo "Nano Editor:nano"
-        echo "OpenSSH Server:openssh-server"
-        echo "Screen (GNU):screen"
-    fi
-}
-
 # Install packages based on OS
 install_packages() {
     local packages=("$@")

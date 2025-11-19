@@ -212,6 +212,31 @@ needs_elevation() {
 # Package Management Functions
 # ============================================================================
 
+# Get package definitions for the given OS
+get_package_list() {
+    if [[ "$DETECTED_OS" == "macos" ]]; then
+        # macOS packages (brew)
+        echo "7-zip:sevenzip"
+        echo "ca-certificates:ca-certificates"
+        echo "Git:git"
+        echo "htop:htop"
+        echo "Nano Editor:nano"
+        echo "Ollama:ollama"
+        echo "Screen (GNU):screen"
+    else
+        # Linux packages (apt)
+        echo "7-zip:7zip"
+        echo "aptitude:aptitude"
+        echo "ca-certificates:ca-certificates"
+        echo "cURL:curl"
+        echo "Git:git"
+        echo "htop:htop"
+        echo "Nano Editor:nano"
+        echo "OpenSSH Server:openssh-server"
+        echo "Screen (GNU):screen"
+    fi
+}
+
 # Check if a package is installed (unified for both macOS and Linux)
 is_package_installed() {
     local package="$1"
