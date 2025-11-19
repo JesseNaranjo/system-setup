@@ -3,6 +3,12 @@
 # utils.sh - Common utilities and variables for system-setup scripts
 # This script provides shared functionality used across all system-setup modules
 
+# Prevent multiple sourcing
+if [[ -n "${UTILS_SH_LOADED:-}" ]]; then
+    return 0
+fi
+readonly UTILS_SH_LOADED=true
+
 set -euo pipefail
 
 # ============================================================================
