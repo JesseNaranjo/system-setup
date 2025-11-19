@@ -183,6 +183,7 @@ self_update() {
 # Continues processing all modules even if some downloads fail
 # Returns: 1 if any downloads failed, 0 otherwise
 update_modules() {
+    local uptodate_count=0
     local updated_count=0
     local skipped_count=0
     local failed_count=0
@@ -216,6 +217,7 @@ update_modules() {
         # Compare and handle differences
         if diff -u "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
             print_success "- ${SCRIPT_FILE} is already up-to-date"
+            ((uptodate_count++)) || true
             rm -f "${TEMP_SCRIPT_FILE}"
             echo ""
         else
@@ -245,9 +247,10 @@ update_modules() {
     echo "============================================================================"
     print_info "Module Update Summary"
     echo "============================================================================"
-    echo -e "${GREEN}Updated:${NC}  ${updated_count} file(s)"
-    echo -e "${YELLOW}Skipped:${NC}  ${skipped_count} file(s)"
-    echo -e "${RED}Failed:${NC}   ${failed_count} file(s)"
+    echo -e "${BLUE}Up-to-date:${NC}  ${uptodate_count} file(s)"
+    echo -e "${GREEN}Updated:${NC}     ${updated_count} file(s)"
+    echo -e "${YELLOW}Skipped:${NC}     ${skipped_count} file(s)"
+    echo -e "${RED}Failed:${NC}      ${failed_count} file(s)"
     echo "============================================================================"
     echo ""
 
