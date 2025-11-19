@@ -57,13 +57,12 @@ prompt_yes_no() {
 }
 
 if [[ ${scriptUpdated:-0} -eq 0 ]]; then
-    REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main"
-    SCRIPT_FILE="system-setup.sh"
-    TEMP_SCRIPT_FILE="$(mktemp)"
-    trap 'rm -f "${TEMP_SCRIPT_FILE}"' EXIT     # ensure cleanup on script exit
+    local REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main"
+    local SCRIPT_FILE="system-setup.sh"
+    local TEMP_SCRIPT_FILE="$(mktemp)"
 
     # Check for curl or wget availability
-    DOWNLOAD_CMD=""
+    local DOWNLOAD_CMD=""
     if command -v curl &>/dev/null; then
         DOWNLOAD_CMD="curl"
     elif command -v wget &>/dev/null; then
@@ -97,7 +96,7 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
     if [[ -n "$DOWNLOAD_CMD" ]]; then
         echo "▶ Fetching ${REMOTE_BASE}/${SCRIPT_FILE}..."
 
-        DOWNLOAD_SUCCESS=false
+        local DOWNLOAD_SUCCESS=false
         if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
             # -H header, -o file path, -f fail-on-HTTP-error, -s silent, -S show errors, -L follow redirects
             if curl -H 'Cache-Control: no-cache, no-store' -o "${TEMP_SCRIPT_FILE}" -fsSL "${REMOTE_BASE}/${SCRIPT_FILE}"; then
@@ -735,7 +734,7 @@ update_config_line() {
             return 0
         else
             local current_value=$(grep -E "^[[:space:]]*${setting_pattern}" "$file" | head -n 1)
-            print_warning "✗ $description has different value: '$current_value' in $file"
+            print_warning "✖ $description has different value: '$current_value' in $file"
             backup_file "$file"
             add_change_header "$file" "$config_type"
 
@@ -1988,17 +1987,17 @@ main() {
     if [[ "$NANO_INSTALLED" == true ]]; then
         echo "          ✓ nano editor settings"
     else
-        echo "          ✗ nano editor (not installed, will be skipped)"
+        echo "          ✖ nano editor (not installed, will be skipped)"
     fi
     if [[ "$SCREEN_INSTALLED" == true ]]; then
         echo "          ✓ GNU screen settings"
     else
-        echo "          ✗ GNU screen (not installed, will be skipped)"
+        echo "          ✖ GNU screen (not installed, will be skipped)"
     fi
     if [[ "$OPENSSH_SERVER_INSTALLED" == true ]]; then
         echo "          ✓ OpenSSH Server (socket-based activation option)"
     else
-        echo "          ✗ OpenSSH Server (not installed, will be skipped)"
+        echo "          ✖ OpenSSH Server (not installed, will be skipped)"
     fi
     echo "          ✓ Shell aliases and configurations"
     echo ""

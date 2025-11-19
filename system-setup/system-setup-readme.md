@@ -169,7 +169,7 @@ Example output:
 ```
 [SUCCESS] - softwrap setting already configured correctly
 [   INFO] + Adding linenumbers setting to ~/.nanorc
-[WARNING] ✗ tabsize setting has different value: 'set tabsize 8' in ~/.nanorc
+[WARNING] ✖ tabsize setting has different value: 'set tabsize 8' in ~/.nanorc
 [SUCCESS] ✓ tab size setting updated in ~/.nanorc
 ```
 
