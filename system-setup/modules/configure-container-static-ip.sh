@@ -62,15 +62,15 @@ configure_container_static_ip() {
         return 0
     fi
 
-    echo "          - Primary network interface: $primary_interface"
+    echo "            - Primary network interface: $primary_interface"
 
     # Get all current IP addresses
     if command -v ip &>/dev/null; then
         local ip_addresses=$(ip -4 addr show "$primary_interface" 2>/dev/null | grep "inet " | awk '{print $2}')
         if [[ -n "$ip_addresses" ]]; then
-            echo "          - Current IP address(es):"
+            echo "            - Current IP address(es):"
             while IFS= read -r ip_addr; do
-                echo "            • $ip_addr"
+                echo "              • $ip_addr"
             done <<< "$ip_addresses"
         else
             print_warning "- No IP address currently assigned"
@@ -90,9 +90,9 @@ configure_container_static_ip() {
         # Show configured static IPs
         local static_ips=$(grep -A 1 "^\[Address\]" "$network_file" | grep "^Address=" | cut -d= -f2)
         if [[ -n "$static_ips" ]]; then
-            echo "          - Configured static IP(s):"
+            echo "            - Configured static IP(s):"
             while IFS= read -r ip; do
-                echo "            • $ip"
+                echo "              • $ip"
             done <<< "$static_ips"
         fi
         echo ""
@@ -101,12 +101,12 @@ configure_container_static_ip() {
 
     echo ""
     print_info "Container static IP configuration:"
-    echo "          - This will add a secondary static IP address to $primary_interface"
-    echo "          - DHCP will remain enabled for the primary IP"
-    echo "          - Uses systemd-networkd configuration"
+    echo "            - This will add a secondary static IP address to $primary_interface"
+    echo "            - DHCP will remain enabled for the primary IP"
+    echo "            - Uses systemd-networkd configuration"
     echo ""
 
-    if ! prompt_yes_no "          Would you like to configure a static IP address?" "y"; then
+    if ! prompt_yes_no "            Would you like to configure a static IP address?" "y"; then
         print_info "Skipping static IP configuration"
         return 0
     fi
@@ -118,7 +118,7 @@ configure_container_static_ip() {
     local static_prefix=""
 
     while true; do
-        read -p "          Enter static IP in CIDR notation (e.g., 192.168.1.100/24, defaults to /24): " -r user_input </dev/tty
+        read -p "            Enter static IP in CIDR notation (e.g., 192.168.1.100/24, defaults to /24): " -r user_input </dev/tty
 
         # Check if input contains a slash (CIDR notation)
         if [[ "$user_input" =~ ^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})(/([0-9]+))?$ ]]; then
@@ -191,7 +191,7 @@ EOF
         # Show new IP configuration
         echo ""
         print_info "Current IP addresses on $primary_interface:"
-        ip -4 addr show "$primary_interface" 2>/dev/null | grep "inet " | awk '{print "          - " $2}' || true
+        ip -4 addr show "$primary_interface" 2>/dev/null | grep "inet " | awk '{print "            - " $2}' || true
     else
         print_warning "Could not restart systemd-networkd (may require manual restart)"
         print_info "To apply changes manually, run: systemctl restart systemd-networkd"

@@ -73,7 +73,7 @@ for lxcName in "${RUNNING[@]}"; do
     if lxc-stop --name "${lxcName}"; then
         print_success "✓ Container stopped: ${lxcName}"
     else
-        print_error "✗ Failed to stop container: ${lxcName}"
+        print_error "✖ Failed to stop container: ${lxcName}"
     fi
     sleep 1
 

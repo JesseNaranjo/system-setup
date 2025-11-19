@@ -81,11 +81,11 @@ configure_ssh_socket() {
 
     echo ""
     print_info "Socket-based activation (ssh.socket) vs Service-based (ssh.service):"
-    echo "          • ssh.socket: Starts SSH daemon on-demand when connections arrive (saves resources)"
-    echo "          • ssh.service: Keeps SSH daemon running constantly (traditional approach)"
+    echo "            • ssh.socket: Starts SSH daemon on-demand when connections arrive (saves resources)"
+    echo "            • ssh.service: Keeps SSH daemon running constantly (traditional approach)"
     echo ""
 
-    if ! prompt_yes_no "          Would you like to configure and enable ssh.socket?" "y"; then
+    if ! prompt_yes_no "            Would you like to configure and enable ssh.socket?" "y"; then
         print_info "Keeping current SSH configuration (no changes made)"
         return 0
     fi

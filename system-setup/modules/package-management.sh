@@ -101,7 +101,7 @@ check_and_install_packages() {
         else
             print_warning "$display_name is not installed"
             if [[ "$can_install" == true ]]; then
-                if prompt_yes_no "          - Would you like to install $display_name?" "n"; then
+                if prompt_yes_no "            - Would you like to install $display_name?" "n"; then
                     packages_to_install+=("$package")
                     track_special_packages "$package"
                 fi

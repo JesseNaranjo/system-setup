@@ -127,7 +127,7 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
     # Proceed with self-update if a download command is available
     if [[ -n "$DOWNLOAD_CMD" ]]; then
         print_info "Checking for updates to ${SCRIPT_FILE}..."
-        echo "          ▶ Fetching ${REMOTE_BASE}/${SCRIPT_FILE}..."
+        echo "            ▶ Fetching ${REMOTE_BASE}/${SCRIPT_FILE}..."
 
         DOWNLOAD_SUCCESS=false
         if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
@@ -192,10 +192,10 @@ SKIPPED_COUNT=0
 FAILED_COUNT=0
 
 for fname in "${FILES[@]}"; do
-    tmp="$(mktemp)"                 # secure, race-free temp file
+    tmp="$(mktemp)"                   # secure, race-free temp file
 
     print_info "Checking ${fname}..."
-    echo "          ▶ Fetching ${REMOTE_BASE}/${fname}..."
+    echo "            ▶ Fetching ${REMOTE_BASE}/${fname}..."
 
     DOWNLOAD_SUCCESS=false
     if [[ "$DOWNLOAD_CMD" == "curl" ]]; then

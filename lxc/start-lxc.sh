@@ -78,7 +78,7 @@ for lxcName in "$@"; do
     if systemctl --user start "lxc-bg-start@${lxcName}.service"; then
         print_success "✓ Service and Container started: ${lxcName}"
     else
-        print_error "✗ Failed to start service/container: ${lxcName}"
+        print_error "✖ Failed to start service/container: ${lxcName}"
     fi
     sleep 1
 done
@@ -91,7 +91,7 @@ if [[ $# -eq 1 ]]; then
     print_info "Container started. Attaching in:"
     x=3
     while [ $x -gt 0 ]; do
-        echo "          $x..."
+        echo "            $x..."
         sleep 0.75
         x=$((x - 1))
     done

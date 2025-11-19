@@ -186,8 +186,8 @@ configure_issue_network() {
     fi
 
     print_info "Network interface changes detected. Updating $issue_file..."
-    echo "          - Displayed: $existing_ifaces"
-    echo "          - Current:  $current_ifaces"
+    echo "            - Displayed: $existing_ifaces"
+    echo "            - Current:  $current_ifaces"
 
     # Backup the file before making changes
     backup_file "$issue_file"

@@ -45,27 +45,27 @@ RUNNING_IN_CONTAINER=false
 
 # Print colored output
 print_backup() {
-    echo -e "${GRAY}[ BACKUP] $1${NC}"
+    echo -e "${GRAY}[ BACKUP  ] $1${NC}"
 }
 
 print_debug() {
-    echo -e "${MAGENTA}[  DEBUG] $1${NC}"
+    echo -e "${MAGENTA}[ DEBUG   ] $1${NC}"
 }
 
 print_error() {
-    echo -e "${RED}[  ERROR]${NC} $1"
+    echo -e "${RED}[ ERROR   ]${NC} $1"
 }
 
 print_info() {
-    echo -e "${BLUE}[   INFO]${NC} $1"
+    echo -e "${BLUE}[ INFO    ]${NC} $1"
 }
 
 print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}[ SUCCESS ]${NC} $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${YELLOW}[ WARNING ]${NC} $1"
 }
 
 # ============================================================================
@@ -542,7 +542,7 @@ print_summary() {
     if [[ ${#BACKED_UP_FILES[@]} -gt 0 ]]; then
         print_success "${GREEN}Files Modified:${NC}"
         for file in "${BACKED_UP_FILES[@]+"${BACKED_UP_FILES[@]}"}"; do
-            echo "          - $file"
+            echo "            - $file"
         done
         echo ""
     fi
@@ -550,7 +550,7 @@ print_summary() {
     if [[ ${#CREATED_BACKUP_FILES[@]} -gt 0 ]]; then
         print_backup "Backup Files Created:"
         for file in "${CREATED_BACKUP_FILES[@]+"${CREATED_BACKUP_FILES[@]}"}"; do
-            echo "          - $file"
+            echo "            - $file"
         done
         echo ""
     fi

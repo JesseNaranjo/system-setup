@@ -49,11 +49,11 @@ configure_swap() {
     print_info "- Swap is currently disabled"
     echo ""
     print_info "Recommended swap sizes:"
-    echo "          • ≤2 GB RAM: 2x RAM"
-    echo "          • >2 GB RAM: 1.5x RAM"
+    echo "            • ≤2 GB RAM: 2x RAM"
+    echo "            • >2 GB RAM: 1.5x RAM"
     echo ""
 
-    if ! prompt_yes_no "          Would you like to set up swap?" "n"; then
+    if ! prompt_yes_no "            Would you like to set up swap?" "n"; then
         print_info "- Keeping swap disabled (no changes made)"
         return 0
     fi

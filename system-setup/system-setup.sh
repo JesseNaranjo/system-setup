@@ -49,7 +49,7 @@ download_script() {
     local http_status=""
 
     print_info "Fetching ${script_file}..."
-    echo "          ▶ ${REMOTE_BASE}/${script_file}..."
+    echo "            ▶ ${REMOTE_BASE}/${script_file}..."
 
     if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
         http_status=$(curl -H 'Cache-Control: no-cache, no-store' -o "${output_file}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${script_file}" 2>/dev/null || echo "000")
@@ -202,7 +202,7 @@ update_modules() {
         mkdir -p "$script_dir"
 
         if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
-            echo "          (skipping ${SCRIPT_FILE})"
+            echo "            (skipping ${SCRIPT_FILE})"
             ((failed_count++)) || true
             rm -f "${TEMP_SCRIPT_FILE}"
             echo ""
@@ -276,7 +276,7 @@ main() {
     fi
 
     print_info "System Setup and Configuration Script (Idempotent Mode)"
-    echo "          ======================================================="
+    echo "            ======================================================="
 
     if [[ $# -ne 0 && $1 == "--debug" ]]; then
         DEBUG_MODE=true
@@ -284,7 +284,7 @@ main() {
     fi
 
     detect_os
-    echo "          - Detected OS: $DETECTED_OS"
+    echo "            - Detected OS: $DETECTED_OS"
 
     if [[ "$DETECTED_OS" == "unknown" ]]; then
         print_error "Unknown operating system. This script supports Linux and macOS."
@@ -294,7 +294,7 @@ main() {
     # Detect if running in a container (sets RUNNING_IN_CONTAINER global variable)
     detect_container
     if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
-        echo "          - Running inside a container environment"
+        echo "            - Running inside a container environment"
 
         # Offer to configure static IP for containers
         echo ""
@@ -324,21 +324,21 @@ main() {
     print_info "---------------------"
     print_info "This script will configure:"
     if [[ "$NANO_INSTALLED" == true ]]; then
-        echo "          ✓ nano editor settings"
+        echo "            ✓ nano editor settings"
     else
-        echo "          ✖ nano editor (not installed, will be skipped)"
+        echo "            ✖ nano editor (not installed, will be skipped)"
     fi
     if [[ "$SCREEN_INSTALLED" == true ]]; then
-        echo "          ✓ GNU screen settings"
+        echo "            ✓ GNU screen settings"
     else
-        echo "          ✖ GNU screen (not installed, will be skipped)"
+        echo "            ✖ GNU screen (not installed, will be skipped)"
     fi
     if [[ "$OPENSSH_SERVER_INSTALLED" == true ]]; then
-        echo "          ✓ OpenSSH Server (socket-based activation option)"
+        echo "            ✓ OpenSSH Server (socket-based activation option)"
     else
-        echo "          ✖ OpenSSH Server (not installed, will be skipped)"
+        echo "            ✖ OpenSSH Server (not installed, will be skipped)"
     fi
-    echo "          ✓ Shell aliases and configurations"
+    echo "            ✓ Shell aliases and configurations"
     echo ""
 
     print_info "The script will only add or update configurations that are missing or different."
@@ -347,11 +347,11 @@ main() {
 
     # Ask for scope (user vs system) for all components
     print_info "Choose configuration scope:"
-    echo "          1) User-specific - nano/screen/shell for current user"
-    echo "          2) System-wide (root) - nano/screen system-wide, /etc/issue, shell all users, swap, SSH socket"
-    echo "          Ctrl+C to cancel configuration and exit"
+    echo "            1) User-specific - nano/screen/shell for current user"
+    echo "            2) System-wide (root) - nano/screen system-wide, /etc/issue, shell all users, swap, SSH socket"
+    echo "            Ctrl+C to cancel configuration and exit"
     echo ""
-    read -p "          Enter choice (1-2): " -r scope_choice
+    read -p "            Enter choice (1-2): " -r scope_choice
 
     local scope
     case "$scope_choice" in

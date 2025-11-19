@@ -261,27 +261,27 @@ needs_elevation() {
 
 # Print colored output
 print_backup() {
-    echo -e "${GRAY}[ BACKUP] $1${NC}"
+    echo -e "${GRAY}[ BACKUP  ] $1${NC}"
 }
 
 print_debug() {
-    echo -e "${MAGENTA}[  DEBUG] $1${NC}"
+    echo -e "${MAGENTA}[ DEBUG   ] $1${NC}"
 }
 
 print_error() {
-    echo -e "${RED}[  ERROR]${NC} $1"
+    echo -e "${RED}[ ERROR   ]${NC} $1"
 }
 
 print_info() {
-    echo -e "${BLUE}[   INFO]${NC} $1"
+    echo -e "${BLUE}[ INFO    ]${NC} $1"
 }
 
 print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}[ SUCCESS ]${NC} $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${YELLOW}[ WARNING ]${NC} $1"
 }
 
 # Check if a package is installed (unified for both macOS and Linux)
@@ -573,7 +573,7 @@ check_and_install_packages() {
         else
             print_warning "$display_name is not installed"
             if [[ "$can_install" == true ]]; then
-                if prompt_yes_no "          - Would you like to install $display_name?" "n"; then
+                if prompt_yes_no "            - Would you like to install $display_name?" "n"; then
                     packages_to_install+=("$package")
                     track_special_packages "$package"
                 fi
@@ -1092,8 +1092,8 @@ configure_issue_network() {
     fi
 
     print_info "Network interface changes detected. Updating $issue_file..."
-    echo "          - Displayed: $existing_ifaces"
-    echo "          - Current:  $current_ifaces"
+    echo "            - Displayed: $existing_ifaces"
+    echo "            - Current:  $current_ifaces"
 
     # Backup the file before making changes
     backup_file "$issue_file"
@@ -1504,11 +1504,11 @@ configure_swap() {
     print_info "- Swap is currently disabled"
     echo ""
     print_info "Recommended swap sizes:"
-    echo "          • ≤2 GB RAM: 2x RAM"
-    echo "          • >2 GB RAM: 1.5x RAM"
+    echo "            • ≤2 GB RAM: 2x RAM"
+    echo "            • >2 GB RAM: 1.5x RAM"
     echo ""
 
-    if ! prompt_yes_no "          Would you like to set up swap?" "n"; then
+    if ! prompt_yes_no "            Would you like to set up swap?" "n"; then
         print_info "- Keeping swap disabled (no changes made)"
         return 0
     fi
@@ -1665,11 +1665,11 @@ configure_ssh_socket() {
 
     echo ""
     print_info "Socket-based activation (ssh.socket) vs Service-based (ssh.service):"
-    echo "          • ssh.socket: Starts SSH daemon on-demand when connections arrive (saves resources)"
-    echo "          • ssh.service: Keeps SSH daemon running constantly (traditional approach)"
+    echo "            • ssh.socket: Starts SSH daemon on-demand when connections arrive (saves resources)"
+    echo "            • ssh.service: Keeps SSH daemon running constantly (traditional approach)"
     echo ""
 
-    if ! prompt_yes_no "          Would you like to configure and enable ssh.socket?" "y"; then
+    if ! prompt_yes_no "            Would you like to configure and enable ssh.socket?" "y"; then
         print_info "Keeping current SSH configuration (no changes made)"
         return 0
     fi
@@ -1769,15 +1769,15 @@ configure_container_static_ip() {
         return 0
     fi
 
-    echo "          - Primary network interface: $primary_interface"
+    echo "            - Primary network interface: $primary_interface"
 
     # Get all current IP addresses
     if command -v ip &>/dev/null; then
         local ip_addresses=$(ip -4 addr show "$primary_interface" 2>/dev/null | grep "inet " | awk '{print $2}')
         if [[ -n "$ip_addresses" ]]; then
-            echo "          - Current IP address(es):"
+            echo "            - Current IP address(es):"
             while IFS= read -r ip_addr; do
-                echo "            • $ip_addr"
+                echo "              • $ip_addr"
             done <<< "$ip_addresses"
         else
             print_warning "- No IP address currently assigned"
@@ -1797,9 +1797,9 @@ configure_container_static_ip() {
         # Show configured static IPs
         local static_ips=$(grep -A 1 "^\[Address\]" "$network_file" | grep "^Address=" | cut -d= -f2)
         if [[ -n "$static_ips" ]]; then
-            echo "          - Configured static IP(s):"
+            echo "            - Configured static IP(s):"
             while IFS= read -r ip; do
-                echo "            • $ip"
+                echo "              • $ip"
             done <<< "$static_ips"
         fi
         echo ""
@@ -1808,12 +1808,12 @@ configure_container_static_ip() {
 
     echo ""
     print_info "Container static IP configuration:"
-    echo "          - This will add a secondary static IP address to $primary_interface"
-    echo "          - DHCP will remain enabled for the primary IP"
-    echo "          - Uses systemd-networkd configuration"
+    echo "            - This will add a secondary static IP address to $primary_interface"
+    echo "            - DHCP will remain enabled for the primary IP"
+    echo "            - Uses systemd-networkd configuration"
     echo ""
 
-    if ! prompt_yes_no "          Would you like to configure a static IP address?" "y"; then
+    if ! prompt_yes_no "            Would you like to configure a static IP address?" "y"; then
         print_info "Skipping static IP configuration"
         return 0
     fi
@@ -1825,7 +1825,7 @@ configure_container_static_ip() {
     local static_prefix=""
 
     while true; do
-        read -p "          Enter static IP in CIDR notation (e.g., 192.168.1.100/24, defaults to /24): " -r user_input </dev/tty
+        read -p "            Enter static IP in CIDR notation (e.g., 192.168.1.100/24, defaults to /24): " -r user_input </dev/tty
 
         # Check if input contains a slash (CIDR notation)
         if [[ "$user_input" =~ ^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})(/([0-9]+))?$ ]]; then
@@ -1898,7 +1898,7 @@ EOF
         # Show new IP configuration
         echo ""
         print_info "Current IP addresses on $primary_interface:"
-        ip -4 addr show "$primary_interface" 2>/dev/null | grep "inet " | awk '{print "          - " $2}' || true
+        ip -4 addr show "$primary_interface" 2>/dev/null | grep "inet " | awk '{print "            - " $2}' || true
     else
         print_warning "Could not restart systemd-networkd (may require manual restart)"
         print_info "To apply changes manually, run: systemctl restart systemd-networkd"
@@ -1922,7 +1922,7 @@ print_summary() {
     if [[ ${#BACKED_UP_FILES[@]} -gt 0 ]]; then
         print_success "${GREEN}Files Modified:${NC}"
         for file in "${BACKED_UP_FILES[@]+"${BACKED_UP_FILES[@]}"}"; do
-            echo "          - $file"
+            echo "            - $file"
         done
         echo ""
     fi
@@ -1930,7 +1930,7 @@ print_summary() {
     if [[ ${#CREATED_BACKUP_FILES[@]} -gt 0 ]]; then
         print_backup "Backup Files Created:"
         for file in "${CREATED_BACKUP_FILES[@]+"${CREATED_BACKUP_FILES[@]}"}"; do
-            echo "          - $file"
+            echo "            - $file"
         done
         echo ""
     fi
@@ -1940,7 +1940,7 @@ print_summary() {
 # Main function
 main() {
     print_info "System Setup and Configuration Script (Idempotent Mode)"
-    echo "          ======================================================="
+    echo "            ======================================================="
 
     if [[ $# -ne 0 && $1 == "--debug" ]]; then
         DEBUG_MODE=true
@@ -1948,7 +1948,7 @@ main() {
     fi
 
     detect_os
-    echo "          - Detected OS: $DETECTED_OS"
+    echo "            - Detected OS: $DETECTED_OS"
 
     if [[ "$DETECTED_OS" == "unknown" ]]; then
         print_error "Unknown operating system. This script supports Linux and macOS."
@@ -1958,7 +1958,7 @@ main() {
     # Detect if running in a container (sets RUNNING_IN_CONTAINER global variable)
     detect_container
     if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
-        echo "          - Running inside a container environment"
+        echo "            - Running inside a container environment"
 
         # Offer to configure static IP for containers
         echo ""
@@ -1985,21 +1985,21 @@ main() {
     print_info "---------------------"
     print_info "This script will configure:"
     if [[ "$NANO_INSTALLED" == true ]]; then
-        echo "          ✓ nano editor settings"
+        echo "            ✓ nano editor settings"
     else
-        echo "          ✖ nano editor (not installed, will be skipped)"
+        echo "            ✖ nano editor (not installed, will be skipped)"
     fi
     if [[ "$SCREEN_INSTALLED" == true ]]; then
-        echo "          ✓ GNU screen settings"
+        echo "            ✓ GNU screen settings"
     else
-        echo "          ✖ GNU screen (not installed, will be skipped)"
+        echo "            ✖ GNU screen (not installed, will be skipped)"
     fi
     if [[ "$OPENSSH_SERVER_INSTALLED" == true ]]; then
-        echo "          ✓ OpenSSH Server (socket-based activation option)"
+        echo "            ✓ OpenSSH Server (socket-based activation option)"
     else
-        echo "          ✖ OpenSSH Server (not installed, will be skipped)"
+        echo "            ✖ OpenSSH Server (not installed, will be skipped)"
     fi
-    echo "          ✓ Shell aliases and configurations"
+    echo "            ✓ Shell aliases and configurations"
     echo ""
 
     print_info "The script will only add or update configurations that are missing or different."
@@ -2008,11 +2008,11 @@ main() {
 
     # Ask for scope (user vs system) for all components
     print_info "Choose configuration scope:"
-    echo "          1) User-specific - nano/screen/shell for current user"
-    echo "          2) System-wide (root) - nano/screen system-wide, /etc/issue, shell all users, swap, SSH socket"
-    echo "          Ctrl+C to cancel configuration and exit"
+    echo "            1) User-specific - nano/screen/shell for current user"
+    echo "            2) System-wide (root) - nano/screen system-wide, /etc/issue, shell all users, swap, SSH socket"
+    echo "            Ctrl+C to cancel configuration and exit"
     echo ""
-    read -p "          Enter choice (1-2): " -r scope_choice
+    read -p "            Enter choice (1-2): " -r scope_choice
 
     local scope
     case "$scope_choice" in

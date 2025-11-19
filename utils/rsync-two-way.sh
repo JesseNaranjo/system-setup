@@ -34,19 +34,19 @@ readonly LOG_FILE="${HOME}/.rsync-two-way.log"
 
 # Print colored output
 print_info() {
-    echo -e "${BLUE}[   INFO]${NC} $1"
+    echo -e "${BLUE}[ INFO    ]${NC} $1"
 }
 
 print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}[ SUCCESS ]${NC} $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${YELLOW}[ WARNING ]${NC} $1"
 }
 
 print_error() {
-    echo -e "${RED}[  ERROR]${NC} $1"
+    echo -e "${RED}[ ERROR   ]${NC} $1"
 }
 
 print_section() {
@@ -137,8 +137,8 @@ if [[ $# -ne 2 ]]; then
     exit 1
 fi
 
-LOCAL="$1"           # e.g. /srv/share/
-REMOTE="$2"          # e.g. alice@backup.example.com:/srv/share/
+LOCAL="$1"             # e.g. /srv/share/
+REMOTE="$2"            # e.g. alice@backup.example.com:/srv/share/
 
 # Configuration
 ENABLE_BACKUPS=false  # Set to true to enable backup-dir functionality
@@ -241,7 +241,7 @@ echo -e "${BLUE}Log File:${NC}        $LOG_FILE"
 echo ""
 
 # Prompt user to continue
-if ! prompt_yes_no "          → Continue with synchronization?" "y"; then
+if ! prompt_yes_no "            → Continue with synchronization?" "y"; then
     print_warning "Synchronization cancelled by user"
     log "Synchronization cancelled by user"
     exit 0
