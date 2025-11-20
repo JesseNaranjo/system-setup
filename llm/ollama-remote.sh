@@ -23,7 +23,7 @@ then
 
     # Move Right: ollama serve
     focus right
-    screen -t "ollama serve" "clear; export OLLAMA_HOST=0.0.0.0:11434; ollama serve"
+    screen -t "ollama serve" bash -c "clear; export OLLAMA_HOST=\"0.0.0.0:11434\"; ollama serve"
 
     # Move bottom-left
     focus left
