@@ -22,9 +22,9 @@ readonly RED='\033[0;31m'
 readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m'
 
-print_info() { echo -e "${BLUE}[   INFO]${NC} $1"; }
-print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-print_error() { echo -e "${RED}[  ERROR]${NC} $1"; }
+print_info() { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
+print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
+print_error() { echo -e "${RED}[ ERROR   ]${NC} $1"; }
 
 main() {
     print_info "Starting..."
@@ -169,19 +169,19 @@ fi
 ```bash
 # Quote ALL variables (security + correctness)
 "$var" "${array[@]}"  # ✓ Correct
-$var ${array[@]}      # ✗ Wrong
+$var ${array[@]}      # ✖ Wrong
 
 # Arrays (not space-separated strings)
 arr=() arr+=("item")  # ✓ Correct
-str="" str="$str item" # ✗ Avoid
+str="" str="$str item" # ✖ Avoid
 
 # Conditionals - use [[ ]] not [ ]
 [[ -f "$file" ]]      # ✓ Correct
-[ -f "$file" ]        # ✗ Avoid
+[ -f "$file" ]        # ✖ Avoid
 
 # Command substitution
 result=$(cmd)         # ✓ Correct
-result=`cmd`          # ✗ Avoid
+result=`cmd`          # ✖ Avoid
 ```
 
 ### Common Conditionals
@@ -466,12 +466,12 @@ add_export_if_needed() {
 
 ### Standard Output Functions
 ```bash
-print_info()    { echo -e "${BLUE}[   INFO]${NC} $1"; }
-print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
-print_error()   { echo -e "${RED}[  ERROR]${NC} $1"; }
-print_backup()  { echo -e "${GRAY}[ BACKUP] $1${NC}"; }
-print_debug()   { echo -e "${MAGENTA}[  DEBUG] $1${NC}"; }
+print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
+print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
+print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1"; }
+print_backup()  { echo -e "${GRAY}[ BACKUP  ] $1${NC}"; }
+print_debug()   { echo -e "${MAGENTA}[ DEBUG   ] $1${NC}"; }
 ```
 
 ### Usage Conventions
@@ -496,8 +496,8 @@ cat "$filename"
 echo -e "${NC}${LINE_COLOR}╰──────────────╯${NC}"
 
 # Indented output
-echo "          - Detail item"
-echo "          • Bullet point"
+echo "            - Detail item"
+echo "            • Bullet point"
 ```
 
 ---

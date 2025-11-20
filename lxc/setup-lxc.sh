@@ -40,23 +40,23 @@ BACKED_UP_FILES=""
 
 # Print colored output
 print_info() {
-    echo -e "${BLUE}[   INFO]${NC} $1"
+    echo -e "${BLUE}[ INFO    ]${NC} $1"
 }
 
 print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}[ SUCCESS ]${NC} $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${YELLOW}[ WARNING ]${NC} $1"
 }
 
 print_error() {
-    echo -e "${RED}[  ERROR]${NC} $1"
+    echo -e "${RED}[ ERROR   ]${NC} $1"
 }
 
 print_backup() {
-    echo -e "${GRAY}[ BACKUP] $1${NC}"
+    echo -e "${GRAY}[ BACKUP  ] $1${NC}"
 }
 
 # Prompt user for yes/no confirmation
