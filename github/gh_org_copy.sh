@@ -71,6 +71,10 @@ TOTAL_DISCUSSION_COMMENTS_COPIED=0
 START_TIME=""
 END_TIME=""
 
+# Self-update configuration
+readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/github"
+DOWNLOAD_CMD=""
+
 # ============================================================================
 # Output Functions
 # ============================================================================
@@ -105,6 +109,119 @@ print_step() {
 print_timestamp() {
     local section="$1"
     echo -e "${GRAY}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} ${section}"
+}
+
+# ============================================================================
+# Self-Update Functionality
+# ============================================================================
+
+# Detect available download command (curl or wget)
+detect_download_cmd() {
+    if command -v curl &>/dev/null; then
+        DOWNLOAD_CMD="curl"
+        return 0
+    elif command -v wget &>/dev/null; then
+        DOWNLOAD_CMD="wget"
+        return 0
+    else
+        DOWNLOAD_CMD=""
+        print_warning "Neither 'curl' nor 'wget' found - self-update disabled"
+        print_info "Install curl or wget to enable automatic updates"
+        return 1
+    fi
+}
+
+# Download script from remote repository
+download_script() {
+    local script_file="$1"
+    local output_file="$2"
+    local http_status=""
+
+    print_info "Fetching ${script_file}..."
+    echo "            ▶ ${REMOTE_BASE}/${script_file}..."
+
+    if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
+        http_status=$(curl -H 'Cache-Control: no-cache, no-store' -o "${output_file}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${script_file}" 2>/dev/null || echo "000")
+        if [[ "$http_status" == "200" ]]; then
+            # Validate that we got a script, not an error page
+            # Check first 10 lines for shebang to handle files with leading comments/blank lines
+            if head -n 10 "${output_file}" | grep -q "^#!/"; then
+                return 0
+            else
+                print_error "✖ Invalid content received (not a script)"
+                return 1
+            fi
+        elif [[ "$http_status" == "429" ]]; then
+            print_error "✖ Rate limited by GitHub (HTTP 429)"
+            return 1
+        elif [[ "$http_status" != "000" ]]; then
+            print_error "✖ HTTP ${http_status} error"
+            return 1
+        else
+            print_error "✖ Download failed"
+            return 1
+        fi
+    elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
+        if wget --no-cache --no-cookies -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null; then
+            # Validate that we got a script, not an error page
+            # Check first 10 lines for shebang to handle files with leading comments/blank lines
+            if head -n 10 "${output_file}" | grep -q "^#!/"; then
+                return 0
+            else
+                print_error "✖ Invalid content received (not a script)"
+                return 1
+            fi
+        else
+            print_error "✖ Download failed"
+            return 1
+        fi
+    fi
+
+    return 1
+}
+
+# Check for script updates and restart if updated
+self_update() {
+    local SCRIPT_FILE="gh_org_copy.sh"
+    local SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
+    local TEMP_SCRIPT_FILE="$(mktemp)"
+
+    if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
+        rm -f "${TEMP_SCRIPT_FILE}"
+        echo ""
+        return 1
+    fi
+
+    # Compare versions
+    if diff -q "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
+        print_success "- Script is already up-to-date"
+        rm -f "${TEMP_SCRIPT_FILE}"
+        return 0
+    fi
+
+    # Show diff
+    echo ""
+    echo -e "${LINE_COLOR}╭────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
+    diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" || true
+    echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
+    echo ""
+
+    read -p "→ Overwrite and restart with updated ${SCRIPT_FILE}? [Y/n] " -n 1 -r
+    if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+        echo ""
+        chmod +x "${TEMP_SCRIPT_FILE}"
+        mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"
+        print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
+        echo ""
+        export scriptUpdated=1
+        exec "${LOCAL_SCRIPT}" "$@"
+        exit 0
+    else
+        print_warning "⚠ Skipped update - continuing with local version"
+        rm -f "${TEMP_SCRIPT_FILE}"
+    fi
+    echo ""
 }
 
 # ============================================================================
@@ -740,6 +857,12 @@ process_repositories() {
 # ============================================================================
 
 main() {
+    # Check for updates if download tool available
+    if detect_download_cmd && [[ ${scriptUpdated:-0} -eq 0 ]]; then
+        self_update "$@"
+        echo ""
+    fi
+
     # Record start time
     START_TIME=$(date +%s)
     local start_display=$(date +'%Y-%m-%d %H:%M:%S')
