@@ -39,7 +39,7 @@ prompt_yes_no() {
     local user_reply
 
     # Set the prompt suffix based on default
-    if [[ "$(echo "$default" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
+    if [[ "${default,,}" == "y" ]]; then
         prompt_suffix="(Y/n)"
     else
         prompt_suffix="(y/N)"
@@ -50,7 +50,7 @@ prompt_yes_no() {
 
     # If user just pressed Enter (empty reply), use default
     if [[ -z "$user_reply" ]]; then
-        [[ "$(echo "$default" | tr '[:upper:]' '[:lower:]')" == "y" ]]
+        [[ "${default,,}" == "y" ]]
     else
         [[ $user_reply =~ ^[Yy]$ ]]
     fi
