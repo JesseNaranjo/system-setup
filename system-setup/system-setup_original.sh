@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-# system-setup.sh - System configuration and package management
+# system-setup_original.sh - System configuration and package management
 # Implements configurations from nano.md, screen-gnu.md, and shell.md
 #
-# Usage: ./system-setup.sh
+# Usage: ./system-setup_original.sh
 #
 # This script:
 # - Checks and optionally installs required packages (nano, screen, htop, 7zip, openssh-server)
@@ -58,7 +58,7 @@ prompt_yes_no() {
 
 if [[ ${scriptUpdated:-0} -eq 0 ]]; then
     local REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main"
-    local SCRIPT_FILE="system-setup.sh"
+    local SCRIPT_FILE="system-setup_original.sh"
     local TEMP_SCRIPT_FILE="$(mktemp)"
 
     # Check for curl or wget availability
@@ -669,13 +669,13 @@ add_change_header() {
     header_content+=$'\n'
     case "$config_type" in
         nano)
-            header_content+="# nano configuration - managed by system-setup.sh"$'\n'
+            header_content+="# nano configuration - managed by system-setup_original.sh"$'\n'
             ;;
         screen)
-            header_content+="# GNU screen configuration - managed by system-setup.sh"$'\n'
+            header_content+="# GNU screen configuration - managed by system-setup_original.sh"$'\n'
             ;;
         shell)
-            header_content+="# Shell configuration - managed by system-setup.sh"$'\n'
+            header_content+="# Shell configuration - managed by system-setup_original.sh"$'\n'
             ;;
     esac
     header_content+="# Updated: $(date)"$'\n'
@@ -744,7 +744,7 @@ update_config_line() {
             awk -v pattern="^[[:space:]]*${setting_pattern}" -v new_line="${full_line}" '
             BEGIN { found=0 }
             $0 ~ pattern {
-                print "# " $0 " # Replaced by system-setup.sh on " strftime("%Y-%m-%d");
+                print "# " $0 " # Replaced by system-setup_original.sh on " strftime("%Y-%m-%d");
                 found=1;
                 next;
             }
@@ -1198,7 +1198,7 @@ configure_shell_prompt_colors_system() {
         # No existing PS1, just add at the end
         add_change_header "$shell_config" "shell"
         {
-            echo "# Custom PS1 prompt - managed by system-setup.sh"
+            echo "# Custom PS1 prompt - managed by system-setup_original.sh"
             echo "$custom_ps1_pattern"
         } >> "$shell_config"
         print_success "✓ Custom PS1 prompt configured in $shell_config"
@@ -1207,13 +1207,13 @@ configure_shell_prompt_colors_system() {
         local ps1_line_num=$(grep -n "^[[:space:]]*PS1=" "$shell_config" | cut -d: -f1)
 
         # Comment out the line
-        sed -i.bak "${ps1_line_num}s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
+        sed -i.bak "${ps1_line_num}s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Replaced by system-setup_original.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
 
         # Create a temporary file with the new PS1 content
         local temp_ps1=$(mktemp)
         add_change_header "$temp_ps1" "shell"
         {
-            echo "    # Custom PS1 prompt - managed by system-setup.sh"
+            echo "    # Custom PS1 prompt - managed by system-setup_original.sh"
             echo "$custom_ps1_pattern"
         } > "$temp_ps1"
 
@@ -1227,12 +1227,12 @@ configure_shell_prompt_colors_system() {
         print_warning "Found $ps1_count PS1 definitions in $shell_config"
 
         # Comment out all PS1 lines
-        sed -i.bak "s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
+        sed -i.bak "s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Replaced by system-setup_original.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
 
         # Add new PS1 at the end
         add_change_header "$shell_config" "shell"
         {
-            echo "# Custom PS1 prompt - managed by system-setup.sh"
+            echo "# Custom PS1 prompt - managed by system-setup_original.sh"
             echo "$custom_ps1_pattern"
         } >> "$shell_config"
 
@@ -1309,11 +1309,11 @@ configure_shell_prompt_colors_user() {
     # Comment out existing PS1 definitions with OS-specific rules
     if [[ "$DETECTED_OS" == "macos" ]]; then
         # macOS: Comment out ALL PS1 definitions
-        sed -i.bak "s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Commented out by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
+        sed -i.bak "s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Commented out by system-setup_original.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
     else
         # Linux: Comment out all PS1 definitions EXCEPT those starting with: PS1="\[\e]0;
         # This preserves the terminal title escape sequences
-        sed -i.bak "/^[[:space:]]*PS1=\"\\\\\[\\\\e\]0;/! s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Commented out by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
+        sed -i.bak "/^[[:space:]]*PS1=\"\\\\\[\\\\e\]0;/! s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Commented out by system-setup_original.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
     fi
 
     # Restore ownership if running as root
@@ -1590,7 +1590,7 @@ configure_swap() {
 
         # Add entry to fstab
         echo "" >> /etc/fstab
-        echo "# Swap file - managed by system-setup.sh" >> /etc/fstab
+        echo "# Swap file - managed by system-setup_original.sh" >> /etc/fstab
         echo "# Added: $(date)" >> /etc/fstab
         echo "$fstab_entry" >> /etc/fstab
 
@@ -1871,7 +1871,7 @@ configure_container_static_ip() {
     # Create or update the network configuration file
     cat > "$network_file" << EOF
 # Network configuration for $primary_interface
-# Managed by system-setup.sh
+# Managed by system-setup_original.sh
 # Updated: $(date)
 
 [Match]
