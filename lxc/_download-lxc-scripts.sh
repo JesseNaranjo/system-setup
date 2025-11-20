@@ -87,6 +87,47 @@ prompt_yes_no() {
     fi
 }
 
+# ============================================================================
+# Self-Update Functionality
+# ============================================================================
+
+# Detect available download command (curl or wget)
+# Sets global DOWNLOAD_CMD variable
+detect_download_cmd() {
+    if command -v curl &>/dev/null; then
+        DOWNLOAD_CMD="curl"
+        return 0
+    elif command -v wget &>/dev/null; then
+        DOWNLOAD_CMD="wget"
+        return 0
+    else
+        DOWNLOAD_CMD=""
+        # Display large error message if neither curl nor wget is available
+        echo ""
+        echo -e "            ${YELLOW}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "            ${YELLOW}║                                                                             ║${NC}"
+        echo -e "            ${YELLOW}║                        ⚠️   UPDATES NOT AVAILABLE  ⚠️                         ║${NC}"
+        echo -e "            ${YELLOW}║                                                                             ║${NC}"
+        echo -e "            ${YELLOW}║        Neither 'curl' nor 'wget' is installed on this system.               ║${NC}"
+        echo -e "            ${YELLOW}║        Self-updating functionality requires one of these tools.             ║${NC}"
+        echo -e "            ${YELLOW}║                                                                             ║${NC}"
+        echo -e "            ${YELLOW}║        To enable self-updating, please install one of the following:        ║${NC}"
+        echo -e "            ${YELLOW}║          • curl  (recommended)                                              ║${NC}"
+        echo -e "            ${YELLOW}║          • wget                                                             ║${NC}"
+        echo -e "            ${YELLOW}║                                                                             ║${NC}"
+        echo -e "            ${YELLOW}║        Installation commands:                                               ║${NC}"
+        echo -e "            ${YELLOW}║          macOS:    brew install curl                                        ║${NC}"
+        echo -e "            ${YELLOW}║          Debian:   apt install curl                                         ║${NC}"
+        echo -e "            ${YELLOW}║          RHEL:     yum install curl                                         ║${NC}"
+        echo -e "            ${YELLOW}║                                                                             ║${NC}"
+        echo -e "            ${YELLOW}║        Continuing with local version of the scripts...                      ║${NC}"
+        echo -e "            ${YELLOW}║                                                                             ║${NC}"
+        echo -e "            ${YELLOW}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        return 1
+    fi
+}
+
 # Download a script file from the remote repository
 # Args: $1 = script filename (relative path), $2 = output file path
 # Returns: 0 on success, 1 on failure
@@ -138,47 +179,6 @@ download_script() {
     return 1
 }
 
-# ============================================================================
-# Self-Update Functionality
-# ============================================================================
-
-# Detect available download command (curl or wget)
-# Sets global DOWNLOAD_CMD variable
-detect_download_cmd() {
-    if command -v curl &>/dev/null; then
-        DOWNLOAD_CMD="curl"
-        return 0
-    elif command -v wget &>/dev/null; then
-        DOWNLOAD_CMD="wget"
-        return 0
-    else
-        DOWNLOAD_CMD=""
-        # Display large error message if neither curl nor wget is available
-        echo ""
-        echo -e "            ${YELLOW}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║                        ⚠️   UPDATES NOT AVAILABLE  ⚠️                         ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        Neither 'curl' nor 'wget' is installed on this system.               ║${NC}"
-        echo -e "            ${YELLOW}║        Self-updating functionality requires one of these tools.             ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        To enable self-updating, please install one of the following:        ║${NC}"
-        echo -e "            ${YELLOW}║          • curl  (recommended)                                              ║${NC}"
-        echo -e "            ${YELLOW}║          • wget                                                             ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        Installation commands:                                               ║${NC}"
-        echo -e "            ${YELLOW}║          macOS:    brew install curl                                        ║${NC}"
-        echo -e "            ${YELLOW}║          Debian:   apt install curl                                         ║${NC}"
-        echo -e "            ${YELLOW}║          RHEL:     yum install curl                                         ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        Continuing with local version of the scripts...                      ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
-        echo ""
-        return 1
-    fi
-}
-
 # Check for updates to _download-lxc-scripts.sh itself
 # This function only updates the main script and will restart if updated
 self_update() {
@@ -211,15 +211,13 @@ self_update() {
         echo ""
         chmod +x "${TEMP_SCRIPT_FILE}"
         mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"
-        print_success "✓ Updated ${SCRIPT_FILE}"
-        echo ""
-        print_info "Restarting with updated version..."
+        print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
         echo ""
         export scriptUpdated=1
         exec "${LOCAL_SCRIPT}" "$@"
         exit 0
     else
-        print_warning "Skipped ${SCRIPT_FILE} update"
+        print_warning "⚠ Skipped ${SCRIPT_FILE} update - continuing with local version"
         rm -f "${TEMP_SCRIPT_FILE}"
     fi
     echo ""
@@ -277,7 +275,7 @@ update_modules() {
                 print_success "✓ Replaced ${SCRIPT_FILE}"
                 ((updated_count++)) || true
             else
-                print_warning "Skipped ${SCRIPT_FILE}"
+                print_warning "⚠ Skipped ${SCRIPT_FILE}"
                 ((skipped_count++)) || true
                 rm -f "${TEMP_SCRIPT_FILE}"
             fi
