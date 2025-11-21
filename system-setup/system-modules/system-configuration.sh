@@ -70,8 +70,10 @@ configure_nano() {
 
     # Add homebrew include for macOS
     if [[ "$DETECTED_OS" == "macos" ]]; then
+        local include_line_pattern='include "\/opt\/homebrew\/share\/nano\/\*\.nanorc"'
         local include_line='include "/opt/homebrew/share/nano/*.nanorc"'
-        if ! config_exists "$config_file" "$include_line"; then
+
+        if ! config_exists "$config_file" "$include_line_pattern"; then
             print_info "+ Adding homebrew nano syntax definitions to $config_file"
             backup_file "$config_file"
             add_change_header "$config_file" "nano"
@@ -82,7 +84,7 @@ configure_nano() {
                 echo "$include_line"
             } | run_elevated tee -a "$config_file" > /dev/null
         else
-            print_success "homebrew nano syntax definitions already configured"
+            print_success "- homebrew nano syntax definitions already configured"
         fi
     fi
 
