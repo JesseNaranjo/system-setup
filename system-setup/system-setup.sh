@@ -28,9 +28,8 @@ source "${SCRIPT_DIR}/utils.sh"
 
 readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/system-setup"
 
-# List of module scripts to download/update (excludes system-setup.sh)
+# List of module scripts to download/update (excludes system-setup.sh and utils.sh)
 get_script_list() {
-    echo "utils.sh"
     echo "system-modules/modernize-apt-sources.sh"
     echo "system-modules/package-management.sh"
     echo "system-modules/system-configuration.sh"
@@ -132,51 +131,99 @@ download_script() {
     return 1
 }
 
-# Check for updates to system-setup.sh itself
-# This function only updates the main script and will restart if updated
+# Check for updates to system-setup.sh and utils.sh
+# Will restart system-setup.sh if either file is updated
 self_update() {
-    local SCRIPT_FILE="system-setup.sh"
-    local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
-    local TEMP_SCRIPT_FILE="$(mktemp)"
+    local setup_updated=false
+    local utils_updated=false
+    local any_updated=false
 
-    if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
-        rm -f "${TEMP_SCRIPT_FILE}"
+    # Check system-setup.sh
+    local SETUP_FILE="system-setup.sh"
+    local LOCAL_SETUP="${SCRIPT_DIR}/${SETUP_FILE}"
+    local TEMP_SETUP="$(mktemp)"
+
+    if download_script "${SETUP_FILE}" "${TEMP_SETUP}"; then
+        if diff -u "${LOCAL_SETUP}" "${TEMP_SETUP}" > /dev/null 2>&1; then
+            print_success "- ${SETUP_FILE} is already up-to-date"
+            rm -f "${TEMP_SETUP}"
+            echo ""
+        else
+            echo ""
+            echo -e "${CYAN}╭────────────────────────────────────────────────── Δ detected in ${SETUP_FILE} ──────────────────────────────────────────────────╮${NC}"
+            diff -u --color "${LOCAL_SETUP}" "${TEMP_SETUP}" || true
+            echo -e "${CYAN}╰───────────────────────────────────────────────────────── ${SETUP_FILE} ─────────────────────────────────────────────────────────╯${NC}"
+            echo ""
+
+            if prompt_yes_no "→ Overwrite ${SETUP_FILE} with updated version?" "y"; then
+                echo ""
+                chmod +x "${TEMP_SETUP}"
+                mv -f "${TEMP_SETUP}" "${LOCAL_SETUP}"
+                print_success "✓ Updated ${SETUP_FILE}"
+                setup_updated=true
+                any_updated=true
+            else
+                print_warning "⚠ Skipped ${SETUP_FILE} update"
+                rm -f "${TEMP_SETUP}"
+            fi
+            echo ""
+        fi
+    else
+        rm -f "${TEMP_SETUP}"
         echo ""
-        return 1
     fi
 
-    # Compare versions
-    if diff -u "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
-        print_success "- ${SCRIPT_FILE} is already up-to-date"
-        rm -f "${TEMP_SCRIPT_FILE}"
+    # Check utils.sh
+    local UTILS_FILE="utils.sh"
+    local LOCAL_UTILS="${SCRIPT_DIR}/${UTILS_FILE}"
+    local TEMP_UTILS="$(mktemp)"
+
+    if download_script "${UTILS_FILE}" "${TEMP_UTILS}"; then
+        if diff -u "${LOCAL_UTILS}" "${TEMP_UTILS}" > /dev/null 2>&1; then
+            print_success "- ${UTILS_FILE} is already up-to-date"
+            rm -f "${TEMP_UTILS}"
+            echo ""
+        else
+            echo ""
+            echo -e "${CYAN}╭────────────────────────────────────────────────── Δ detected in ${UTILS_FILE} ──────────────────────────────────────────────────╮${NC}"
+            diff -u --color "${LOCAL_UTILS}" "${TEMP_UTILS}" || true
+            echo -e "${CYAN}╰───────────────────────────────────────────────────────── ${UTILS_FILE} ─────────────────────────────────────────────────────────╯${NC}"
+            echo ""
+
+            if prompt_yes_no "→ Overwrite ${UTILS_FILE} with updated version?" "y"; then
+                echo ""
+                mv -f "${TEMP_UTILS}" "${LOCAL_UTILS}"
+                print_success "✓ Updated ${UTILS_FILE}"
+                utils_updated=true
+                any_updated=true
+            else
+                print_warning "⚠ Skipped ${UTILS_FILE} update"
+                rm -f "${TEMP_UTILS}"
+            fi
+            echo ""
+        fi
+    else
+        rm -f "${TEMP_UTILS}"
         echo ""
-        return 0
     fi
 
-    # Show diff
-    echo ""
-    echo -e "${CYAN}╭────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
-    diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" || true
-    echo -e "${CYAN}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
-    echo ""
-
-    if prompt_yes_no "→ Overwrite and restart with updated ${SCRIPT_FILE}?" "y"; then
-        echo ""
-        chmod +x "${TEMP_SCRIPT_FILE}"
-        mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"
-        print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
+    # Restart if either file was updated
+    if [[ "$any_updated" == true ]]; then
+        if [[ "$setup_updated" == true && "$utils_updated" == true ]]; then
+            print_success "✓ Both ${SETUP_FILE} and ${UTILS_FILE} were updated - restarting..."
+        elif [[ "$setup_updated" == true ]]; then
+            print_success "✓ ${SETUP_FILE} was updated - restarting..."
+        else
+            print_success "✓ ${UTILS_FILE} was updated - restarting..."
+        fi
         echo ""
         export scriptUpdated=1
-        exec "${LOCAL_SCRIPT}" "$@"
+        exec "${LOCAL_SETUP}" "$@"
         exit 0
-    else
-        print_warning "⚠ Skipped ${SCRIPT_FILE} update - continuing with local version"
-        rm -f "${TEMP_SCRIPT_FILE}"
     fi
-    echo ""
 }
 
-# Update all module scripts (utils.sh and system-modules/*)
+# Update all module scripts (system-modules/*)
 # Downloads each module script and prompts user to replace if different
 # Continues processing all modules even if some downloads fail
 # Returns: 1 if any downloads failed, 0 otherwise
