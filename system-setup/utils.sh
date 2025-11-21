@@ -536,7 +536,7 @@ add_export_if_needed() {
 # Print a summary of all changes made
 print_summary() {
     if [[ ${#BACKED_UP_FILES[@]} -eq 0 && ${#CREATED_BACKUP_FILES[@]} -eq 0 ]]; then
-        echo "            No files were modified during this session."
+        echo -e "            ${GRAY}No files were modified during this session.${NC}"
         return
     fi
 
