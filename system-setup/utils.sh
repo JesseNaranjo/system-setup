@@ -273,10 +273,8 @@ populate_package_cache() {
     for package in "${package_list[@]}"; do
         if echo "$installed_packages" | grep -qx "$package"; then
             PACKAGE_CACHE["$package"]="installed"
-            echo "Cached installed package: $package"
         else
             PACKAGE_CACHE["$package"]="not_installed"
-            echo "Cached not installed package: $package"
         fi
     done
 
