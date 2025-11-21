@@ -19,12 +19,12 @@ set -euo pipefail
 
 # Colors for output
 readonly BLUE='\033[0;34m'
+readonly CYAN='\033[0;36m' # Cyan for lines/borders
 readonly GRAY='\033[0;90m'
 readonly GREEN='\033[0;32m'
 readonly RED='\033[0;31m'
 readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m' # No Color
-readonly LINE_COLOR='\033[0;36m' # Cyan for lines/borders
 
 # Script metadata
 readonly SCRIPT_NAME="$(basename "$0")"
@@ -50,9 +50,9 @@ print_error() {
 }
 
 print_section() {
-    echo -e "${LINE_COLOR}╭────────────────────────────────────────────────────────────────────────╮${NC}"
-    echo -e "${LINE_COLOR}│${NC} $1"
-    echo -e "${LINE_COLOR}╰────────────────────────────────────────────────────────────────────────╯${NC}"
+    echo -e "${CYAN}╭────────────────────────────────────────────────────────────────────────╮${NC}"
+    echo -e "${CYAN}│${NC} $1"
+    echo -e "${CYAN}╰────────────────────────────────────────────────────────────────────────╯${NC}"
 }
 
 # Log to file

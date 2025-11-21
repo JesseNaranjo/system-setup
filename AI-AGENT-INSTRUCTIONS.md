@@ -124,15 +124,13 @@ set -euo pipefail
 ```bash
 # Colors - define before any other code that might use them
 readonly BLUE='\033[0;34m'
+readonly CYAN='\033[0;36m'
 readonly GRAY='\033[0;90m'
 readonly GREEN='\033[0;32m'
 readonly RED='\033[0;31m'
 readonly YELLOW='\033[1;33m'
-readonly CYAN='\033[0;36m'
 readonly MAGENTA='\033[0;35m'
 readonly NC='\033[0m'
-readonly LINE_COLOR='\033[0;36m'
-readonly CODE_COLOR='\033[0;37m'
 ```
 
 ### Global Variables (Use Arrays for Collections)
@@ -490,11 +488,6 @@ echo -e "${YELLOW}╔════════════════╗${NC}"
 echo -e "${YELLOW}║  Message       ║${NC}"
 echo -e "${YELLOW}╚════════════════╝${NC}"
 
-# File display with borders
-echo -e "${LINE_COLOR}╭── ${filename} ──╮${NC}${CODE_COLOR}"
-cat "$filename"
-echo -e "${NC}${LINE_COLOR}╰──────────────╯${NC}"
-
 # Indented output
 echo "            - Detail item"
 echo "            • Bullet point"
@@ -766,9 +759,9 @@ if [[ ${scriptUpdated:-0} -eq 0 ]]; then
         if [[ "$DOWNLOAD_SUCCESS" == true ]]; then
             if ! diff -u "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" >/dev/null 2>&1; then
                 # Show diff
-                echo -e "${LINE_COLOR}╭── Changes ──╮${NC}"
+                echo -e "${CYAN}╭── Changes ──╮${NC}"
                 diff -u --color "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" || true
-                echo -e "${LINE_COLOR}╰─────────────╯${NC}"
+                echo -e "${CYAN}╰─────────────╯${NC}"
 
                 if prompt_yes_no "Update and restart?" "y"; then
                     chmod +x "$TEMP_SCRIPT_FILE"

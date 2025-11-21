@@ -19,15 +19,12 @@ set -euo pipefail
 
 # Colors for output
 readonly BLUE='\033[0;34m'
+readonly CYAN="\033[0;36m"
 readonly GRAY='\033[0;90m'
 readonly GREEN='\033[0;32m'
 readonly RED='\033[0;31m'
 readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m' # No Color
-
-# Diff display colors
-readonly LINE_COLOR="\033[0;33m"
-readonly CODE_COLOR="\033[40m"
 
 # Remote repository configuration
 readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/llm"
@@ -198,9 +195,9 @@ self_update() {
 
     # Show diff
     echo ""
-    echo -e "${LINE_COLOR}╭────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
+    echo -e "${CYAN}╭────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
     diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" || true
-    echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
+    echo -e "${CYAN}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
     echo ""
 
     if prompt_yes_no "→ Overwrite and restart with updated ${SCRIPT_FILE}?" "y"; then
@@ -259,9 +256,9 @@ update_modules() {
             echo ""
         else
             echo ""
-            echo -e "${LINE_COLOR}╭────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
+            echo -e "${CYAN}╭────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
             diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" || true
-            echo -e "${LINE_COLOR}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
+            echo -e "${CYAN}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
             echo ""
 
             if prompt_yes_no "→ Overwrite local ${SCRIPT_FILE} with remote copy?" "y"; then
