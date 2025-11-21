@@ -443,19 +443,33 @@ configure_shell() {
     echo ""
 
     if [[ "$scope" == "system" ]]; then
-        # Configure root user
-        print_info "Configuring shell for root..."
-        configure_shell_for_user "/root" "root"
-        configure_shell_prompt_colors_user "/root" "root"
-        echo ""
+        # Configure root user (skip on macOS as /root doesn't exist)
+        if [[ "$DETECTED_OS" != "macos" ]] && [[ -d "/root" ]]; then
+            print_info "Configuring shell for root..."
+            configure_shell_for_user "/root" "root"
+            configure_shell_prompt_colors_user "/root" "root"
+            echo ""
+        fi
 
-        # System-wide configuration: iterate over all users in /home/
-        if [[ -d "/home" ]]; then
-            # Find all user home directories in /home
+        # System-wide configuration: iterate over all users
+        # Linux: /home/, macOS: /Users/
+        local users_dir
+        if [[ "$DETECTED_OS" == "macos" ]]; then
+            users_dir="/Users"
+        else
+            users_dir="/home"
+        fi
+
+        if [[ -d "$users_dir" ]]; then
+            # Find all user home directories
             local user_count=0
-            for user_home in /home/*; do
+            for user_home in "$users_dir"/*; do
                 if [[ -d "$user_home" ]]; then
                     local username=$(basename "$user_home")
+                    # Skip system users on macOS (Shared, Guest, etc.)
+                    if [[ "$DETECTED_OS" == "macos" ]] && [[ "$username" == "Shared" || "$username" == "Guest" ]]; then
+                        continue
+                    fi
                     print_info "Configuring shell for $username..."
                     configure_shell_for_user "$user_home" "$username"
                     configure_shell_prompt_colors_user "$user_home" "$username"
@@ -465,7 +479,11 @@ configure_shell() {
             done
 
             if [[ $user_count -gt 0 ]]; then
-                print_success "Configured shell for root and $user_count user(s)"
+                if [[ "$DETECTED_OS" == "macos" ]]; then
+                    print_success "Configured shell for $user_count user(s)"
+                else
+                    print_success "Configured shell for root and $user_count user(s)"
+                fi
             fi
         fi
     else
