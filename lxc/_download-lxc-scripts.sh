@@ -36,6 +36,7 @@ readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setu
 get_script_list() {
     echo "config-lxc-ssh.sh"
     echo "create-priv-lxc.sh"
+    echo "refresh-lxc.sh"
     echo "restart-lxc.sh"
     echo "setup-lxc.sh"
     echo "start-lxc.sh"
