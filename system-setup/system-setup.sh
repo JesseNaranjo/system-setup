@@ -31,13 +31,13 @@ readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setu
 # List of module scripts to download/update (excludes system-setup.sh)
 get_script_list() {
     echo "utils.sh"
-    echo "modules/modernize-apt-sources.sh"
-    echo "modules/package-management.sh"
-    echo "modules/system-configuration.sh"
-    echo "modules/system-configuration-swap.sh"
-    echo "modules/configure-container-static-ip.sh"
-    echo "modules/system-configuration-openssh-server.sh"
-    echo "modules/system-configuration-issue.sh"
+    echo "system-modules/modernize-apt-sources.sh"
+    echo "system-modules/package-management.sh"
+    echo "system-modules/system-configuration.sh"
+    echo "system-modules/system-configuration-swap.sh"
+    echo "system-modules/configure-container-static-ip.sh"
+    echo "system-modules/system-configuration-openssh-server.sh"
+    echo "system-modules/system-configuration-issue.sh"
 }
 
 # ============================================================================
@@ -176,7 +176,7 @@ self_update() {
     echo ""
 }
 
-# Update all module scripts (utils.sh and modules/*)
+# Update all module scripts (utils.sh and system-modules/*)
 # Downloads each module script and prompts user to replace if different
 # Continues processing all modules even if some downloads fail
 # Returns: 1 if any downloads failed, 0 otherwise
@@ -296,14 +296,14 @@ main() {
 
         # Offer to configure static IP for containers
         echo ""
-        source "${SCRIPT_DIR}/modules/configure-container-static-ip.sh"
+        source "${SCRIPT_DIR}/system-modules/configure-container-static-ip.sh"
         main_configure_container_static_ip
     fi
     echo ""
 
     # Step 1: Modernize APT sources (Linux only)
     if [[ "$DETECTED_OS" == "linux" ]]; then
-        source "${SCRIPT_DIR}/modules/modernize-apt-sources.sh"
+        source "${SCRIPT_DIR}/system-modules/modernize-apt-sources.sh"
         main_modernize_apt_sources
         echo ""
     fi
@@ -311,7 +311,7 @@ main() {
     # Step 2: Package Management
     print_info "Step 1: Package Management"
     print_info "---------------------------"
-    source "${SCRIPT_DIR}/modules/package-management.sh"
+    source "${SCRIPT_DIR}/system-modules/package-management.sh"
     if ! main_manage_packages; then
         print_error "Package management failed. Continuing with configuration for installed packages..."
     fi
@@ -375,13 +375,13 @@ main() {
     echo ""
 
     # Step 3: System Configuration (nano, screen, shell)
-    source "${SCRIPT_DIR}/modules/system-configuration.sh"
+    source "${SCRIPT_DIR}/system-modules/system-configuration.sh"
     main_configure_system "$scope"
     echo ""
 
     # Step 4: Swap configuration (system scope only, Linux only)
     if [[ "$scope" == "system" ]]; then
-        source "${SCRIPT_DIR}/modules/system-configuration-swap.sh"
+        source "${SCRIPT_DIR}/system-modules/system-configuration-swap.sh"
         main_configure_swap
         echo ""
     fi
@@ -392,7 +392,7 @@ main() {
     # Step 6: OpenSSH Server configuration (system scope only, Linux only)
     if [[ "$scope" == "system" ]]; then
         if [[ "$OPENSSH_SERVER_INSTALLED" == true ]]; then
-            source "${SCRIPT_DIR}/modules/system-configuration-openssh-server.sh"
+            source "${SCRIPT_DIR}/system-modules/system-configuration-openssh-server.sh"
             main_configure_openssh_server
         else
             print_info "Skipping OpenSSH Server configuration (not installed)"
@@ -402,7 +402,7 @@ main() {
 
     # Step 7: /etc/issue configuration (system scope only, Linux only)
     if [[ "$scope" == "system" ]]; then
-        source "${SCRIPT_DIR}/modules/system-configuration-issue.sh"
+        source "${SCRIPT_DIR}/system-modules/system-configuration-issue.sh"
         main_configure_issue
         echo ""
     fi

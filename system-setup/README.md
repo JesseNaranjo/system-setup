@@ -22,7 +22,7 @@ The script will:
 system-setup/
 ├── system-setup.sh                            # Main orchestrator
 ├── utils.sh                                   # Shared utilities and functions
-└── modules/
+└── system-modules/
     ├── configure-container-static-ip.sh       # Static IP for containers
     ├── modernize-apt-sources.sh               # APT DEB822 migration
     ├── package-management.sh                  # Package installation
@@ -123,7 +123,7 @@ Shared utility library providing common functionality across all modules.
 
 ## Module Scripts
 
-### modules/modernize-apt-sources.sh
+### system-modules/modernize-apt-sources.sh
 
 Modernizes APT package sources to DEB822 format (Debian/Ubuntu).
 
@@ -154,7 +154,7 @@ Modernizes APT package sources to DEB822 format (Debian/Ubuntu).
 [SUCCESS] ✓ APT sources file modernized successfully.
 ```
 
-### modules/package-management.sh
+### system-modules/package-management.sh
 
 Checks for and installs required packages.
 
@@ -198,7 +198,7 @@ apt update && apt install <packages>
 brew install <packages>
 ```
 
-### modules/system-configuration.sh
+### system-modules/system-configuration.sh
 
 Configures nano editor, GNU screen, and shell settings.
 
@@ -314,7 +314,7 @@ PS1="${debian_chroot:+($debian_chroot)}[\[\e[90m\]\h\[\e[0m\]:\[\e[92m\]\u\[\e[0
 - Does not modify system-wide configs
 - Does not alter PS1 (preserves user's prompt)
 
-### modules/system-configuration-swap.sh
+### system-modules/system-configuration-swap.sh
 
 Creates and enables swap memory (Linux only, system scope).
 
@@ -344,7 +344,7 @@ echo "/var/swapfile none swap sw 0 0" >> /etc/fstab
 - Not in container
 - Root privileges
 
-### modules/configure-container-static-ip.sh
+### system-modules/configure-container-static-ip.sh
 
 Configures static IP addresses for containers using systemd-networkd.
 
@@ -380,7 +380,7 @@ Address=192.168.1.100/24
 - systemd-networkd available
 - Root privileges
 
-### modules/system-configuration-openssh-server.sh
+### system-modules/system-configuration-openssh-server.sh
 
 Configures OpenSSH to use socket-based activation (Linux only, system scope).
 
@@ -416,7 +416,7 @@ Configures OpenSSH to use socket-based activation (Linux only, system scope).
 - openssh-server installed
 - Root privileges
 
-### modules/system-configuration-issue.sh
+### system-modules/system-configuration-issue.sh
 
 Updates `/etc/issue` with network interface information (Linux only, system scope).
 
@@ -612,28 +612,28 @@ If neither curl nor wget is installed, displays prominent warning box explaining
 
 ```bash
 # APT modernization
-sudo ./modules/modernize-apt-sources.sh
+sudo ./system-modules/modernize-apt-sources.sh
 
 # Package check only
-./modules/package-management.sh
+./system-modules/package-management.sh
 
 # User-level config
-./modules/system-configuration.sh user
+./system-modules/system-configuration.sh user
 
 # System-wide config
-sudo ./modules/system-configuration.sh system
+sudo ./system-modules/system-configuration.sh system
 
 # Swap setup
-sudo ./modules/system-configuration-swap.sh
+sudo ./system-modules/system-configuration-swap.sh
 
 # Container static IP
-sudo ./modules/configure-container-static-ip.sh
+sudo ./system-modules/configure-container-static-ip.sh
 
 # SSH socket
-sudo ./modules/system-configuration-openssh-server.sh
+sudo ./system-modules/system-configuration-openssh-server.sh
 
 # /etc/issue
-sudo ./modules/system-configuration-issue.sh
+sudo ./system-modules/system-configuration-issue.sh
 ```
 
 ### Debug Mode
@@ -778,26 +778,26 @@ Each module can be run independently for focused configuration:
 
 ```bash
 # Modernize APT sources only (Linux)
-./modules/modernize-apt-sources.sh
+./system-modules/modernize-apt-sources.sh
 
 # Install/check packages only
-./modules/package-management.sh
+./system-modules/package-management.sh
 
 # Configure nano, screen, and shell only
-./modules/system-configuration.sh user    # User scope
-./modules/system-configuration.sh system  # System scope
+./system-modules/system-configuration.sh user    # User scope
+./system-modules/system-configuration.sh system  # System scope
 
 # Configure swap only (Linux, requires root)
-./modules/system-configuration-swap.sh
+./system-modules/system-configuration-swap.sh
 
 # Configure container static IP (containers only)
-./modules/configure-container-static-ip.sh
+./system-modules/configure-container-static-ip.sh
 
 # Configure OpenSSH socket (Linux, requires root)
-./modules/system-configuration-openssh-server.sh
+./system-modules/system-configuration-openssh-server.sh
 
 # Configure /etc/issue (Linux, requires root)
-./modules/system-configuration-issue.sh
+./system-modules/system-configuration-issue.sh
 ```
 
 ## Execution Order
