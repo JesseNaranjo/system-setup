@@ -439,18 +439,16 @@ copy_labels_and_milestones() {
     local name="$1"
 
     print_step "Copying labels for ${name}"
-    gh_api --paginate "/repos/${SRC_ORG}/${name}/labels?per_page=100" \
-        --jq '.[] | [.name,.color,(.description//"")] | @tsv' \
-    | while IFS=$'\t' read -r LNAME LCOLOR LDESC; do
+    while IFS=$'\t' read -r LNAME LCOLOR LDESC; do
         ensure_label "$name" "$LNAME" "$LCOLOR" "$LDESC"
-    done
+    done < <(gh_api --paginate "/repos/${SRC_ORG}/${name}/labels?per_page=100" \
+        --jq '.[] | [.name,.color,(.description//"")] | @tsv')
 
     print_step "Copying milestones for ${name}"
     # Build map of destination title → destination number
     declare -A DST_MS=()
     # Create any missing milestones by title
-    gh_api --paginate "/repos/${SRC_ORG}/${name}/milestones?state=all&per_page=100" \
-        --jq '.[] | @base64' | while read -r row; do
+    while read -r row; do
         _j() { echo "$row" | base64 --decode | jq -r "$1"; }
         local TITLE=$(_j '.title')
         local DESC=$(_j '.description // empty')
@@ -468,7 +466,8 @@ copy_labels_and_milestones() {
                 ((TOTAL_MILESTONES_COPIED++)) || true
             fi
         fi
-    done
+    done < <(gh_api --paginate "/repos/${SRC_ORG}/${name}/milestones?state=all&per_page=100" \
+        --jq '.[] | @base64')
 }
 
 # ============================================================================
@@ -578,21 +577,7 @@ copy_issues() {
     print_step "Copying issues for ${name}"
 
     # Page through all issues from source (includes PRs; we filter those out)
-    gh_api --paginate "/repos/${SRC_ORG}/${name}/issues?state=all&per_page=100" 2>/dev/null \
-    | jq -c '
-        .[]?
-        | select(has("pull_request")|not)
-        | {
-            number, title,
-            body: (.body // ""),
-            html_url, state,
-            author: (.user.login // "unknown"),
-            created_at,
-            milestone_title: (.milestone.title // ""),
-            labels: ((.labels // []) | map(.name))
-          }
-      ' \
-    | while IFS= read -r row; do
+    while IFS= read -r row; do
         # Extract fields
         local NUM TITLE BODY URL STATE AUTHOR CREATED MIL_TITLE
         local LABELS_JSON
@@ -622,17 +607,29 @@ copy_issues() {
 
         # Copy comments for this issue
         local num=$(jq -r '.number' <<<"$row")
-        gh_api --paginate "/repos/${SRC_ORG}/${name}/issues/${num}/comments?per_page=100" 2>/dev/null \
-        | jq -c '.[]? | {author:(.user.login // "unknown"), created_at, body:(.body // "")}' \
-        | while IFS= read -r crow; do
+        while IFS= read -r crow; do
             local CAUTH CDATE CBODY CMT
             CAUTH=$(jq -r '.author'      <<<"$crow")
             CDATE=$(jq -r '.created_at'  <<<"$crow")
             CBODY=$(jq -r '.body'        <<<"$crow")
             CMT="**(Original comment by @${CAUTH} on ${CDATE})**\n\n${CBODY}"
             post_issue_comment "$name" "$NEWNUM" "$CMT"
-        done
-    done
+        done < <(gh_api --paginate "/repos/${SRC_ORG}/${name}/issues/${num}/comments?per_page=100" 2>/dev/null \
+        | jq -c '.[]? | {author:(.user.login // "unknown"), created_at, body:(.body // "")}')
+    done < <(gh_api --paginate "/repos/${SRC_ORG}/${name}/issues?state=all&per_page=100" 2>/dev/null \
+    | jq -c '
+        .[]?
+        | select(has("pull_request")|not)
+        | {
+            number, title,
+            body: (.body // ""),
+            html_url, state,
+            author: (.user.login // "unknown"),
+            created_at,
+            milestone_title: (.milestone.title // ""),
+            labels: ((.labels // []) | map(.name))
+          }
+      ')
 }
 
 # ============================================================================
@@ -647,9 +644,7 @@ copy_prs_as_archival_issues() {
     # Ensure archival label exists
     ensure_label "$name" "$LABEL_ARCHIVED_PR" "6e5494" "Archival of original Pull Request"
 
-    gh_api --paginate "/repos/${SRC_ORG}/${name}/pulls?state=all&per_page=100" \
-        --jq '.[] | @base64' \
-    | while read -r row; do
+    while read -r row; do
         _j() { echo "$row" | base64 --decode | jq -r "$1"; }
         local PRNUM=$(_j '.number')
         local TITLE=$(_j '.title')
@@ -690,8 +685,7 @@ copy_prs_as_archival_issues() {
             --jq '.[] | {kind:"review",author:.user.login,created_at,body:("[Review state: " + .state + "]\n\n" + (.body//""))}' >"${WORKDIR}/rv.json"
 
         # Merge and sort chronologically
-        jq -s 'add | sort_by(.created_at)' "${WORKDIR}/ic.json" "${WORKDIR}/rc.json" "${WORKDIR}/rv.json" 2>/dev/null \
-        | jq -c '.[]' | while read -r c; do
+        while read -r c; do
             local KIND=$(echo "$c" | jq -r '.kind')
             local AUTH=$(echo "$c" | jq -r '.author')
             local DATE=$(echo "$c" | jq -r '.created_at')
@@ -700,8 +694,10 @@ copy_prs_as_archival_issues() {
             if post_issue_comment "$name" "$NEWNUM" "$CMT"; then
                 ((TOTAL_PR_COMMENTS_COPIED++)) || true
             fi
-        done || true
-    done
+        done < <(jq -s 'add | sort_by(.created_at)' "${WORKDIR}/ic.json" "${WORKDIR}/rc.json" "${WORKDIR}/rv.json" 2>/dev/null \
+        | jq -c '.[]') || true
+    done < <(gh_api --paginate "/repos/${SRC_ORG}/${name}/pulls?state=all&per_page=100" \
+        --jq '.[] | @base64')
 }
 
 # ============================================================================
@@ -758,7 +754,7 @@ copy_discussions() {
         hasNext="$(echo "$page" | jq -r '.data.src.discussions.pageInfo.hasNextPage')"
         cursor="$(echo "$page"  | jq -r '.data.src.discussions.pageInfo.endCursor')"
 
-        echo "$page" | jq -c '.data.src.discussions.nodes[]' | while read -r d; do
+        while read -r d; do
             local DTITLE DBODY DURL DCAT
             DTITLE="$(echo "$d" | jq -r '.title')"
             DBODY="$(echo "$d" | jq -r '.body // ""')"
@@ -783,7 +779,7 @@ copy_discussions() {
 
             # Comments (single page or more)
             # First page from current node
-            echo "$d" | jq -c '.comments.nodes[]?' | while read -r c; do
+            while read -r c; do
                 local CAUTH=$(echo "$c" | jq -r '.author.login // "unknown"')
                 local CDAT=$(echo "$c"  | jq -r '.createdAt')
                 local CBOD=$(echo "$c"  | jq -r '.body // ""')
@@ -792,9 +788,9 @@ copy_discussions() {
                 if gh_gql -f query="$cm" -F id="$newDid" -F body="$CBODY" >/dev/null 2>&1; then
                     ((TOTAL_DISCUSSION_COMMENTS_COPIED++)) || true
                 fi
-            done
+            done < <(echo "$d" | jq -c '.comments.nodes[]?')
             # Additional comment pages not handled here for simplicity (rare for most repos).
-        done
+        done < <(echo "$page" | jq -c '.data.src.discussions.nodes[]')
     done
 }
 
@@ -808,9 +804,7 @@ process_repositories() {
     print_info "Listing repositories in ${SRC_ORG}..."
     echo ""
 
-    gh_api --paginate "/orgs/${SRC_ORG}/repos?per_page=100" \
-        --jq '.[] | {name,visibility,archived,has_wiki} | @base64' \
-    | while read -r row; do
+    while read -r row; do
         _j() { echo "$row" | base64 --decode | jq -r "$1"; }
         NAME=$(_j '.name')
         VIS=$(_j '.visibility')
@@ -849,7 +843,8 @@ process_repositories() {
 
         # Add throttle between repository processing to avoid rate limits
         sleep "$THROTTLE"
-    done
+    done < <(gh_api --paginate "/orgs/${SRC_ORG}/repos?per_page=100" \
+        --jq '.[] | {name,visibility,archived,has_wiki} | @base64')
 }
 
 # ============================================================================
