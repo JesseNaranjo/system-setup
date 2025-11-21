@@ -455,7 +455,7 @@ main() {
     fi
 
     print_success "Setup complete!"
-    print_summary
+    print_session_summary
     echo ""
 
     print_info "The script made only necessary changes to bring your configuration up to date."

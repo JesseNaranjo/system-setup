@@ -117,7 +117,7 @@ Shared utility library providing common functionality across all modules.
   - Reads from `/dev/tty` to work in piped contexts
 
 **Summary:**
-- `print_summary()`: Displays all file modifications and backups at end of session
+- `print_session_summary()`: Displays all file modifications and backups at end of session
 
 ---
 
