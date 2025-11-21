@@ -136,11 +136,11 @@ echo ""
 
 # Step 2: Destroy the container
 print_info "Step 2/4: Destroying container..."
-if lxc-destroy -n "$CONTAINER_NAME"; then
+if lxc-destroy --name "$CONTAINER_NAME" --quiet; then
     print_success "✓ Container destroyed: $CONTAINER_NAME"
 else
     print_error "✖ Failed to destroy container: $CONTAINER_NAME"
-    exit 1
+    echo "            (maybe it doesn't exist?)"
 fi
 echo ""
 
@@ -149,7 +149,7 @@ print_info "Step 3/4: Creating container with:"
 echo "            Distribution: $DISTRIBUTION"
 echo "            Release: $RELEASE"
 echo "            Architecture: $ARCHITECTURE"
-if lxc-create -n "$CONTAINER_NAME" -t download -- -d "$DISTRIBUTION" -r "$RELEASE" -a "$ARCHITECTURE"; then
+if lxc-create --name "$CONTAINER_NAME" -t download -- -d "$DISTRIBUTION" -r "$RELEASE" -a "$ARCHITECTURE"; then
     print_success "✓ Container created: $CONTAINER_NAME"
 else
     print_error "✖ Failed to create container: $CONTAINER_NAME"
