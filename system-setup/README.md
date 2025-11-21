@@ -554,7 +554,7 @@ All operations are safe to run multiple times:
 ### Backup System
 
 **Timestamped Backups:**
-- Format: `<filename>.backup.YYYYMMDD_HHMMSS`
+- Format: `<filename>.backup.YYYYMMDD_HHMMSS.bak`
 - Preserves permissions and ownership
 - Created before first modification in session
 - Tracked in `BACKED_UP_FILES[]` array

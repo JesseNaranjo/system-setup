@@ -309,7 +309,7 @@ backup_file() {
     fi
 
     if [[ -f "$file" ]]; then
-        local backup="${file}.backup.$(date +%Y%m%d_%H%M%S)"
+        local backup="${file}.backup.$(date +%Y%m%d_%H%M%S).bak"
 
         # Copy file with preserved permissions (-p flag)
         if needs_elevation "$file"; then

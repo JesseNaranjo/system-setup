@@ -626,7 +626,7 @@ backup_file() {
     [[ "$already_backed_up" == true ]] && return 0
 
     if [[ -f "$file" ]]; then
-        local backup="${file}.backup.$(date +%Y%m%d_%H%M%S)"
+        local backup="${file}.backup.$(date +%Y%m%d_%H%M%S).bak"
         cp -p "$file" "$backup"
 
         # Preserve ownership (platform-specific)
