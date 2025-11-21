@@ -254,6 +254,10 @@ get_package_list() {
 
 # Populate the package cache with installed packages from the package list
 populate_package_cache() {
+    if [[ "$DEBUG_MODE" == true ]]; then
+        print_debug "Populating package cache..."
+    fi
+
     # Get all package names from the package list
     local package_list=()
     while read -r line; do
@@ -269,6 +273,7 @@ populate_package_cache() {
         installed_packages=$(dpkg -l 2>/dev/null | awk '/^ii/ {print $2}' || true)
     fi
 
+    PACKAGE_CACHE=()
     # Check each package from our list against installed packages
     for package in "${package_list[@]}"; do
         if echo "$installed_packages" | grep -qx "$package"; then
