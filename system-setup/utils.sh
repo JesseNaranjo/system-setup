@@ -226,6 +226,7 @@ get_package_list() {
     if [[ "$DETECTED_OS" == "macos" ]]; then
         # macOS packages (brew)
         echo "7-zip:sevenzip"
+        echo "AWK:awk"
         echo "Bash:bash"
         echo "CA Certificates:ca-certificates"
         echo "Git:git"
