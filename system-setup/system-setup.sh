@@ -408,8 +408,6 @@ main() {
     fi
 
     print_success "Setup complete!"
-    echo ""
-
     print_summary
     echo ""
 

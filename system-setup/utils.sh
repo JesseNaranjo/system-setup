@@ -64,6 +64,10 @@ print_success() {
     echo -e "${GREEN}[ SUCCESS ]${NC} $1"
 }
 
+print_summary() {
+    echo -e "${BLUE}[ SUMMARY ]${NC} $1"
+}
+
 print_warning() {
     echo -e "${YELLOW}[ WARNING ]${NC} $1"
 }
@@ -532,16 +536,15 @@ add_export_if_needed() {
 # Print a summary of all changes made
 print_summary() {
     if [[ ${#BACKED_UP_FILES[@]} -eq 0 && ${#CREATED_BACKUP_FILES[@]} -eq 0 ]]; then
-        print_info "No files were modified during this session."
+        echo "            No files were modified during this session."
         return
     fi
 
-    echo ""
-    print_info "─────────────────── Session Summary ───────────────────"
+    print_summary "─── Session ─────────────────────────────────────────────────────────"
     echo ""
 
     if [[ ${#BACKED_UP_FILES[@]} -gt 0 ]]; then
-        print_success "${GREEN}Files Modified:${NC}"
+        print_success "${GREEN}Files Updated:${NC}"
         for file in "${BACKED_UP_FILES[@]+"${BACKED_UP_FILES[@]}"}"; do
             echo "            - $file"
         done
@@ -549,11 +552,11 @@ print_summary() {
     fi
 
     if [[ ${#CREATED_BACKUP_FILES[@]} -gt 0 ]]; then
-        print_backup "Backup Files Created:"
+        print_backup "Backup Files:"
         for file in "${CREATED_BACKUP_FILES[@]+"${CREATED_BACKUP_FILES[@]}"}"; do
             echo "            - $file"
         done
         echo ""
     fi
-    print_info "───────────────────────────────────────────────────────"
+    print_summary "─────────────────────────────────────────────────────────────────────"
 }
