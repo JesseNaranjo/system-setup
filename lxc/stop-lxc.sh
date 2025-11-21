@@ -75,7 +75,7 @@ for lxcName in "${RUNNING[@]}"; do
     else
         print_error "✖ Failed to stop container: ${lxcName}"
     fi
-    sleep 1
+    sleep 0.5
 
     # Stop the systemd service
     if systemctl --user stop "lxc-bg-start@${lxcName}.service" 2>/dev/null; then
@@ -83,7 +83,7 @@ for lxcName in "${RUNNING[@]}"; do
     else
         print_warning "⚠ Service may not be running: lxc-bg-start@${lxcName}.service"
     fi
-    sleep 1
+    sleep 0.25
 done
 
 echo ""

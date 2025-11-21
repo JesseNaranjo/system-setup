@@ -80,7 +80,7 @@ for lxcName in "$@"; do
     else
         print_error "✖ Failed to start service/container: ${lxcName}"
     fi
-    sleep 1
+    sleep 0.5
 done
 echo ""
 

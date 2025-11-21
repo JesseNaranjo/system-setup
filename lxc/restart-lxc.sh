@@ -59,7 +59,7 @@ print_info "Restarting ${#RUNNING[@]} container(s): ${RUNNING[*]}"
 echo ""
 
 "${SCRIPT_DIR}/stop-lxc.sh" "${RUNNING[@]}"
-sleep 1
+sleep 0.25
 "${SCRIPT_DIR}/start-lxc.sh" "${RUNNING[@]}"
 
 echo ""
