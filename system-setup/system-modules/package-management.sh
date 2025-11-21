@@ -94,16 +94,16 @@ check_and_install_packages() {
     fi
 
     # Identify all missing packages
-    while IFS=: read -r display_name package; do
-        if is_package_installed "$package"; then
+    while IFS=':' read -r display_name package_name; do
+        if is_package_installed "$package_name"; then
             print_success "$display_name is already installed"
-            track_special_packages "$package"
+            track_special_packages "$package_name"
         else
             print_warning "$display_name is not installed"
             if [[ "$can_install" == true ]]; then
                 if prompt_yes_no "            - Would you like to install $display_name?" "n"; then
-                    packages_to_install+=("$package")
-                    track_special_packages "$package"
+                    packages_to_install+=("$package_name")
+                    track_special_packages "$package_name"
                 fi
             fi
         fi

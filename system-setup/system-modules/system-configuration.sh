@@ -532,9 +532,9 @@ main_configure_system() {
     # Verify package manager availability
     if verify_package_manager; then
         # Identify all installed special packages
-        while IFS=: read -r display_name package; do
-            if is_package_installed "$package"; then
-                track_special_packages "$package"
+        while IFS=: read -r display_name package_name; do
+            if is_package_installed "$package_name"; then
+                track_special_packages "$package_name"
             fi
         done < <(get_package_list)
     fi

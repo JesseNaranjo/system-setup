@@ -38,6 +38,10 @@ SCREEN_INSTALLED=false
 OPENSSH_SERVER_INSTALLED=false
 RUNNING_IN_CONTAINER=false
 
+# Package cache for performance optimization
+declare -A PACKAGE_CACHE=()
+PACKAGE_CACHE_POPULATED=false
+
 # ============================================================================
 # Output Functions
 # ============================================================================
@@ -248,10 +252,54 @@ get_package_list() {
     fi
 }
 
+# Populate the package cache with installed packages from the package list
+populate_package_cache() {
+    # Get all package names from the package list
+    local package_list=()
+    while read -r line; do
+        package_list+=("${line##*:}")
+    done < <(get_package_list)
+
+    local installed_packages
+    if [[ "$DETECTED_OS" == "macos" ]]; then
+        # Get all installed packages from brew
+        installed_packages=$(brew list --formula -1 2>/dev/null || true)
+    else
+        # Get all installed packages from dpkg
+        installed_packages=$(dpkg -l 2>/dev/null | awk '/^ii/ {print $2}' || true)
+    fi
+
+    # Check each package from our list against installed packages
+    for package in "${package_list[@]}"; do
+        if echo "$installed_packages" | grep -qx "$package"; then
+            PACKAGE_CACHE["$package"]="installed"
+            echo "Cached installed package: $package"
+        else
+            PACKAGE_CACHE["$package"]="not_installed"
+            echo "Cached not installed package: $package"
+        fi
+    done
+
+    PACKAGE_CACHE_POPULATED=true
+}
+
 # Check if a package is installed (unified for both macOS and Linux)
+# Uses cache for performance optimization
 is_package_installed() {
     local package="$1"
 
+    # Populate cache if not yet populated
+    if [[ "$PACKAGE_CACHE_POPULATED" != "true" ]]; then
+        populate_package_cache
+    fi
+
+    # Check cache first
+    if [[ -n "${PACKAGE_CACHE[$package]:-}" ]]; then
+        [[ "${PACKAGE_CACHE[$package]}" == "installed" ]]
+        return $?
+    fi
+
+    # Fallback to direct check if not in cache (shouldn't happen normally)
     if [[ "$DETECTED_OS" == "macos" ]]; then
         brew list "$package" &>/dev/null
     else
