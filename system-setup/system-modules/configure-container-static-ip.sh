@@ -162,7 +162,7 @@ configure_container_static_ip() {
     fi
 
     # Create or update the network configuration file
-    cat > "$network_file" << EOF
+    cat << EOF | run_elevated tee "$network_file" > /dev/null
 # Network configuration for $primary_interface
 # Managed by system-setup.sh
 # Updated: $(date)

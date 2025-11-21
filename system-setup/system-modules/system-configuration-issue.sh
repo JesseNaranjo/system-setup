@@ -199,7 +199,7 @@ configure_issue_network() {
 
     # If the marker doesn't exist, add the box at the end of the file.
     if ! grep -q "║ Network Interfaces" "$issue_file"; then
-        echo -e "\n$new_content" >> "$issue_file"
+        echo -e "\n$new_content" | run_elevated tee -a "$issue_file" > /dev/null
         print_success "✓ Added network interface info to $issue_file"
     else
         # If the marker exists, replace the entire block.
@@ -222,7 +222,7 @@ configure_issue_network() {
             printing { print }
         ' "$issue_file" > "$temp_issue"
 
-        mv "$temp_issue" "$issue_file"
+        run_elevated mv "$temp_issue" "$issue_file"
         print_success "✓ Updated network interface info in $issue_file"
     fi
 }

@@ -87,32 +87,32 @@ configure_swap() {
     print_info "Creating swap file at ${swapfile}..."
 
     # Create swap file
-    if ! dd if=/dev/zero of="$swapfile" bs=1M count="$swap_mb" 2>&1 | grep -v "records in\|records out"; then
+    if ! run_elevated dd if=/dev/zero of="$swapfile" bs=1M count="$swap_mb" 2>&1 | grep -v "records in\|records out"; then
         print_error "Failed to create swap file"
         return 1
     fi
     print_success "✓ Swap file created (${swap_gb} GB)"
 
     # Set correct permissions
-    if ! chmod 600 "$swapfile"; then
+    if ! run_elevated chmod 600 "$swapfile"; then
         print_error "Failed to set permissions on swap file"
-        rm -f "$swapfile"
+        run_elevated rm -f "$swapfile"
         return 1
     fi
     print_success "✓ Updated permissions on swap file (chmod)"
 
     # Format as swap
-    if ! mkswap "$swapfile" 2>&1 | tail -n 1; then
+    if ! run_elevated mkswap "$swapfile" 2>&1 | tail -n 1; then
         print_error "Failed to format swap file"
-        rm -f "$swapfile"
+        run_elevated rm -f "$swapfile"
         return 1
     fi
     print_success "✓ Formatted swap file (mkswap)"
 
     # Enable swap
-    if ! swapon "$swapfile"; then
+    if ! run_elevated swapon "$swapfile"; then
         print_error "Failed to enable swap"
-        rm -f "$swapfile"
+        run_elevated rm -f "$swapfile"
         return 1
     fi
     print_success "✓ Swap enabled successfully"
@@ -134,10 +134,12 @@ configure_swap() {
         backup_file /etc/fstab
 
         # Add entry to fstab
-        echo "" >> /etc/fstab
-        echo "# Swap file - managed by system-setup.sh" >> /etc/fstab
-        echo "# Added: $(date)" >> /etc/fstab
-        echo "$fstab_entry" >> /etc/fstab
+        {
+            echo ""
+            echo "# Swap file - managed by system-setup.sh"
+            echo "# Added: $(date)"
+            echo "$fstab_entry"
+        } | run_elevated tee -a /etc/fstab > /dev/null
 
         print_success "✓ Swap entry added to /etc/fstab"
     fi

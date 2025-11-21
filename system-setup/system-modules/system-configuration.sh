@@ -76,15 +76,11 @@ configure_nano() {
             backup_file "$config_file"
             add_change_header "$config_file" "nano"
 
-            if needs_elevation "$config_file"; then
-                echo "" | sudo tee -a "$config_file" > /dev/null
-                echo "# homebrew nano syntax definitions" | sudo tee -a "$config_file" > /dev/null
-                echo "$include_line" | sudo tee -a "$config_file" > /dev/null
-            else
-                echo "" >> "$config_file"
-                echo "# homebrew nano syntax definitions" >> "$config_file"
-                echo "$include_line" >> "$config_file"
-            fi
+            {
+                echo ""
+                echo "# homebrew nano syntax definitions"
+                echo "$include_line"
+            } | run_elevated tee -a "$config_file" > /dev/null
         else
             print_success "homebrew nano syntax definitions already configured"
         fi
@@ -207,14 +203,14 @@ configure_shell_prompt_colors_system() {
         {
             echo "# Custom PS1 prompt - managed by system-setup.sh"
             echo "$custom_ps1_pattern"
-        } >> "$shell_config"
+        } | run_elevated tee -a "$shell_config" > /dev/null
         print_success "✓ Custom PS1 prompt configured in $shell_config"
     elif [[ "$ps1_count" -eq 1 ]]; then
         # Find the line number of the PS1 definition
         local ps1_line_num=$(grep -n "^[[:space:]]*PS1=" "$shell_config" | cut -d: -f1)
 
         # Comment out the line
-        sed -i.bak "${ps1_line_num}s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
+        run_elevated sed -i.bak "${ps1_line_num}s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && run_elevated rm -f "${shell_config}.bak"
 
         # Create a temporary file with the new PS1 content
         local temp_ps1=$(mktemp)
@@ -225,7 +221,7 @@ configure_shell_prompt_colors_system() {
         } > "$temp_ps1"
 
         # Insert the new content after the commented line
-        sed -i.bak "${ps1_line_num}r ${temp_ps1}" "$shell_config" && rm -f "${shell_config}.bak"
+        run_elevated sed -i.bak "${ps1_line_num}r ${temp_ps1}" "$shell_config" && run_elevated rm -f "${shell_config}.bak"
         rm -f "$temp_ps1"
 
         print_success "✓ Custom PS1 prompt configured in $shell_config"
@@ -234,14 +230,14 @@ configure_shell_prompt_colors_system() {
         print_warning "Found $ps1_count PS1 definitions in $shell_config"
 
         # Comment out all PS1 lines
-        sed -i.bak "s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
+        run_elevated sed -i.bak "s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && run_elevated rm -f "${shell_config}.bak"
 
         # Add new PS1 at the end
         add_change_header "$shell_config" "shell"
         {
             echo "# Custom PS1 prompt - managed by system-setup.sh"
             echo "$custom_ps1_pattern"
-        } >> "$shell_config"
+        } | run_elevated tee -a "$shell_config" > /dev/null
 
         # Provide instructions and wait
         echo ""
@@ -259,7 +255,7 @@ configure_shell_prompt_colors_system() {
         echo ""
 
         # Open nano for user to review/edit
-        nano "$shell_config"
+        run_elevated nano "$shell_config"
 
         print_success "✓ File reviewed and saved"
     fi
@@ -270,17 +266,17 @@ configure_shell_prompt_colors_user() {
     local home_dir="$1"
     local username="$2"
 
+    # Skip if home directory doesn't exist
+    if [[ ! -d "$home_dir" ]]; then
+        return 0
+    fi
+
     # Determine shell config file based on OS
     local shell_config
     if [[ "$DETECTED_OS" == "macos" ]]; then
         shell_config="${home_dir}/.zshrc"
     else
         shell_config="${home_dir}/.bashrc"
-    fi
-
-    # Skip if home directory doesn't exist
-    if [[ ! -d "$home_dir" ]]; then
-        return 0
     fi
 
     # Skip if config file doesn't exist
@@ -316,11 +312,11 @@ configure_shell_prompt_colors_user() {
     # Comment out existing PS1 definitions with OS-specific rules
     if [[ "$DETECTED_OS" == "macos" ]]; then
         # macOS: Comment out ALL PS1 definitions
-        sed -i.bak "s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Commented out by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
+        run_elevated sed -i.bak "s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Commented out by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && run_elevated rm -f "${shell_config}.bak"
     else
         # Linux: Comment out all PS1 definitions EXCEPT those starting with: PS1="\[\e]0;
         # This preserves the terminal title escape sequences
-        sed -i.bak "/^[[:space:]]*PS1=\"\\\\\[\\\\e\]0;/! s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Commented out by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && rm -f "${shell_config}.bak"
+        run_elevated sed -i.bak "/^[[:space:]]*PS1=\"\\\\\[\\\\e\]0;/! s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Commented out by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && run_elevated rm -f "${shell_config}.bak"
     fi
 
     # Restore ownership if running as root
