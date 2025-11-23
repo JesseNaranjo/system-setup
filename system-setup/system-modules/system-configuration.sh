@@ -391,6 +391,7 @@ configure_shell_for_user() {
             echo "" >> "$shell_config"
             echo "# Linux ls configuration" >> "$shell_config"
         fi
+        add_config_if_needed "shell" "$shell_config" 'eval $(dircolors -b)' "" "dircolors initialization"
         add_alias_if_needed "$shell_config" "ls" "ls --color=auto --group-directories-first -AFHhl" "Linux ls with colors and formatting"
     fi
 
