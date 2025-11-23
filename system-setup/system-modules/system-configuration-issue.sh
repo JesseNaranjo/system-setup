@@ -127,25 +127,27 @@ get_existing_issue_interfaces() {
 generate_issue_content() {
     local temp_box=$(mktemp)
 
-    # Add box with network interfaces
-    echo "  ╔═══════════════════════════════════════════════════════════════════════════" > "$temp_box"
-    echo "  ║ Network Interfaces" >> "$temp_box"
-    echo "  ╠═══════════════════════════════════════════════════════════════════════════" >> "$temp_box"
+    {
+        # Add box with network interfaces
+        echo "  ╔═════════════════════════════════════════════════════════════════════════════"
+        echo "  ║ Network Interfaces"
+        echo "  ╠═════════════════════════════════════════════════════════════════════════════"
 
-    # Add wired, wireless, and other interfaces
-    for iface in "${wire_interfaces[@]+"${wire_interfaces[@]}"}"; do
-        echo "  ║ - wire: \\4{${iface}} / \\6{${iface}} (${iface})" >> "$temp_box"
-    done
-    for iface in "${wifi_interfaces[@]+"${wifi_interfaces[@]}"}"; do
-        echo "  ║ - wifi: \\4{${iface}} / \\6{${iface}} (${iface})" >> "$temp_box"
-    done
-    for iface_info in "${other_interfaces[@]+"${other_interfaces[@]}"}"; do
-        local iface="${iface_info%%:*}"
-        local type="${iface_info##*:}"
-        echo "  ║ - ${type}: \\4{${iface}} / \\6{${iface}} (${iface})" >> "$temp_box"
-    done
+        # Add wired, wireless, and other interfaces
+        for iface in "${wire_interfaces[@]+"${wire_interfaces[@]}"}"; do
+            echo "  ║ - wire:   \\4{${iface}} / \\6{${iface}} (${iface})"
+        done
+        for iface in "${wifi_interfaces[@]+"${wifi_interfaces[@]}"}"; do
+            echo "  ║ - wifi:   \\4{${iface}} / \\6{${iface}} (${iface})"
+        done
+        for iface_info in "${other_interfaces[@]+"${other_interfaces[@]}"}"; do
+            local iface="${iface_info%%:*}"
+            local type="${iface_info##*:}"
+            echo "  ║ - ${type}: \\4{${iface}} / \\6{${iface}} (${iface})"
+        done
 
-    echo "  ╚═══════════════════════════════════════════════════════════════════════════" >> "$temp_box"
+        echo "  ╚═════════════════════════════════════════════════════════════════════════════"
+    } >> "$temp_box"
 
     echo "$temp_box"
 }
