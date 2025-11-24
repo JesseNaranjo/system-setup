@@ -237,7 +237,9 @@ get_package_list() {
         echo "htop:htop"
         echo "Nano Editor:nano"
         echo "Ollama:ollama"
+        echo "OrbStack:orbstack"
         echo "Screen (GNU):screen"
+        echo "UTM:utm"
     else
         # Linux packages (apt)
         echo "7-zip:7zip"
