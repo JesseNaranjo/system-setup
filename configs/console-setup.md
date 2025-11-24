@@ -5,6 +5,11 @@ Ensure the following packages are installed:
 
 ### console font size
 
+To manually configure the console, reconfigure the package:
+```
+dpkg-reconfigure console-setup
+```
+
 Change:
 ```
 FONTSIZE="16x32"
