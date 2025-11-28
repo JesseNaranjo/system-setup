@@ -31,6 +31,7 @@ readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setu
 # List of module scripts to download/update (excludes system-setup.sh and utils.sh)
 get_script_list() {
     echo "system-modules/configure-container-static-ip.sh"
+    echo "system-modules/migrate-to-systemd-networkd.sh"
     echo "system-modules/modernize-apt-sources.sh"
     echo "system-modules/package-management.sh"
     echo "system-modules/system-configuration-issue.sh"
@@ -340,13 +341,22 @@ main() {
     detect_container
     if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
         echo "            - Running inside a container environment"
-
-        # Offer to configure static IP for containers
-        echo ""
-        source "${SCRIPT_DIR}/system-modules/configure-container-static-ip.sh"
-        main_configure_container_static_ip
     fi
     echo ""
+
+    # Network migration from ifupdown to systemd-networkd (Linux only, before container static IP)
+    if [[ "$DETECTED_OS" == "linux" ]]; then
+        source "${SCRIPT_DIR}/system-modules/migrate-to-systemd-networkd.sh"
+        main_migrate_to_systemd_networkd
+        echo ""
+    fi
+
+    # Offer to configure static IP for containers
+    if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
+        source "${SCRIPT_DIR}/system-modules/configure-container-static-ip.sh"
+        main_configure_container_static_ip
+        echo ""
+    fi
 
     # Step 1: Modernize APT sources (Linux only)
     if [[ "$DETECTED_OS" == "linux" ]]; then
