@@ -104,16 +104,11 @@ configure_ssh_socket() {
     fi
 
     # Open editor for ssh.socket configuration
-    echo ""
-    echo -e "            ${YELLOW}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "            ${YELLOW}║                                                                             ║${NC}"
-    echo -e "            ${YELLOW}║        You can customize the socket configuration here.                     ║${NC}"
-    echo -e "            ${YELLOW}║        Examples: change port, add ListenStream, etc.                        ║${NC}"
-    echo -e "            ${YELLOW}║                                                                             ║${NC}"
-    echo -e "            ${YELLOW}║        nano will open for manual configuration and adjustment.              ║${NC}"
-    echo -e "            ${YELLOW}║                                                                             ║${NC}"
-    echo -e "            ${YELLOW}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
-    echo ""
+    print_warning_box \
+        "You can customize the socket configuration here." \
+        "Examples: change port, add ListenStream, etc." \
+        "" \
+        "nano will open for manual configuration and adjustment."
     read -n 1 -s -r -p "Press any key to open nano and configure ssh.socket..."
     echo ""
 

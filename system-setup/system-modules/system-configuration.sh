@@ -242,17 +242,12 @@ configure_shell_prompt_colors_system() {
         } | run_elevated tee -a "$shell_config" > /dev/null
 
         # Provide instructions and wait
-        echo ""
-        echo -e "            ${YELLOW}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        Multiple PS1 definitions were found and commented out.               ║${NC}"
-        echo -e "            ${YELLOW}║        The new PS1 has been added at the end of the file.                   ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        Please review the file to ensure proper placement.                   ║${NC}"
-        echo -e "            ${YELLOW}║        nano will open for manual verification and adjustment.               ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
-        echo ""
+        print_warning_box \
+            "Multiple PS1 definitions were found and commented out." \
+            "The new PS1 has been added at the end of the file." \
+            "" \
+            "Please review the file to ensure proper placement." \
+            "nano will open for manual verification and adjustment."
         read -n 1 -s -r -p "Press any key to open nano and review $shell_config..."
         echo ""
 

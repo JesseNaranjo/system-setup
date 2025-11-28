@@ -75,6 +75,34 @@ print_warning() {
     echo -e "${YELLOW}[ WARNING ]${NC} $1"
 }
 
+# Print a warning box with multiple lines of content
+# Usage: print_warning_box "line1" "line2" "line3" ...
+# Each line will be padded to fit within the box
+print_warning_box() {
+    local box_width=77
+    local padding=8
+    local content_width=$((box_width - padding - 1))
+
+    echo ""
+    echo -e "            ${YELLOW}╔$(printf '═%.0s' $(seq 1 $box_width))╗${NC}"
+    echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
+
+    for line in "$@"; do
+        local line_len=${#line}
+        local right_pad=$((content_width - line_len))
+        if [[ $right_pad -lt 0 ]]; then
+            right_pad=0
+            line="${line:0:$content_width}"
+        fi
+        printf -v padded_line "%-${content_width}s" "$line"
+        echo -e "            ${YELLOW}║        ${padded_line}║${NC}"
+    done
+
+    echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
+    echo -e "            ${YELLOW}╚$(printf '═%.0s' $(seq 1 $box_width))╝${NC}"
+    echo ""
+}
+
 # ============================================================================
 # User Input Functions
 # ============================================================================
