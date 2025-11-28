@@ -30,13 +30,13 @@ readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setu
 
 # List of module scripts to download/update (excludes system-setup.sh and utils.sh)
 get_script_list() {
+    echo "system-modules/configure-container-static-ip.sh"
     echo "system-modules/modernize-apt-sources.sh"
     echo "system-modules/package-management.sh"
-    echo "system-modules/system-configuration.sh"
-    echo "system-modules/system-configuration-swap.sh"
-    echo "system-modules/configure-container-static-ip.sh"
-    echo "system-modules/system-configuration-openssh-server.sh"
     echo "system-modules/system-configuration-issue.sh"
+    echo "system-modules/system-configuration-openssh-server.sh"
+    echo "system-modules/system-configuration-swap.sh"
+    echo "system-modules/system-configuration.sh"
 }
 
 # ============================================================================
