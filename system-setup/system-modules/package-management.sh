@@ -130,10 +130,7 @@ check_and_install_packages() {
 # ============================================================================
 
 main_manage_packages() {
-    # Detect OS if not already detected
-    if [[ -z "$DETECTED_OS" ]]; then
-        detect_os
-    fi
+    detect_environment
 
     check_and_install_packages
 }

@@ -171,10 +171,7 @@ modernize_apt_sources() {
 # ============================================================================
 
 main_modernize_apt_sources() {
-    # Detect OS if not already detected
-    if [[ -z "$DETECTED_OS" ]]; then
-        detect_os
-    fi
+    detect_environment
 
     modernize_apt_sources
 }

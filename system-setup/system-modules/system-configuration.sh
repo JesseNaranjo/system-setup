@@ -525,10 +525,7 @@ main_configure_system() {
         exit 1
     fi
 
-    # Detect OS if not already detected
-    if [[ -z "$DETECTED_OS" ]]; then
-        detect_os
-    fi
+    detect_environment
 
     # Verify package manager availability
     if verify_package_manager; then

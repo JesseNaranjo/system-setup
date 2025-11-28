@@ -149,10 +149,7 @@ configure_ssh_socket() {
 # ============================================================================
 
 main_configure_openssh_server() {
-    # Detect OS if not already detected
-    if [[ -z "$DETECTED_OS" ]]; then
-        detect_os
-    fi
+    detect_environment
 
     configure_ssh_socket
 }

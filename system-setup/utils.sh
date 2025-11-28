@@ -153,6 +153,20 @@ detect_container() {
     RUNNING_IN_CONTAINER=false
 }
 
+# Detect both OS and container environment in one call
+# This consolidates the common pattern used in all modules
+detect_environment() {
+    # Detect OS if not already detected
+    if [[ -z "$DETECTED_OS" ]]; then
+        detect_os
+    fi
+
+    # Detect container environment on Linux
+    if [[ "$DETECTED_OS" == "linux" ]]; then
+        detect_container
+    fi
+}
+
 # ============================================================================
 # Privilege Management
 # ============================================================================

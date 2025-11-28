@@ -206,15 +206,7 @@ EOF
 # ============================================================================
 
 main_configure_container_static_ip() {
-    # Detect OS if not already detected
-    if [[ -z "$DETECTED_OS" ]]; then
-        detect_os
-    fi
-
-    # Detect container environment if not already detected
-    if [[ "$RUNNING_IN_CONTAINER" == false ]] || [[ "$DETECTED_OS" == "linux" ]]; then
-        detect_container
-    fi
+    detect_environment
 
     configure_container_static_ip
 }
