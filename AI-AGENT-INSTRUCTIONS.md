@@ -987,7 +987,7 @@ install_packages() {
                 if [[ "$os" == "macos" ]]; then
                     brew install "$pkg"
                 else
-                    sudo apt install -y "$pkg"
+                    sudo apt install "$pkg"
                 fi
             fi
         fi
