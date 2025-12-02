@@ -486,6 +486,12 @@ add_change_header() {
 # Configuration Management Functions
 # ============================================================================
 
+# Escape special regex characters in a string for use in grep/sed patterns
+# Usage: escaped=$(escape_regex "string with $pecial (chars)")
+escape_regex() {
+    printf '%s' "$1" | sed 's/[.[\(*^$+?{|\\]/\\&/g'
+}
+
 # Check if a configuration line exists in a file
 config_exists() {
     local file="$1"
@@ -523,7 +529,8 @@ update_config_line() {
 
     if config_exists "$file" "$setting_pattern"; then
         # Setting exists, check if it's already correct
-        if grep -qE "^[[:space:]]*${full_line}[[:space:]]*$" "$file"; then
+        local escaped_full_line=$(escape_regex "$full_line")
+        if grep -qE "^[[:space:]]*${escaped_full_line}[[:space:]]*$" "$file"; then
             print_success "- $description already configured correctly"
             return 0
         else
@@ -585,12 +592,16 @@ add_config_if_needed() {
         full_setting="${setting}"
     fi
 
+    # Escape regex special characters in the setting for pattern matching
+    local escaped_setting=$(escape_regex "$setting")
+
     # The pattern is the setting key itself
     if [[ $setting =~ ^[[:space:]]*set[[:space:]]+ ]]; then
         local setting_key=${setting#set }
-        local setting_pattern="^[[:space:]]*set[[:space:]]+${setting_key}"
+        local escaped_key=$(escape_regex "$setting_key")
+        local setting_pattern="^[[:space:]]*set[[:space:]]+${escaped_key}"
     else
-        local setting_pattern="^[[:space:]]*${setting}"
+        local setting_pattern="^[[:space:]]*${escaped_setting}"
     fi
 
     update_config_line "$config_type" "$file" "$setting_pattern" "$full_setting" "$description"
