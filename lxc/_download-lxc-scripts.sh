@@ -32,8 +32,8 @@ readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setu
 # List of script files to download/update (excludes _download-lxc-scripts.sh)
 get_script_list() {
     echo "config-lxc-ssh.sh"
+    echo "create-lxc.sh"
     echo "create-priv-lxc.sh"
-    echo "refresh-lxc.sh"
     echo "restart-lxc.sh"
     echo "setup-lxc.sh"
     echo "start-lxc.sh"

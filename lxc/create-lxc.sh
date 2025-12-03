@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 
-# refresh-lxc.sh - Destroy and recreate an LXC container
+# create-lxc.sh - Create an LXC container (with optional destroy/recreate)
 #
-# Usage: ./refresh-lxc.sh <container_name> [distribution] [release] [architecture]
+# Usage: ./create-lxc.sh <container_name> [distribution] [release] [architecture]
 #
-# This script stops, destroys, recreates, and starts an LXC container.
-# Optional parameters (distribution, release, architecture) will be auto-detected
-# from the host system if not provided.
+# This script creates an LXC container. If a container with the same name
+# already exists, it prompts for confirmation before stopping, destroying,
+# and recreating it. Optional parameters (distribution, release, architecture)
+# will be auto-detected from the host system if not provided.
 #
 # Examples:
-#   ./refresh-lxc.sh mycontainer
-#   ./refresh-lxc.sh mycontainer debian bookworm amd64
+#   ./create-lxc.sh mycontainer
+#   ./create-lxc.sh mycontainer debian bookworm amd64
 
 set -euo pipefail
 
@@ -38,6 +39,31 @@ print_error() {
     echo -e "${RED}[ ERROR   ]${NC} $1"
 }
 
+# Prompt user for yes/no confirmation
+# Usage: prompt_yes_no "message" [default]
+#   default: "y" or "n" (optional, defaults to "n")
+# Returns: 0 for yes, 1 for no
+prompt_yes_no() {
+    local prompt_message="$1"
+    local default="${2:-n}"
+    local prompt_suffix
+    local user_reply
+
+    if [[ "${default,,}" == "y" ]]; then
+        prompt_suffix="(Y/n)"
+    else
+        prompt_suffix="(y/N)"
+    fi
+
+    read -p "$prompt_message $prompt_suffix: " -r user_reply </dev/tty
+
+    if [[ -z "$user_reply" ]]; then
+        [[ "${default,,}" == "y" ]]
+    else
+        [[ $user_reply =~ ^[Yy]$ ]]
+    fi
+}
+
 # ============================================================================
 # Input Validation
 # ============================================================================
@@ -56,6 +82,9 @@ if [[ $# -eq 0 || -z ${1-} ]]; then
     echo "Examples:"
     echo "  ${0##*/} mycontainer"
     echo "  ${0##*/} mycontainer debian bookworm amd64"
+    echo ""
+    echo "If a container with the same name already exists, you will be"
+    echo "prompted for confirmation before it is destroyed and recreated."
     exit 64  # 64 - EX_USAGE (sysexits.h)
 fi
 
@@ -123,29 +152,56 @@ echo ""
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Step 1: Stop the container
-print_info "Step 1/4: Stopping container..."
-if [[ -f "$SCRIPT_DIR/stop-lxc.sh" ]]; then
-    "$SCRIPT_DIR/stop-lxc.sh" "$CONTAINER_NAME"
-else
-    print_warning "stop-lxc.sh not found, attempting to stop manually..."
-    lxc-stop --name "$CONTAINER_NAME" || true
-    systemctl --user stop "lxc-bg-start@${CONTAINER_NAME}.service" 2>/dev/null || true
+# Check if container already exists
+CONTAINER_EXISTS=false
+if lxc-info -n "${CONTAINER_NAME}" &>/dev/null; then
+    CONTAINER_EXISTS=true
+    print_warning "Container '${CONTAINER_NAME}' already exists!"
+    echo ""
+    if ! prompt_yes_no "            Do you want to destroy and recreate it?" "n"; then
+        print_info "Operation cancelled by user"
+        exit 75  # 75 - EX_TEMPFAIL (sysexits.h) - user chose to abort
+    fi
+    echo ""
 fi
-echo ""
 
-# Step 2: Destroy the container
-print_info "Step 2/4: Destroying container..."
-if lxc-destroy --name "$CONTAINER_NAME" --quiet; then
-    print_success "✓ Container destroyed: $CONTAINER_NAME"
+# Set total steps and initialize counter
+if [[ "$CONTAINER_EXISTS" == true ]]; then
+    TOTAL_STEPS=4
 else
-    print_error "✖ Failed to destroy container: $CONTAINER_NAME"
-    echo "            (maybe it doesn't exist?)"
+    TOTAL_STEPS=2
 fi
-echo ""
+CURRENT_STEP=0
 
-# Step 3: Create the container with specified parameters
-print_info "Step 3/4: Creating container with:"
+# Stop and destroy only if container exists
+if [[ "$CONTAINER_EXISTS" == true ]]; then
+    # Step: Stop the container
+    ((CURRENT_STEP++)) || true
+    print_info "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Stopping container..."
+    if [[ -f "$SCRIPT_DIR/stop-lxc.sh" ]]; then
+        "$SCRIPT_DIR/stop-lxc.sh" "$CONTAINER_NAME"
+    else
+        print_warning "stop-lxc.sh not found, attempting to stop manually..."
+        lxc-stop --name "$CONTAINER_NAME" || true
+        systemctl --user stop "lxc-bg-start@${CONTAINER_NAME}.service" 2>/dev/null || true
+    fi
+    echo ""
+
+    # Step: Destroy the container
+    ((CURRENT_STEP++)) || true
+    print_info "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Destroying container..."
+    if lxc-destroy --name "$CONTAINER_NAME" --quiet; then
+        print_success "✓ Container destroyed: $CONTAINER_NAME"
+    else
+        print_error "✖ Failed to destroy container: $CONTAINER_NAME"
+        exit 1
+    fi
+    echo ""
+fi
+
+# Step: Create the container with specified parameters
+((CURRENT_STEP++)) || true
+print_info "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Creating container with:"
 echo "            Distribution: $DISTRIBUTION"
 echo "            Release: $RELEASE"
 echo "            Architecture: $ARCHITECTURE"
@@ -157,8 +213,9 @@ else
 fi
 echo ""
 
-# Step 4: Start the container
-print_info "Step 4/4: Starting container..."
+# Step: Start the container
+((CURRENT_STEP++)) || true
+print_info "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Starting container..."
 if [[ -f "$SCRIPT_DIR/start-lxc.sh" ]]; then
     "$SCRIPT_DIR/start-lxc.sh" "$CONTAINER_NAME"
 else
@@ -178,4 +235,4 @@ else
 fi
 
 echo ""
-print_success "Container $CONTAINER_NAME has been successfully refreshed!"
+print_success "Container $CONTAINER_NAME has been successfully created!"
