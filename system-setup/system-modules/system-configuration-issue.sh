@@ -206,16 +206,35 @@ configure_issue_network() {
     else
         # If the marker exists, replace the entire block.
         local temp_issue=$(mktemp)
+        local temp_new_content=$(mktemp)
+        echo "$new_content" > "$temp_new_content"
+        export TEMP_CONTENT="$temp_new_content"
         # Use awk to replace the block between the start and end markers
-        awk -v new_content="$new_content" '
+        awk '
             BEGIN { printing=1 }
-            /║ Network Interfaces/ {
+            /^[[:space:]]*╔═/ {
+                # Check if this is the start of our network block by peeking ahead
                 if (printing) {
-                    print new_content
-                    printing=0
+                    if ((getline nextline) > 0) {
+                        if (nextline ~ /^[[:space:]]*║ Network Interfaces/) {
+                            # This is our block, print new content from file
+                            while ((getline line < ENVIRON["TEMP_CONTENT"]) > 0) {
+                                print line
+                            }
+                            close(ENVIRON["TEMP_CONTENT"])
+                            printing=0
+                        } else {
+                            # Not our block, print both lines
+                            print
+                            print nextline
+                        }
+                    } else {
+                        print
+                    }
+                    next
                 }
             }
-            /╚═.*═╝/ {
+            /^[[:space:]]*╚═/ {
                 if (!printing) {
                     printing=1
                     next
@@ -223,6 +242,8 @@ configure_issue_network() {
             }
             printing { print }
         ' "$issue_file" > "$temp_issue"
+        rm -f "$temp_new_content"
+        unset TEMP_CONTENT
 
         run_elevated mv "$temp_issue" "$issue_file"
         print_success "✓ Updated network interface info in $issue_file"
