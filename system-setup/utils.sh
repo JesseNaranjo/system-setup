@@ -667,11 +667,11 @@ normalize_trailing_newlines() {
     local num_lines="${2:-1}"
     local temp_file=$(mktemp)
 
-    # Remove all trailing blank lines
+    # Remove all trailing blank lines (last content line keeps its newline)
     sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$file" > "$temp_file"
 
-    # Add exactly N blank lines
-    for ((i=0; i<num_lines; i++)); do
+    # Add (N-1) more newlines since the last line already ends with one
+    for ((i=1; i<num_lines; i++)); do
         printf '\n' >> "$temp_file"
     done
 
