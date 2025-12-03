@@ -37,6 +37,28 @@ get_script_list() {
     echo "update-k8s-repos.sh"
 }
 
+# List of obsolete scripts to clean up (renamed or removed from repository)
+# Add filenames here when scripts are renamed or deprecated
+OBSOLETE_SCRIPTS=()
+
+# Clean up obsolete scripts that have been renamed or removed from the repository
+# Usage: cleanup_obsolete_scripts "script1.sh" "script2.sh" ...
+# Args: List of obsolete script filenames to remove
+cleanup_obsolete_scripts() {
+    # Safely handle empty argument list
+    for obsolete_script in "${@+"$@"}"; do
+        if [[ -f "${obsolete_script}" ]]; then
+            echo -e "${RED}[ CLEANUP ]${NC} Found obsolete script: ${obsolete_script}"
+            if prompt_yes_no "            → Delete ${obsolete_script}?" "n"; then
+                rm -f "${obsolete_script}"
+                print_success "✓ Deleted ${obsolete_script}"
+            else
+                print_warning "⚠ Kept ${obsolete_script}"
+            fi
+        fi
+    done
+}
+
 # Print colored output
 print_info() {
     echo -e "${BLUE}[ INFO    ]${NC} $1"
@@ -308,4 +330,7 @@ if detect_download_cmd; then
 
     # Always check for module updates (not skipped by scriptUpdated) if download cmd available
     update_modules
+
+    # Clean up any obsolete scripts
+    cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
 fi

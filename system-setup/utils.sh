@@ -136,6 +136,30 @@ prompt_yes_no() {
 }
 
 # ============================================================================
+# Cleanup Functions
+# ============================================================================
+
+# Clean up obsolete scripts that have been renamed or removed from the repository
+# Usage: cleanup_obsolete_scripts "script1.sh" "script2.sh" ...
+# Args: List of obsolete script filenames to remove (relative to SCRIPT_DIR)
+# Requires: SCRIPT_DIR variable to be set, prompt_yes_no function
+cleanup_obsolete_scripts() {
+    # Safely handle empty argument list
+    for obsolete_script in "${@+"$@"}"; do
+        local script_path="${SCRIPT_DIR}/${obsolete_script}"
+        if [[ -f "${script_path}" ]]; then
+            echo -e "${RED}[ CLEANUP ]${NC} Found obsolete script: ${obsolete_script}"
+            if prompt_yes_no "            → Delete ${obsolete_script}?" "n"; then
+                rm -f "${script_path}"
+                print_success "✓ Deleted ${obsolete_script}"
+            else
+                print_warning "⚠ Kept ${obsolete_script}"
+            fi
+        fi
+    done
+}
+
+# ============================================================================
 # OS and Environment Detection
 # ============================================================================
 

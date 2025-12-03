@@ -28,6 +28,10 @@ source "${SCRIPT_DIR}/utils.sh"
 
 readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/system-setup"
 
+# List of obsolete scripts to clean up (renamed or removed from repository)
+# Add filenames here when scripts are renamed or deprecated
+OBSOLETE_SCRIPTS=()
+
 # List of module scripts to download/update (excludes system-setup.sh and utils.sh)
 get_script_list() {
     echo "system-modules/configure-container-static-ip.sh"
@@ -319,6 +323,9 @@ main() {
 
         # Always check for module updates (not skipped by scriptUpdated) if download cmd available
         update_modules
+
+        # Clean up any obsolete scripts
+        cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
     fi
 
     print_info "System Setup and Configuration Script (Idempotent Mode)"
