@@ -34,6 +34,7 @@ OBSOLETE_SCRIPTS=()
 
 # List of module scripts to download/update (excludes system-setup.sh and utils.sh)
 get_script_list() {
+    echo "apt-pkgs-helper.sh"
     echo "system-modules/configure-container-static-ip.sh"
     echo "system-modules/migrate-to-systemd-networkd.sh"
     echo "system-modules/modernize-apt-sources.sh"
