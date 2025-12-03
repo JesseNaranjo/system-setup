@@ -313,6 +313,7 @@ get_package_list() {
         echo "ca-certificates:ca-certificates"
         echo "cURL:curl"
         echo "Git:git"
+        echo "gpm:gpm"
         echo "htop:htop"
         echo "Nano Editor:nano"
         echo "OpenSSH Server:openssh-server"
