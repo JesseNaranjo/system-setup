@@ -147,6 +147,7 @@ generate_issue_content() {
         done
 
         echo "  ╚═════════════════════════════════════════════════════════════════════════════"
+        echo ""
     } >> "$temp_box"
 
     echo "$temp_box"
@@ -206,41 +207,40 @@ configure_issue_network() {
     else
         # If the marker exists, replace the entire block.
         local temp_issue=$(mktemp)
-        local temp_new_content=$(mktemp)
-        echo "$new_content" > "$temp_new_content"
-        export TEMP_CONTENT="$temp_new_content"
         # Use awk to replace the block between the start and end markers
+        # Export new_content so awk can access it via ENVIRON (preserves backslashes)
+        export new_content
         awk '
-            BEGIN { printing=1 }
+            BEGIN { in_block=0; pending="" }
+            # Detect potential block start (top border line)
             /^[[:space:]]*╔═/ {
-                # Check if this is the start of our network block by peeking ahead
-                if (printing) {
-                    getline nextline
-                    if (nextline ~ /^[[:space:]]*║ Network Interfaces/) {
-                        # This is our block, print new content from file
-                        while ((getline line < ENVIRON["TEMP_CONTENT"]) > 0) {
-                            print line
-                        }
-                        close(ENVIRON["TEMP_CONTENT"])
-                        printing=0
-                    } else {
-                        # Not our block, print both lines
-                        print
-                        print nextline
-                    }
+                pending = $0
+                next
+            }
+            # Check if previous line was a box start and this is the Network Interfaces header
+            pending != "" {
+                if (/║ Network Interfaces/) {
+                    # This is our block - start skipping
+                    in_block = 1
+                    pending = ""
                     next
+                } else {
+                    # Not our block - print the pending line and continue
+                    print pending
+                    pending = ""
                 }
             }
-            /^[[:space:]]*╚═/ {
-                if (!printing) {
-                    printing=1
-                    next
-                }
+            # Skip lines while inside the block
+            in_block && /^[[:space:]]*╚═/ {
+                # End of block - print new content and resume normal printing
+                print ENVIRON["new_content"]
+                in_block = 0
+                next
             }
-            printing { print }
+            # Print lines when not in block
+            !in_block { print }
         ' "$issue_file" > "$temp_issue"
-        rm -f "$temp_new_content"
-        unset TEMP_CONTENT
+        unset new_content
 
         run_elevated mv "$temp_issue" "$issue_file"
         print_success "✓ Updated network interface info in $issue_file"
