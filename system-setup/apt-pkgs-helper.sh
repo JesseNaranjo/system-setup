@@ -62,9 +62,10 @@ list_backports_upgrades() {
     echo ""
 
     aptitude -t "${release}-backports" search '~U' || true
-
     echo ""
+
     print_success "Backports search complete."
+    echo ""
 }
 
 # Option 2: List packages with residual configs and optionally purge them
@@ -97,6 +98,7 @@ list_residual_configs() {
     else
         print_info "Skipped purging residual configuration files."
     fi
+    echo ""
 }
 
 # Option 3: Run apt autoremove
@@ -105,9 +107,10 @@ run_autoremove() {
     echo ""
 
     run_elevated apt autoremove
-
     echo ""
+
     print_success "Autoremove complete."
+    echo ""
 }
 
 # ============================================================================
@@ -152,6 +155,7 @@ main() {
             ;;
         *)
             print_error "Invalid choice. Aborting."
+            echo ""
             exit 1
             ;;
     esac

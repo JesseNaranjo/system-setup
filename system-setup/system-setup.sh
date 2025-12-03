@@ -342,6 +342,7 @@ main() {
 
     if [[ "$DETECTED_OS" == "unknown" ]]; then
         print_error "Unknown operating system. This script supports Linux and macOS."
+        echo ""
         exit 1
     fi
 
@@ -422,6 +423,7 @@ main() {
         2) scope="system" ;;
         *)
             print_error "Invalid choice. Aborting."
+            echo ""
             exit 1
             ;;
     esac
@@ -432,6 +434,7 @@ main() {
             echo ""
             print_error "System-wide configuration requires root privileges on Linux"
             print_info "Please re-run the script with: sudo $0"
+            echo ""
             exit 1
         fi
     fi
@@ -478,6 +481,7 @@ main() {
 
     print_info "The script made only necessary changes to bring your configuration up to date."
     print_info "You may need to restart your terminal or source your shell configuration file for all changes to take effect."
+    echo ""
 }
 
 # Run main function if script is executed directly
