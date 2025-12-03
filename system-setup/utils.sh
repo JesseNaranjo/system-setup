@@ -660,6 +660,24 @@ add_export_if_needed() {
     update_config_line "shell" "$file" "$setting_pattern" "$full_export" "$description"
 }
 
+# Ensure a file ends with exactly N blank lines (default: 1)
+# Usage: normalize_trailing_newlines <file> [num_lines]
+normalize_trailing_newlines() {
+    local file="$1"
+    local num_lines="${2:-1}"
+    local temp_file=$(mktemp)
+
+    # Remove all trailing blank lines
+    sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$file" > "$temp_file"
+
+    # Add exactly N blank lines
+    for ((i=0; i<num_lines; i++)); do
+        printf '\n' >> "$temp_file"
+    done
+
+    run_elevated mv "$temp_file" "$file"
+}
+
 # ============================================================================
 # Summary Functions
 # ============================================================================

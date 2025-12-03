@@ -147,7 +147,6 @@ generate_issue_content() {
         done
 
         echo "  ╚═════════════════════════════════════════════════════════════════════════════"
-        echo ""
     } >> "$temp_box"
 
     echo "$temp_box"
@@ -203,6 +202,7 @@ configure_issue_network() {
     # If the marker doesn't exist, add the box at the end of the file.
     if ! grep -q "║ Network Interfaces" "$issue_file"; then
         echo -e "\n$new_content" | run_elevated tee -a "$issue_file" > /dev/null
+        normalize_trailing_newlines "$issue_file" 2
         print_success "✓ Added network interface info to $issue_file"
     else
         # If the marker exists, replace the entire block.
@@ -243,6 +243,7 @@ configure_issue_network() {
         unset new_content
 
         run_elevated mv "$temp_issue" "$issue_file"
+        normalize_trailing_newlines "$issue_file" 2
         print_success "✓ Updated network interface info in $issue_file"
     fi
 }
