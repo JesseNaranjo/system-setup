@@ -215,21 +215,18 @@ configure_issue_network() {
             /^[[:space:]]*╔═/ {
                 # Check if this is the start of our network block by peeking ahead
                 if (printing) {
-                    if ((getline nextline) > 0) {
-                        if (nextline ~ /^[[:space:]]*║ Network Interfaces/) {
-                            # This is our block, print new content from file
-                            while ((getline line < ENVIRON["TEMP_CONTENT"]) > 0) {
-                                print line
-                            }
-                            close(ENVIRON["TEMP_CONTENT"])
-                            printing=0
-                        } else {
-                            # Not our block, print both lines
-                            print
-                            print nextline
+                    getline nextline
+                    if (nextline ~ /^[[:space:]]*║ Network Interfaces/) {
+                        # This is our block, print new content from file
+                        while ((getline line < ENVIRON["TEMP_CONTENT"]) > 0) {
+                            print line
                         }
+                        close(ENVIRON["TEMP_CONTENT"])
+                        printing=0
                     } else {
+                        # Not our block, print both lines
                         print
+                        print nextline
                     }
                     next
                 }
