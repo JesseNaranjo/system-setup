@@ -135,15 +135,15 @@ generate_issue_content() {
 
         # Add wired, wireless, and other interfaces
         for iface in "${wire_interfaces[@]+"${wire_interfaces[@]}"}"; do
-            echo "  ║ - wire:   \\4{${iface}} / \\6{${iface}} (${iface})"
+            echo "  ║ - wire:    \\4{${iface}} / \\6{${iface}} (${iface})"
         done
         for iface in "${wifi_interfaces[@]+"${wifi_interfaces[@]}"}"; do
-            echo "  ║ - wifi:   \\4{${iface}} / \\6{${iface}} (${iface})"
+            echo "  ║ - wifi:    \\4{${iface}} / \\6{${iface}} (${iface})"
         done
         for iface_info in "${other_interfaces[@]+"${other_interfaces[@]}"}"; do
             local iface="${iface_info%%:*}"
             local type="${iface_info##*:}"
-            echo "  ║ - ${type}: \\4{${iface}} / \\6{${iface}} (${iface})"
+            echo "  ║ - ${type}:  \\4{${iface}} / \\6{${iface}} (${iface})"
         done
 
         echo "  ╚═════════════════════════════════════════════════════════════════════════════"
