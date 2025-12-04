@@ -3,9 +3,10 @@
 ## Document Purpose
 This document provides comprehensive patterns, styles, and conventions used across all bash scripts in this repository. Optimized for LLM consumption to enable rapid, accurate code generation and modification without requiring full source file analysis.
 
-**Last Updated:** November 15, 2025
-**Primary Reference:** system-setup.sh (1982 lines)
-**Scope:** All `.sh` scripts in repository
+**Last Updated:** December 3, 2025
+**Primary Reference:** system-setup.sh (491 lines) + utils.sh (712 lines)
+**Secondary Reference:** _download-*-scripts.sh (standalone script pattern)
+**Scope:** All `.sh` scripts in repository (modular and standalone)
 
 ---
 
@@ -67,16 +68,19 @@ done
 
 ## Table of Contents
 1. [Core Principles](#core-principles)
-2. [Script Structure](#script-structure)
-3. [Bash Standards](#bash-standards)
-4. [Function Patterns](#function-patterns)
-5. [User Interaction](#user-interaction)
-6. [Configuration Management](#configuration-management)
-7. [Output & Logging](#output--logging)
-8. [Cross-Platform Support](#cross-platform-support)
-9. [Error Handling](#error-handling)
-10. [File Modification](#file-modification)
-11. [Security & Safety](#security--safety)
+2. [Script Architecture](#script-architecture)
+3. [Script Structure](#script-structure)
+4. [Modular Script Patterns](#modular-script-patterns)
+5. [Bash Standards](#bash-standards)
+6. [Function Patterns](#function-patterns)
+7. [User Interaction](#user-interaction)
+8. [Configuration Management](#configuration-management)
+9. [Output & Logging](#output--logging)
+10. [Cross-Platform Support](#cross-platform-support)
+11. [Error Handling](#error-handling)
+12. [File Modification](#file-modification)
+13. [Security & Safety](#security--safety)
+14. [Download & Self-Update Patterns](#download--self-update-patterns)
 
 ---
 
@@ -100,6 +104,52 @@ done
 - Handle both brew and apt package managers
 - Support user and system-wide configurations
 - Detect container environments (Docker, LXC)
+
+---
+
+## Script Architecture
+
+This repository uses two distinct script architectures. Choose based on context:
+
+### 1. Modular Scripts (system-setup/)
+
+**When to use:** Complex, multi-component scripts that share utilities.
+
+**Structure:**
+- Main orchestrator: `system-setup.sh`
+- Shared utilities: `utils.sh` (colors, prompts, config functions, file operations)
+- Feature modules: `system-modules/*.sh` (each handles one concern)
+- Modules are sourced at runtime, not executed directly
+
+**Key characteristics:**
+- Source `utils.sh` for all shared functions
+- Use `main_*` naming for module entry points (e.g., `main_configure_system`, `main_manage_packages`)
+- Modules can be run standalone for testing but are designed to be sourced
+- Global state shared via variables in `utils.sh`
+
+### 2. Standalone Scripts (github/, kubernetes/, lxc/, llm/)
+
+**When to use:** Self-contained scripts that must work when downloaded individually.
+
+**Structure:**
+- Each script is fully self-contained
+- Duplicate essential functions inline (colors, `print_*`, `prompt_yes_no`)
+- Managed by `_download-*-scripts.sh` updaters in each directory
+
+**Key characteristics:**
+- No external dependencies (except system tools)
+- Include full color definitions and output functions
+- Include `prompt_yes_no` if user interaction needed
+- Can be copied/downloaded and run immediately
+
+### Decision Guide
+
+| Scenario | Architecture | Reason |
+|----------|-------------|--------|
+| New feature for system-setup | Modular | Add to existing module or create new one |
+| New utility script in lxc/, k8s/, etc. | Standalone | Must work when downloaded individually |
+| Shared helper used by multiple modules | Add to utils.sh | Centralized maintenance |
+| One-off automation script | Standalone | Simpler, no dependencies |
 
 ---
 
@@ -157,6 +207,175 @@ DEBUG_MODE=false
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi
+```
+
+---
+
+## Modular Script Patterns
+
+### Shared Utilities (utils.sh)
+
+The `utils.sh` file provides all shared functionality for the system-setup suite.
+
+**Multiple-source guard:**
+```bash
+#!/usr/bin/env bash
+
+# Prevent multiple sourcing
+if [[ -n "${UTILS_SH_LOADED:-}" ]]; then
+    return 0
+fi
+readonly UTILS_SH_LOADED=true
+
+set -euo pipefail
+
+# All shared constants, variables, and functions follow...
+```
+
+**Global variables provided by utils.sh:**
+```bash
+# State tracking arrays
+BACKED_UP_FILES=()
+CREATED_BACKUP_FILES=()
+HEADER_ADDED_FILES=()
+
+# Detection results (set by detect_* functions)
+DETECTED_OS=""
+RUNNING_IN_CONTAINER=false
+
+# Package tracking
+NANO_INSTALLED=false
+SCREEN_INSTALLED=false
+OPENSSH_SERVER_INSTALLED=false
+
+# Package cache for performance
+declare -A PACKAGE_CACHE=()
+PACKAGE_CACHE_POPULATED=false
+
+# Debug mode
+DEBUG_MODE=false
+```
+
+### Module Script Template
+
+Modules in `system-modules/` follow this pattern:
+
+```bash
+#!/usr/bin/env bash
+
+# module-name.sh - Brief description
+# Part of the system-setup suite
+#
+# This script:
+# - Feature 1
+# - Feature 2
+
+# Get the directory where this script is located
+if [[ -z "${SCRIPT_DIR:-}" ]]; then
+    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fi
+
+# Source utilities
+# shellcheck source=utils.sh
+source "${SCRIPT_DIR}/utils.sh"
+
+# ============================================================================
+# Module Functions
+# ============================================================================
+
+helper_function() {
+    # Internal helper
+}
+
+# ============================================================================
+# Main Entry Point
+# ============================================================================
+
+# Use main_<module_name> naming convention
+main_configure_component() {
+    local scope="${1:-user}"
+
+    # Ensure environment is detected
+    detect_environment
+
+    print_info "Configuring component..."
+    # Module logic here
+    print_success "Component configured"
+}
+
+# Run main function if script is executed directly (for testing)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main_configure_component "$@"
+fi
+```
+
+### Orchestrator Pattern (system-setup.sh)
+
+The main script sources and orchestrates modules:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source utilities first
+source "${SCRIPT_DIR}/utils.sh"
+
+# Remote repository for self-update
+readonly REMOTE_BASE="https://raw.githubusercontent.com/USER/REPO/refs/heads/main/path"
+
+# List of module scripts to download/update
+get_script_list() {
+    echo "system-modules/module-a.sh"
+    echo "system-modules/module-b.sh"
+}
+
+main() {
+    # Self-update check first
+    if detect_download_cmd; then
+        if [[ ${scriptUpdated:-0} -eq 0 ]]; then
+            self_update "$@"
+        fi
+        update_modules
+    fi
+
+    # Detect environment
+    detect_os
+    detect_container
+
+    # Source and run modules as needed
+    source "${SCRIPT_DIR}/system-modules/module-a.sh"
+    main_module_a "$scope"
+
+    source "${SCRIPT_DIR}/system-modules/module-b.sh"
+    main_module_b "$scope"
+
+    print_success "Setup complete!"
+    print_session_summary
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
+```
+
+### Environment Detection (Combined)
+
+```bash
+# Detect both OS and container environment in one call
+# Sets global variables DETECTED_OS and RUNNING_IN_CONTAINER
+detect_environment() {
+    # Detect OS if not already detected
+    if [[ -z "$DETECTED_OS" ]]; then
+        detect_os
+    fi
+
+    # Detect container environment on Linux
+    if [[ "$DETECTED_OS" == "linux" ]]; then
+        detect_container
+    fi
+}
 ```
 
 ---
@@ -470,6 +689,45 @@ print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
 print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1"; }
 print_backup()  { echo -e "${GRAY}[ BACKUP  ] $1${NC}"; }
 print_debug()   { echo -e "${MAGENTA}[ DEBUG   ] $1${NC}"; }
+print_summary() { echo -e "${BLUE}[ SUMMARY ]${NC} $1"; }
+```
+
+### Warning Box Function
+```bash
+# Print a warning box with multiple lines of content
+# Usage: print_warning_box "line1" "line2" "line3" ...
+print_warning_box() {
+    local box_width=77
+    local padding=8
+    local content_width=$((box_width - padding - 1))
+
+    echo ""
+    echo -e "            ${YELLOW}╔$(printf '═%.0s' $(seq 1 $box_width))╗${NC}"
+    echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
+
+    for line in "$@"; do
+        local line_len=${#line}
+        local right_pad=$((content_width - line_len))
+        if [[ $right_pad -lt 0 ]]; then
+            right_pad=0
+            line="${line:0:$content_width}"
+        fi
+        printf -v padded_line "%-${content_width}s" "$line"
+        echo -e "            ${YELLOW}║        ${padded_line}║${NC}"
+    done
+
+    echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
+    echo -e "            ${YELLOW}╚$(printf '═%.0s' $(seq 1 $box_width))╝${NC}"
+    echo ""
+}
+```
+
+### Diff Display Pattern
+```bash
+# Show changes with colored borders
+echo -e "${CYAN}╭────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────╮${NC}"
+diff -u --color "${LOCAL_FILE}" "${TEMP_FILE}" || true
+echo -e "${CYAN}╰─────────────────────────── ${SCRIPT_FILE} ───────────────────────────────╯${NC}"
 ```
 
 ### Usage Conventions
@@ -497,27 +755,167 @@ echo "            • Bullet point"
 
 ## Cross-Platform Support
 
-### OS Detection
+### OS Detection (Sets Global)
 ```bash
+# Sets DETECTED_OS global variable (preferred for modular scripts)
 detect_os() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo "macos"
+        DETECTED_OS="macos"
     elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        echo "linux"
+        DETECTED_OS="linux"
     else
-        echo "unknown"
+        DETECTED_OS="unknown"
     fi
 }
 ```
 
 ### Container Detection (Sets Global)
 ```bash
+# Sets RUNNING_IN_CONTAINER global variable
 detect_container() {
-    [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ && RUNNING_IN_CONTAINER=true && return
-    [[ -f /.dockerenv ]] && RUNNING_IN_CONTAINER=true && return
-    [[ -f /run/systemd/container ]] && RUNNING_IN_CONTAINER=true && return
-    grep -q lxc /proc/1/cgroup 2>/dev/null && RUNNING_IN_CONTAINER=true && return
+    # Check for LXC container via environment variable
+    if [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ; then
+        RUNNING_IN_CONTAINER=true
+        return
+    fi
+
+    # Check for Docker container
+    if [[ -f /.dockerenv ]]; then
+        RUNNING_IN_CONTAINER=true
+        return
+    fi
+
+    # Check for systemd container
+    if [[ -f /run/systemd/container ]]; then
+        RUNNING_IN_CONTAINER=true
+        return
+    fi
+
+    # Check for LXC in cgroup
+    if grep -q lxc /proc/1/cgroup 2>/dev/null; then
+        RUNNING_IN_CONTAINER=true
+        return
+    fi
+
     RUNNING_IN_CONTAINER=false
+}
+```
+
+### Privilege Management
+```bash
+# Check if we have necessary privileges for the operation
+# Returns: 0 if privileges are sufficient, 1 otherwise
+check_privileges() {
+    local operation="$1"  # "package_install", "system_config", or "apt_operations"
+
+    if [[ "$operation" == "package_install" ]]; then
+        if [[ "$DETECTED_OS" == "linux" ]]; then
+            # Linux requires root for apt
+            if [[ $EUID -ne 0 ]]; then
+                return 1
+            fi
+        fi
+        # macOS doesn't need root for brew
+    elif [[ "$operation" == "system_config" ]] || [[ "$operation" == "apt_operations" ]]; then
+        # System-wide config and apt operations need root on Linux
+        if [[ "$DETECTED_OS" == "linux" ]] && [[ $EUID -ne 0 ]]; then
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# Run command with appropriate privileges (macOS sudo, Linux expects root)
+run_elevated() {
+    if [[ $EUID -eq 0 ]]; then
+        "$@"
+    else
+        if [[ "$DETECTED_OS" == "macos" ]]; then
+            sudo "$@"
+        else
+            print_error "Insufficient privileges to run: $*"
+            return 1
+        fi
+    fi
+}
+
+# Check if a file operation needs elevation (macOS-specific)
+needs_elevation() {
+    local file="$1"
+
+    # If already root or running Linux (should already be root), no elevation needed
+    if [[ $EUID -eq 0 ]] || [[ "$OSTYPE" == "linux"* ]]; then
+        return 1
+    fi
+
+    # Check if file is in a system directory
+    if [[ "$file" == /etc/* ]] || [[ "$file" == /usr/* ]] || [[ "$file" == /var/* ]]; then
+        return 0
+    fi
+
+    # Check if parent directory requires elevated permissions
+    local dir=$(dirname "$file")
+    if [[ ! -w "$dir" ]]; then
+        return 0
+    fi
+
+    return 1
+}
+```
+
+### Package Cache (Performance Optimization)
+```bash
+# Use associative array for O(1) package lookups
+declare -A PACKAGE_CACHE=()
+PACKAGE_CACHE_POPULATED=false
+
+# Populate the package cache with installed packages
+populate_package_cache() {
+    local package_list=()
+    while read -r line; do
+        package_list+=("${line##*:}")
+    done < <(get_package_list)
+
+    local installed_packages
+    if [[ "$DETECTED_OS" == "macos" ]]; then
+        installed_packages=$(brew list --formula -1 2>/dev/null || true)
+    else
+        installed_packages=$(dpkg -l 2>/dev/null | awk '/^ii/ {print $2}' || true)
+    fi
+
+    PACKAGE_CACHE=()
+    for package in "${package_list[@]}"; do
+        if echo "$installed_packages" | grep -qx "$package"; then
+            PACKAGE_CACHE["$package"]="installed"
+        else
+            PACKAGE_CACHE["$package"]="not_installed"
+        fi
+    done
+
+    PACKAGE_CACHE_POPULATED=true
+}
+
+# Check if a package is installed (uses cache)
+is_package_installed() {
+    local package="$1"
+
+    # Populate cache if not yet populated
+    if [[ "$PACKAGE_CACHE_POPULATED" != "true" ]]; then
+        populate_package_cache
+    fi
+
+    # Check cache first
+    if [[ -n "${PACKAGE_CACHE[$package]:-}" ]]; then
+        [[ "${PACKAGE_CACHE[$package]}" == "installed" ]]
+        return $?
+    fi
+
+    # Fallback to direct check if not in cache
+    if [[ "$DETECTED_OS" == "macos" ]]; then
+        brew list "$package" &>/dev/null
+    else
+        dpkg -l "$package" 2>/dev/null | grep -q "^ii"
+    fi
 }
 ```
 
@@ -731,52 +1129,314 @@ echo "content" > "$temp_file"
 
 ---
 
-## Self-Update Pattern
+## Download & Self-Update Patterns
 
-### GitHub Auto-Update (Before Main Logic)
+These patterns are used in `_download-*-scripts.sh` files and the main `system-setup.sh` orchestrator.
+
+### Download Command Detection
 ```bash
-if [[ ${scriptUpdated:-0} -eq 0 ]]; then
-    REMOTE_BASE="https://raw.githubusercontent.com/USER/REPO/refs/heads/main"
-    SCRIPT_FILE="$(basename "${BASH_SOURCE[0]}")"
-    TEMP_SCRIPT_FILE="$(mktemp)"
-    trap 'rm -f "${TEMP_SCRIPT_FILE}"' EXIT
+# Detect available download command (curl or wget)
+# Sets global DOWNLOAD_CMD variable
+detect_download_cmd() {
+    if command -v curl &>/dev/null; then
+        DOWNLOAD_CMD="curl"
+        return 0
+    elif command -v wget &>/dev/null; then
+        DOWNLOAD_CMD="wget"
+        return 0
+    else
+        DOWNLOAD_CMD=""
+        # Display warning box if neither is available
+        print_warning_box \
+            "⚠️   UPDATES NOT AVAILABLE  ⚠️" \
+            "" \
+            "Neither 'curl' nor 'wget' is installed on this system." \
+            "Self-updating functionality requires one of these tools." \
+            "" \
+            "To enable self-updating, please install one of the following:" \
+            "  • curl  (recommended)" \
+            "  • wget" \
+            "" \
+            "Installation commands:" \
+            "  macOS:    brew install curl" \
+            "  Debian:   apt install curl" \
+            "  RHEL:     yum install curl" \
+            "" \
+            "Continuing with local version of the scripts..."
+        return 1
+    fi
+}
+```
 
-    # Detect download tool
-    DOWNLOAD_CMD=""
-    command -v curl &>/dev/null && DOWNLOAD_CMD="curl"
-    command -v wget &>/dev/null && [[ -z "$DOWNLOAD_CMD" ]] && DOWNLOAD_CMD="wget"
+### Download Script Function
+```bash
+# Download a script file from the remote repository
+# Args: $1 = script filename (relative path), $2 = output file path
+# Returns: 0 on success, 1 on failure
+download_script() {
+    local script_file="$1"
+    local output_file="$2"
+    local http_status=""
 
-    if [[ -n "$DOWNLOAD_CMD" ]]; then
-        DOWNLOAD_SUCCESS=false
-        if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-            curl -H 'Cache-Control: no-cache' -o "${TEMP_SCRIPT_FILE}" \
-                 -fsSL "${REMOTE_BASE}/${SCRIPT_FILE}" && DOWNLOAD_SUCCESS=true
-        elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
-            wget --no-cache -O "${TEMP_SCRIPT_FILE}" \
-                 -q "${REMOTE_BASE}/${SCRIPT_FILE}" && DOWNLOAD_SUCCESS=true
+    print_info "Fetching ${script_file}..."
+    echo "            ▶ ${REMOTE_BASE}/${script_file}..."
+
+    if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
+        http_status=$(curl -H 'Cache-Control: no-cache, no-store' -o "${output_file}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${script_file}" 2>/dev/null || echo "000")
+        if [[ "$http_status" == "200" ]]; then
+            # Validate that we got a script, not an error page
+            # Check first 10 lines for shebang to handle files with leading comments
+            if head -n 10 "${output_file}" | grep -q "^#!/"; then
+                return 0
+            else
+                print_error "✖ Invalid content received (not a script)"
+                return 1
+            fi
+        elif [[ "$http_status" == "429" ]]; then
+            print_error "✖ Rate limited by GitHub (HTTP 429)"
+            return 1
+        elif [[ "$http_status" != "000" ]]; then
+            print_error "✖ HTTP ${http_status} error"
+            return 1
+        else
+            print_error "✖ Download failed"
+            return 1
+        fi
+    elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
+        if wget --no-cache --no-cookies -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null; then
+            # Validate that we got a script
+            if head -n 10 "${output_file}" | grep -q "^#!/"; then
+                return 0
+            else
+                print_error "✖ Invalid content received (not a script)"
+                return 1
+            fi
+        else
+            print_error "✖ Download failed"
+            return 1
+        fi
+    fi
+
+    return 1
+}
+```
+
+### Self-Update Function
+```bash
+# Check for updates to the main script itself
+# Will restart the script if updated
+self_update() {
+    local SCRIPT_FILE="$(basename "${BASH_SOURCE[0]}")"
+    local LOCAL_SCRIPT="${BASH_SOURCE[0]}"
+    local TEMP_SCRIPT="$(mktemp)"
+
+    if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT}"; then
+        rm -f "${TEMP_SCRIPT}"
+        echo ""
+        return 1
+    fi
+
+    # Compare and handle differences
+    if diff -u "${LOCAL_SCRIPT}" "${TEMP_SCRIPT}" > /dev/null 2>&1; then
+        print_success "- ${SCRIPT_FILE} is already up-to-date"
+        rm -f "${TEMP_SCRIPT}"
+        echo ""
+        return 0
+    fi
+
+    # Show diff with colored borders
+    echo ""
+    echo -e "${CYAN}╭───────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────╮${NC}"
+    diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT}" || true
+    echo -e "${CYAN}╰───────────────────────── ${SCRIPT_FILE} ─────────────────────────────╯${NC}"
+    echo ""
+
+    if prompt_yes_no "→ Overwrite and restart with updated ${SCRIPT_FILE}?" "y"; then
+        echo ""
+        chmod +x "${TEMP_SCRIPT}"
+        mv -f "${TEMP_SCRIPT}" "${LOCAL_SCRIPT}"
+        print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
+        echo ""
+        export scriptUpdated=1
+        exec "${LOCAL_SCRIPT}" "$@"
+        exit 0
+    else
+        print_warning "⚠ Skipped ${SCRIPT_FILE} update - continuing with local version"
+        rm -f "${TEMP_SCRIPT}"
+    fi
+    echo ""
+}
+```
+
+### Module Update Function
+```bash
+# Update all module scripts
+# Downloads each module and prompts user to replace if different
+update_modules() {
+    local uptodate_count=0
+    local updated_count=0
+    local skipped_count=0
+    local failed_count=0
+
+    print_info "Checking for module updates..."
+    echo ""
+
+    while IFS= read -r script_path; do
+        local SCRIPT_FILE="$script_path"
+        local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
+        local TEMP_SCRIPT="$(mktemp)"
+
+        # Ensure the local directory exists
+        local script_dir="$(dirname "$LOCAL_SCRIPT")"
+        mkdir -p "$script_dir"
+
+        if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT}"; then
+            echo "            (skipping ${SCRIPT_FILE})"
+            ((failed_count++)) || true
+            rm -f "${TEMP_SCRIPT}"
+            echo ""
+            continue
         fi
 
-        if [[ "$DOWNLOAD_SUCCESS" == true ]]; then
-            if ! diff -u "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" >/dev/null 2>&1; then
-                # Show diff
-                echo -e "${CYAN}╭── Changes ──╮${NC}"
-                diff -u --color "${BASH_SOURCE[0]}" "${TEMP_SCRIPT_FILE}" || true
-                echo -e "${CYAN}╰─────────────╯${NC}"
+        # Create file if it doesn't exist
+        if [[ ! -f "${LOCAL_SCRIPT}" ]]; then
+            touch "${LOCAL_SCRIPT}"
+        fi
 
-                if prompt_yes_no "Update and restart?" "y"; then
-                    chmod +x "$TEMP_SCRIPT_FILE"
-                    mv -f "$TEMP_SCRIPT_FILE" "${BASH_SOURCE[0]}"
-                    export scriptUpdated=1
-                    exec "${BASH_SOURCE[0]}" "$@"
-                    exit 0
-                fi
+        # Compare and handle differences
+        if diff -u "${LOCAL_SCRIPT}" "${TEMP_SCRIPT}" > /dev/null 2>&1; then
+            print_success "- ${SCRIPT_FILE} is already up-to-date"
+            ((uptodate_count++)) || true
+            rm -f "${TEMP_SCRIPT}"
+            echo ""
+        else
+            echo ""
+            echo -e "${CYAN}╭────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────╮${NC}"
+            diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT}" || true
+            echo -e "${CYAN}╰────────────────────── ${SCRIPT_FILE} ───────────────────────╯${NC}"
+            echo ""
+
+            if prompt_yes_no "→ Overwrite local ${SCRIPT_FILE} with remote copy?" "y"; then
+                echo ""
+                chmod +x "${TEMP_SCRIPT}"
+                mv -f "${TEMP_SCRIPT}" "${LOCAL_SCRIPT}"
+                print_success "✓ Replaced ${SCRIPT_FILE}"
+                ((updated_count++)) || true
             else
-                echo "✓ Script up-to-date"
+                print_warning "⚠ Skipped ${SCRIPT_FILE}"
+                ((skipped_count++)) || true
+                rm -f "${TEMP_SCRIPT}"
+            fi
+            echo ""
+        fi
+    done < <(get_script_list)
+
+    # Display final statistics
+    echo ""
+    echo "============================================================================"
+    print_info "Module Update Summary"
+    echo "============================================================================"
+    echo -e "${BLUE}Up-to-date:${NC}  ${uptodate_count} file(s)"
+    echo -e "${GREEN}Updated:${NC}     ${updated_count} file(s)"
+    echo -e "${YELLOW}Skipped:${NC}     ${skipped_count} file(s)"
+    echo -e "${RED}Failed:${NC}      ${failed_count} file(s)"
+    echo "============================================================================"
+    echo ""
+
+    if [[ $failed_count -gt 0 ]]; then
+        return 1
+    fi
+}
+```
+
+### Script List and Obsolete Cleanup
+```bash
+# List of module scripts to download/update
+get_script_list() {
+    echo "script-a.sh"
+    echo "script-b.sh"
+    echo "subdir/script-c.sh"
+}
+
+# List of obsolete scripts to clean up (renamed or removed from repository)
+OBSOLETE_SCRIPTS=(
+    "old-script-name.sh"  # renamed to new-script-name.sh
+)
+
+# Clean up obsolete scripts
+# Usage: cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
+cleanup_obsolete_scripts() {
+    # Safely handle empty argument list
+    for obsolete_script in "${@+"$@"}"; do
+        local script_path="${SCRIPT_DIR}/${obsolete_script}"
+        if [[ -f "${script_path}" ]]; then
+            echo -e "${RED}[ CLEANUP ]${NC} Found obsolete script: ${obsolete_script}"
+            if prompt_yes_no "            → Delete ${obsolete_script}?" "n"; then
+                rm -f "${script_path}"
+                print_success "✓ Deleted ${obsolete_script}"
+            else
+                print_warning "⚠ Kept ${obsolete_script}"
             fi
         fi
-    else
-        print_warning "No download tool (curl/wget) available for auto-update"
+    done
+}
+```
+
+### Complete Download Script Template
+
+Use this template for `_download-*-scripts.sh` files:
+
+```bash
+#!/usr/bin/env bash
+
+# _download-DOMAIN-scripts.sh - DOMAIN Script Management and Auto-Updater
+#
+# Usage: ./_download-DOMAIN-scripts.sh
+#
+# This script:
+# - Self-updates from the remote repository before running
+# - Downloads the latest versions of all DOMAIN management scripts
+# - Shows diffs for changed files before updating
+# - Prompts for confirmation before overwriting local files
+
+set -euo pipefail
+
+# Colors for output
+readonly BLUE='\033[0;34m'
+readonly CYAN="\033[0;36m"
+readonly GRAY='\033[0;90m'
+readonly GREEN='\033[0;32m'
+readonly RED='\033[0;31m'
+readonly YELLOW='\033[1;33m'
+readonly NC='\033[0m'
+
+# Remote repository configuration
+readonly REMOTE_BASE="https://raw.githubusercontent.com/USER/REPO/refs/heads/main/DOMAIN"
+
+# List of script files to download/update
+get_script_list() {
+    echo "script-a.sh"
+    echo "script-b.sh"
+}
+
+# List of obsolete scripts to clean up
+OBSOLETE_SCRIPTS=()
+
+# Include: print_info, print_success, print_warning, print_error
+# Include: prompt_yes_no
+# Include: detect_download_cmd (with print_warning_box inline or simplified)
+# Include: download_script
+# Include: cleanup_obsolete_scripts
+# Include: self_update
+# Include: update_modules
+
+# Main execution
+if detect_download_cmd; then
+    if [[ ${scriptUpdated:-0} -eq 0 ]]; then
+        self_update "$@"
     fi
+    update_modules
+    cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
 fi
 ```
 
@@ -870,12 +1530,17 @@ fi
 
 ### Script Organization by Directory
 ```
-github/     - GitHub CLI automation (org copying, issue management)
-kubernetes/ - K8s cluster management (start, stop, update repos)
-lxc/        - LXC container operations (create, start, stop, config)
-llm/        - LLM tools (Ollama management)
-misc/       - Utility scripts (rsync, monitoring)
-configs/    - Documentation for tool configurations
+system-setup/         - Main system configuration suite (modular)
+    system-modules/   - Feature modules (sourced, not run directly)
+    utils.sh          - Shared utilities for all modules
+    system-setup.sh   - Main orchestrator script
+github/               - GitHub CLI automation (org copying, issue management)
+kubernetes/           - K8s cluster management (start, stop, update repos)
+lxc/                  - LXC container operations (create, start, stop, config)
+llm/                  - LLM tools (Ollama management)
+utils/                - Cross-platform utility scripts (rsync, monitoring)
+configs/              - Documentation for tool configurations (markdown)
+walkthroughs/         - Step-by-step guides (markdown)
 ```
 
 ### Simple Scripts Pattern (No Color Output)
@@ -969,6 +1634,37 @@ detect_feature() {
     [[ -f /path/to/indicator ]] && return 0
     command -v feature_cmd &>/dev/null && return 0
     return 1
+}
+```
+
+### Session Summary Function
+```bash
+# Print a summary of all changes made during the session
+print_session_summary() {
+    if [[ ${#BACKED_UP_FILES[@]} -eq 0 && ${#CREATED_BACKUP_FILES[@]} -eq 0 ]]; then
+        echo -e "            ${GRAY}No files were modified during this session.${NC}"
+        return
+    fi
+
+    print_summary "─── Session ─────────────────────────────────────────────────────────────"
+    echo ""
+
+    if [[ ${#BACKED_UP_FILES[@]} -gt 0 ]]; then
+        print_success "${GREEN}Files Updated:${NC}"
+        for file in "${BACKED_UP_FILES[@]+"${BACKED_UP_FILES[@]}"}" ; do
+            echo "            - $file"
+        done
+        echo ""
+    fi
+
+    if [[ ${#CREATED_BACKUP_FILES[@]} -gt 0 ]]; then
+        print_backup "Backup Files:"
+        for file in "${CREATED_BACKUP_FILES[@]+"${CREATED_BACKUP_FILES[@]}"}" ; do
+            echo "            - $file"
+        done
+        echo ""
+    fi
+    print_summary "─────────────────────────────────────────────────────────────────────"
 }
 ```
 
