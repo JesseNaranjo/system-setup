@@ -33,6 +33,7 @@ DETECTED_OS=""
 BACKED_UP_FILES=()
 CREATED_BACKUP_FILES=()
 HEADER_ADDED_FILES=()
+FASTFETCH_INSTALLED=false
 NANO_INSTALLED=false
 SCREEN_INSTALLED=false
 OPENSSH_SERVER_INSTALLED=false
@@ -299,6 +300,7 @@ get_package_list() {
         echo "AWK:awk"
         echo "Bash:bash"
         echo "CA Certificates:ca-certificates"
+        echo "Fastfetch:fastfetch"
         echo "Git:git"
         echo "htop:htop"
         echo "Nano Editor:nano"
@@ -312,6 +314,7 @@ get_package_list() {
         echo "aptitude:aptitude"
         echo "ca-certificates:ca-certificates"
         echo "cURL:curl"
+        echo "Fastfetch:fastfetch"
         echo "Git:git"
         echo "gpm:gpm"
         echo "htop:htop"
@@ -399,7 +402,9 @@ verify_package_manager() {
 track_special_packages() {
     local package="$1"
 
-    if [[ "$package" == "nano" ]]; then
+    if [[ "$package" == "fastfetch" ]]; then
+        FASTFETCH_INSTALLED=true
+    elif [[ "$package" == "nano" ]]; then
         NANO_INSTALLED=true
     elif [[ "$package" == "screen" ]]; then
         SCREEN_INSTALLED=true

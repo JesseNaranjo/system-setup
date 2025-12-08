@@ -429,6 +429,43 @@ configure_shell_for_user() {
     print_success "Shell configuration completed for $shell_config (user: $username)"
 }
 
+# Configure fastfetch to run on shell startup (system-wide only)
+configure_fastfetch() {
+    # Determine shell config file based on OS
+    local shell_config
+    if [[ "$DETECTED_OS" == "macos" ]]; then
+        shell_config="/etc/zshrc"
+    else
+        shell_config="/etc/bash.bashrc"
+    fi
+
+    # Skip if config file doesn't exist
+    if [[ ! -f "$shell_config" ]]; then
+        print_warning "Shell configuration file $shell_config does not exist, skipping fastfetch configuration"
+        return 0
+    fi
+
+    print_info "Configuring fastfetch in $shell_config..."
+
+    # Check if fastfetch is already configured (idempotency)
+    if grep -qF "command -v fastfetch" "$shell_config" 2>/dev/null; then
+        print_success "- Fastfetch already configured in $shell_config"
+        return 0
+    fi
+
+    # Backup the config file and add our configuration
+    backup_file "$shell_config"
+    add_change_header "$shell_config" "shell"
+
+    {
+        echo ""
+        echo "# Run fastfetch on shell startup (if installed)"
+        echo "command -v fastfetch &>/dev/null && fastfetch"
+    } | run_elevated tee -a "$shell_config" > /dev/null
+
+    print_success "✓ Fastfetch configured to run on shell startup in $shell_config"
+}
+
 # Configure shell
 configure_shell() {
     local scope="$1"  # "user" or "system"
@@ -492,6 +529,12 @@ configure_shell() {
         echo ""
         # Configure system-wide prompt colors
         configure_shell_prompt_colors_system
+
+        # Configure fastfetch if installed
+        if [[ "$FASTFETCH_INSTALLED" == true ]]; then
+            echo ""
+            configure_fastfetch
+        fi
     fi
 }
 
