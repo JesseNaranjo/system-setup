@@ -366,12 +366,16 @@ configure_shell_for_user() {
     if [[ "$DETECTED_OS" == "macos" ]]; then
         if ! grep -q "macOS ls configuration" "$shell_config" 2>/dev/null; then
             echo "" >> "$shell_config"
+            backup_file "$shell_config"
+            add_change_header "$shell_config" "shell"
             echo "# macOS ls configuration" >> "$shell_config"
         fi
         add_export_if_needed "$shell_config" "CLICOLOR" "YES" "terminal colors"
         add_alias_if_needed "$shell_config" "ls" "ls -AFGHhl" "macOS ls with colors and formatting"
     else
         if ! grep -q "Linux ls configuration" "$shell_config" 2>/dev/null; then
+            backup_file "$shell_config"
+            add_change_header "$shell_config" "shell"
             echo "" >> "$shell_config"
             echo "# Linux ls configuration" >> "$shell_config"
         fi
@@ -381,6 +385,8 @@ configure_shell_for_user() {
 
     # Additional utility aliases
     if ! grep -q "Additional utility aliases" "$shell_config" 2>/dev/null; then
+        backup_file "$shell_config"
+        add_change_header "$shell_config" "shell"
         echo "" >> "$shell_config"
         echo "# Additional utility aliases" >> "$shell_config"
     fi
@@ -393,7 +399,9 @@ configure_shell_for_user() {
 
     # 7z compression helpers
     if [[ "$DETECTED_OS" == "macos" ]]; then
-        if ! grep -q "7z compression helpers (macOS" "$shell_config" 2>/dev/null; then
+        if ! grep -q "^# 7z compression helpers (macOS" "$shell_config" 2>/dev/null; then
+            backup_file "$shell_config"
+            add_change_header "$shell_config" "shell"
             echo "" >> "$shell_config"
             echo "# 7z compression helpers (macOS - using 7zz)" >> "$shell_config"
         fi
@@ -402,6 +410,8 @@ configure_shell_for_user() {
         add_alias_if_needed "$shell_config" "7z-ultra3" "7zz a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 3"
     else
         if ! grep -q "^# 7z compression helpers$" "$shell_config" 2>/dev/null; then
+            backup_file "$shell_config"
+            add_change_header "$shell_config" "shell"
             echo "" >> "$shell_config"
             echo "# 7z compression helpers" >> "$shell_config"
         fi
