@@ -388,7 +388,7 @@ configure_shell_for_user() {
     add_alias_if_needed "$shell_config" "lsblk" 'lsblk -o "NAME,FSTYPE,FSVER,LABEL,FSAVAIL,SIZE,FSUSE%,MOUNTPOINTS,UUID"' "enhanced lsblk"
     add_alias_if_needed "$shell_config" "lxc-ls" "lxc-ls -f" "formatted lxc-ls"
     if [[ "$SCREEN_INSTALLED" == true ]]; then
-        add_alias_if_needed "$shell_config" "screen" "screen -T $TERM" "screen with proper terminal type"
+        add_alias_if_needed "$shell_config" "screen" 'screen -T $TERM' "screen with proper terminal type"
     fi
 
     # 7z compression helpers
