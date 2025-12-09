@@ -153,10 +153,9 @@ modernize_apt_sources() {
         rm "$temp_sources"
         print_success "- APT sources file ($sources_file) is already modern."
     fi
-    echo ""
 
     # Offer to manually edit the sources file
-    if prompt_yes_no "Would you like to manually edit $sources_file with nano?" "n"; then
+    if prompt_yes_no "            Would you like to manually edit $sources_file with nano?" "n"; then
         if command -v nano &>/dev/null; then
             nano "$sources_file"
             print_info "Manual edit completed"

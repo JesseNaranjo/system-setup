@@ -161,15 +161,18 @@ configure_shell_prompt_colors_system() {
     local custom_ps1_pattern
     if [[ "$DETECTED_OS" == "macos" ]]; then
         # macOS zsh prompt
-        custom_ps1_pattern="PS1=\"[%F{247}%m%f:%F{%(!.red.green)}%n%f] %B%F{cyan}%~%f%b %#%(!.%F{red}%B!!%b%f.) \""
-        ps1_check_patterns=("$custom_ps1_pattern")
+        local bash_prompt="PS1=\"[%F{247}%m%f:%F{%(!.red.green)}%n%f] %B%F{cyan}%~%f%b %#%(!.%F{red}%B!!%b%f.) \""
+        ps1_check_patterns=("$bash_prompt")
+        custom_ps1_pattern="
+# Custom PS1 prompt - managed by system-setup.sh
+$bash_prompt"
     else
         # Linux bash prompt - conditional for root vs non-root
-        # We'll use a marker comment to check if it's already configured
         local bash_prompt_root="PS1=\"\${debian_chroot:+(\$debian_chroot)}[\[\e[90m\]\h\[\e[0m\]:\[\e[91m\]\u\[\e[0m\]] \[\e[96;1m\]\w\[\e[0m\] \\$\[\e[91;1m\]!!\[\e[0m\] \""
         local bash_prompt_non_root="PS1=\"\${debian_chroot:+(\$debian_chroot)}[\[\e[90m\]\h\[\e[0m\]:\[\e[92m\]\u\[\e[0m\]] \[\e[96;1m\]\w\[\e[0m\] \\$ \""
         ps1_check_patterns=("$bash_prompt_root" "$bash_prompt_non_root")
         custom_ps1_pattern="
+    # Custom PS1 prompt - managed by system-setup.sh
     if [ \"\$EUID\" -eq 0 ]; then
         # Root user - red username with !! warning
         $bash_prompt_root
@@ -202,10 +205,7 @@ configure_shell_prompt_colors_system() {
     if [[ "$ps1_count" -eq 0 ]]; then
         # No existing PS1, just add at the end
         add_change_header "$shell_config" "shell"
-        {
-            echo "# Custom PS1 prompt - managed by system-setup.sh"
-            echo "$custom_ps1_pattern"
-        } | run_elevated tee -a "$shell_config" > /dev/null
+        echo "$custom_ps1_pattern" | run_elevated tee -a "$shell_config" > /dev/null
         print_success "✓ Custom PS1 prompt configured in $shell_config"
     elif [[ "$ps1_count" -eq 1 ]]; then
         # Find the line number of the PS1 definition
@@ -217,10 +217,7 @@ configure_shell_prompt_colors_system() {
         # Create a temporary file with the new PS1 content
         local temp_ps1=$(mktemp)
         add_change_header "$temp_ps1" "shell"
-        {
-            echo "    # Custom PS1 prompt - managed by system-setup.sh"
-            echo "$custom_ps1_pattern"
-        } > "$temp_ps1"
+        echo "$custom_ps1_pattern" > "$temp_ps1"
 
         # Insert the new content after the commented line
         run_elevated sed -i.bak "${ps1_line_num}r ${temp_ps1}" "$shell_config" && run_elevated rm -f "${shell_config}.bak"
@@ -236,10 +233,7 @@ configure_shell_prompt_colors_system() {
 
         # Add new PS1 at the end
         add_change_header "$shell_config" "shell"
-        {
-            echo "# Custom PS1 prompt - managed by system-setup.sh"
-            echo "$custom_ps1_pattern"
-        } | run_elevated tee -a "$shell_config" > /dev/null
+        echo "$custom_ps1_pattern" | run_elevated tee -a "$shell_config" > /dev/null
 
         # Provide instructions and wait
         print_warning_box \
@@ -357,7 +351,6 @@ configure_shell_for_user() {
     if ! grep -q "Aliases to help avoid some mistakes" "$shell_config" 2>/dev/null; then
         backup_file "$shell_config"
         add_change_header "$shell_config" "shell"
-
         echo "" >> "$shell_config"
         echo "# Aliases to help avoid some mistakes:" >> "$shell_config"
     fi
@@ -366,10 +359,6 @@ configure_shell_for_user() {
     add_alias_if_needed "$shell_config" "mkdir" "mkdir -v" "verbose mkdir"
     add_alias_if_needed "$shell_config" "mv" "mv -iv" "interactive move"
     add_alias_if_needed "$shell_config" "rm" "rm -Iv" "interactive remove"
-
-    if ! grep -q "verbose chmod" "$shell_config" 2>/dev/null; then
-        echo "" >> "$shell_config"
-    fi
     add_alias_if_needed "$shell_config" "chmod" "chmod -vv" "verbose chmod"
     add_alias_if_needed "$shell_config" "chown" "chown -vv" "verbose chown"
 

@@ -499,13 +499,12 @@ add_change_header() {
             ;;
     esac
     header_content+="# Updated: $(date)"$'\n'
-    header_content+=$'\n'
 
     # Add header before changes
     if needs_elevation "$file"; then
-        echo "$header_content" | sudo tee -a "$file" > /dev/null
+        printf '%s' "$header_content" | sudo tee -a "$file" > /dev/null
     else
-        echo "$header_content" >> "$file"
+        printf '%s' "$header_content" >> "$file"
     fi
 
     # Mark this file as having header added
