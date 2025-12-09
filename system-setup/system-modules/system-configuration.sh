@@ -459,7 +459,7 @@ configure_fastfetch() {
     {
         echo ""
         echo "# Run fastfetch on shell startup (if installed)"
-        echo "command -v fastfetch &>/dev/null && fastfetch"
+        echo "command -v fastfetch &>/dev/null && echo \"\" && fastfetch && echo \"\""
     } | run_elevated tee -a "$shell_config" > /dev/null
 
     print_success "✓ Fastfetch configured to run on shell startup in $shell_config"
