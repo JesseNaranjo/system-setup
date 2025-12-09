@@ -574,7 +574,8 @@ update_config_line() {
             awk -v pattern="^[[:space:]]*${setting_pattern}" -v new_line="${full_line}" '
             BEGIN { found=0 }
             $0 ~ pattern {
-                print "# " $0 " # Replaced by system-setup.sh on " ("date +%Y-%m-%d" | getline);
+                "date +%Y-%m-%d" | getline datestr;
+                print "# " $0 " # Replaced by system-setup.sh on " datestr;
                 found=1;
                 next;
             }
