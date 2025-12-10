@@ -132,33 +132,39 @@ main() {
     echo "            ===================="
     echo ""
 
-    # Display menu
-    print_info "Select an operation:"
-    echo "            1) List packages upgradeable from backports"
-    echo "            2) List packages with residual configs (and optionally purge)"
-    echo "            3) Run apt autoremove"
-    echo "            Ctrl+C to cancel and exit"
-    echo ""
-    read -p "            Enter choice (1-3): " -r choice
+    # Main menu loop
+    while true; do
+        # Display menu
+        print_info "Select an operation:"
+        echo "            1) List packages upgradeable from backports"
+        echo "            2) List packages with residual configs (and optionally purge)"
+        echo "            3) Run apt autoremove"
+        echo "            4) Exit (or Ctrl+C)"
+        echo ""
+        read -p "            Enter choice (1-4): " -r choice
 
-    echo ""
+        echo ""
 
-    case "$choice" in
-        1)
-            list_backports_upgrades
-            ;;
-        2)
-            list_residual_configs
-            ;;
-        3)
-            run_autoremove
-            ;;
-        *)
-            print_error "Invalid choice. Aborting."
-            echo ""
-            exit 1
-            ;;
-    esac
+        case "$choice" in
+            1)
+                list_backports_upgrades
+                ;;
+            2)
+                list_residual_configs
+                ;;
+            3)
+                run_autoremove
+                ;;
+            4)
+                print_info "Exiting."
+                exit 0
+                ;;
+            *)
+                print_error "Invalid choice. Please try again."
+                echo ""
+                ;;
+        esac
+    done
 }
 
 # Run main function if script is executed directly
