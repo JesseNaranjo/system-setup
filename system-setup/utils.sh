@@ -33,6 +33,7 @@ DETECTED_OS=""
 BACKED_UP_FILES=()
 CREATED_BACKUP_FILES=()
 HEADER_ADDED_FILES=()
+CURL_INSTALLED=false
 FASTFETCH_INSTALLED=false
 NANO_INSTALLED=false
 SCREEN_INSTALLED=false
@@ -300,6 +301,7 @@ get_package_list() {
         echo "AWK:awk"
         echo "Bash:bash"
         echo "CA Certificates:ca-certificates"
+        echo "cURL:curl"
         echo "Fastfetch:fastfetch"
         echo "Git:git"
         echo "htop:htop"
@@ -402,7 +404,9 @@ verify_package_manager() {
 track_special_packages() {
     local package="$1"
 
-    if [[ "$package" == "fastfetch" ]]; then
+    if [[ "$package" == "curl" ]]; then
+        CURL_INSTALLED=true
+    elif [[ "$package" == "fastfetch" ]]; then
         FASTFETCH_INSTALLED=true
     elif [[ "$package" == "nano" ]]; then
         NANO_INSTALLED=true

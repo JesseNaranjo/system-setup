@@ -391,8 +391,11 @@ configure_shell_for_user() {
         echo "# Additional utility aliases" >> "$shell_config"
     fi
     add_alias_if_needed "$shell_config" "diff" "diff --color" "diff colors"
-    add_alias_if_needed "$shell_config" "lsblk" 'lsblk -o "NAME,FSTYPE,FSVER,LABEL,FSAVAIL,SIZE,FSUSE%,MOUNTPOINTS,UUID"' "enhanced lsblk"
-    add_alias_if_needed "$shell_config" "lxc-ls" "lxc-ls -f" "formatted lxc-ls"
+    # lsblk and lxc-ls are Linux-only utilities
+    if [[ "$DETECTED_OS" != "macos" ]]; then
+        add_alias_if_needed "$shell_config" "lsblk" 'lsblk -o "NAME,FSTYPE,FSVER,LABEL,FSAVAIL,SIZE,FSUSE%,MOUNTPOINTS,UUID"' "enhanced lsblk"
+        add_alias_if_needed "$shell_config" "lxc-ls" "lxc-ls -f" "formatted lxc-ls"
+    fi
     if [[ "$SCREEN_INSTALLED" == true ]]; then
         add_alias_if_needed "$shell_config" "screen" 'screen -T $TERM' "screen with proper terminal type"
     fi
@@ -418,6 +421,24 @@ configure_shell_for_user() {
         add_alias_if_needed "$shell_config" "7z-ultra1" "7z a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 1"
         add_alias_if_needed "$shell_config" "7z-ultra2" "7z a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 2"
         add_alias_if_needed "$shell_config" "7z-ultra3" "7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 3"
+    fi
+
+    # Homebrew curl PATH configuration (macOS only)
+    if [[ "$DETECTED_OS" == "macos" ]] && [[ "$CURL_INSTALLED" == true ]]; then
+        if ! grep -q "Homebrew curl configuration" "$shell_config" 2>/dev/null; then
+            backup_file "$shell_config"
+            add_change_header "$shell_config" "shell"
+            echo "" >> "$shell_config"
+            echo "# Homebrew curl configuration" >> "$shell_config"
+        fi
+        add_export_if_needed "$shell_config" "PATH" '"/opt/homebrew/opt/curl/bin:\$PATH"' "Homebrew curl PATH"
+        # Add commented compiler flags if not already present
+        if ! grep -q 'LDFLAGS.*curl' "$shell_config" 2>/dev/null; then
+            echo "" >> "$shell_config"
+            echo "# Some compilers may need this:" >> "$shell_config"
+            echo '#export LDFLAGS="-L/opt/homebrew/opt/curl/lib"' >> "$shell_config"
+            echo '#export CPPFLAGS="-I/opt/homebrew/opt/curl/include"' >> "$shell_config"
+        fi
     fi
 
     # Restore ownership if running as root
