@@ -29,7 +29,7 @@
 #   SRC_ORG            - Source organization name (required)
 #   DST_ORG            - Destination organization name (required)
 #   WORKDIR            - Working directory for temporary clones (default: /tmp/org-copy-...)
-#   THROTTLE           - Seconds to sleep between API calls (default: 0.3)
+#   THROTTLE           - Seconds to sleep between API calls (default: 1.25)
 #   LABEL_ARCHIVED_PR  - Label name for archived PRs (default: archived-pr)
 #
 # Note: This is a comprehensive migration tool. Always test with a small
@@ -50,7 +50,7 @@ readonly NC='\033[0m' # No Color
 readonly SRC_ORG="${SRC_ORG:-}"
 readonly DST_ORG="${DST_ORG:-}"
 readonly WORKDIR="${WORKDIR:-${TMPDIR:-/tmp}/org-copy-${SRC_ORG}-to-${DST_ORG}}"
-readonly THROTTLE="${THROTTLE:-0.3}"
+readonly THROTTLE="${THROTTLE:-1.25}"
 readonly LABEL_ARCHIVED_PR="${LABEL_ARCHIVED_PR:-archived-pr}"
 
 # Global counters
@@ -230,15 +230,19 @@ self_update() {
 
 # Validate configuration
 validate_config() {
+    local print_usage=false;
+
     if [[ -z "$SRC_ORG" ]]; then
         print_error "SRC_ORG environment variable is required"
-        echo ""
-        echo "Usage: SRC_ORG=\"OldOrg\" DST_ORG=\"NewOrg\" $0"
-        exit 1
+        print_usage=true;
     fi
 
     if [[ -z "$DST_ORG" ]]; then
         print_error "DST_ORG environment variable is required"
+        print_usage=true;
+    fi
+
+    if [[ print_usage == true ]]; then
         echo ""
         echo "Usage: SRC_ORG=\"OldOrg\" DST_ORG=\"NewOrg\" $0"
         exit 1
