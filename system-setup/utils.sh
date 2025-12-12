@@ -499,25 +499,29 @@ backup_file() {
 
         # Copy file with preserved permissions (-p flag)
         if needs_elevation "$file"; then
-            sudo cp -p "$file" "$backup"
+            run_elevated cp -p "$file" "$backup"
         else
             cp -p "$file" "$backup"
         fi
 
         # Preserve ownership (requires appropriate permissions)
         # Get the owner and group of the original file
-        if [[ "$OSTYPE" == "darwin"* ]]; then
+        if [[ "$DETECTED_OS" == "macos" ]]; then
             # macOS stat syntax
             local owner=$(stat -f "%u:%g" "$file")
             if needs_elevation "$file"; then
-                sudo chown "$owner" "$backup" 2>/dev/null || true
+                run_elevated chown "$owner" "$backup" 2>/dev/null
             else
                 chown "$owner" "$backup" 2>/dev/null || true
             fi
         else
             # Linux stat syntax
             local owner=$(stat -c "%u:%g" "$file")
-            chown "$owner" "$backup" 2>/dev/null || true
+            if needs_elevation "$file"; then
+                run_elevated chown "$owner" "$backup" 2>/dev/null
+            else
+                chown "$owner" "$backup" 2>/dev/null || true
+            fi
         fi
 
         print_backup "- Created backup: $backup"
@@ -562,7 +566,7 @@ add_change_header() {
 
     # Add header before changes
     if needs_elevation "$file"; then
-        printf '%s' "$header_content" | sudo tee -a "$file" > /dev/null
+        printf '%s' "$header_content" | run_elevated tee -a "$file" > /dev/null
     else
         printf '%s' "$header_content" >> "$file"
     fi
@@ -649,7 +653,7 @@ update_config_line() {
 
             # Replace the original file with the updated temporary file
             if needs_elevation "$file"; then
-                sudo mv "$temp_file" "$file"
+                run_elevated mv "$temp_file" "$file"
             else
                 mv "$temp_file" "$file"
             fi
@@ -659,7 +663,7 @@ update_config_line() {
         backup_file "$file"
         add_change_header "$file" "$config_type"
         if needs_elevation "$file"; then
-            echo "$full_line" | sudo tee -a "$file" > /dev/null
+            echo "$full_line" | run_elevated tee -a "$file" > /dev/null
         else
             echo "$full_line" >> "$file"
         fi
