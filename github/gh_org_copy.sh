@@ -230,19 +230,19 @@ self_update() {
 
 # Validate configuration
 validate_config() {
-    local print_usage=1
+    local print_usage=false
 
     if [[ -z "$SRC_ORG" ]]; then
         print_error "SRC_ORG environment variable is required"
-        print_usage=0
+        print_usage=true
     fi
 
     if [[ -z "$DST_ORG" ]]; then
         print_error "DST_ORG environment variable is required"
-        print_usage=0
+        print_usage=true
     fi
 
-    if [[ print_usage ]]; then
+    if [[ "$print_usage" == true ]]; then
         echo ""
         echo "Usage: SRC_ORG=\"OldOrg\" DST_ORG=\"NewOrg\" $0"
         exit 1
