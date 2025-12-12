@@ -337,6 +337,7 @@ else
     print_warning "Adding veth entry to /etc/lxc/lxc-usernet"
     backup_file "/etc/lxc/lxc-usernet"
     echo "$VETH_ENTRY" | tee -a /etc/lxc/lxc-usernet > /dev/null
+    chmod 644 /etc/lxc/lxc-usernet
     print_success "- Added: $VETH_ENTRY"
 fi
 echo ""
@@ -351,6 +352,7 @@ else
     print_warning "Adding subuid entry to /etc/subuid"
     backup_file "/etc/subuid"
     echo "$SUB_ENTRY" | tee -a /etc/subuid > /dev/null
+    chmod 644 /etc/subuid
     print_success "- Added: $SUB_ENTRY"
 fi
 echo ""
@@ -363,6 +365,7 @@ else
     print_warning "Adding subgid entry to /etc/subgid"
     backup_file "/etc/subgid"
     echo "$SUB_ENTRY" | tee -a /etc/subgid > /dev/null
+    chmod 644 /etc/subgid
     print_success "- Added: $SUB_ENTRY"
 fi
 echo ""
@@ -378,6 +381,7 @@ else
     backup_file "/etc/sysctl.d/99-lxc.conf"
     sysctl -w kernel.unprivileged_userns_clone=1
     echo "kernel.unprivileged_userns_clone = 1" | tee /etc/sysctl.d/99-lxc.conf > /dev/null
+    chmod 644 /etc/sysctl.d/99-lxc.conf
     sysctl --system > /dev/null 2>&1
     print_success "- Enabled user namespace support"
 fi
@@ -410,6 +414,7 @@ lxc.net.0.link = $BRIDGE_LINK
 lxc.net.0.flags = up
 EOF
 
+chmod 644 "$LIMITED_USER_CONFIG_LXC/default.conf"
 print_success "- Created LXC default configuration"
 echo ""
 
@@ -461,6 +466,7 @@ RemainAfterExit=yes
 WantedBy=default.target
 EOF
 
+chmod 644 "$LIMITED_USER_CONFIG_SYSTEMD_USER/lxc-bg-start@.service"
 print_success "- Created systemd service template"
 echo ""
 

@@ -43,16 +43,11 @@ configure_nano() {
 
     local config_file=$(get_nano_config_file "$scope")
 
-    # Create config file if it doesn't exist
+    # Create config file if it doesn't exist (with world-readable permissions)
     if [[ ! -f "$config_file" ]]; then
         print_info "Creating new nano configuration file: $config_file"
-        if [[ "$scope" == "system" ]] && [[ "$DETECTED_OS" == "macos" ]] && [[ $EUID -ne 0 ]]; then
-            # On macOS with system scope, use sudo to create the file
-            run_elevated touch "$config_file"
-        else
-            touch "$config_file"
-        fi
     fi
+    create_config_file "$config_file"
 
     # Configure each setting individually
     add_config_if_needed "nano" "$config_file" "set atblanks" "" "atblanks setting"
@@ -113,16 +108,11 @@ configure_screen() {
 
     local config_file=$(get_screen_config_file "$scope")
 
-    # Create config file if it doesn't exist
+    # Create config file if it doesn't exist (with world-readable permissions)
     if [[ ! -f "$config_file" ]]; then
         print_info "Creating new screen configuration file: $config_file"
-        if [[ "$scope" == "system" ]] && [[ "$DETECTED_OS" == "macos" ]] && [[ $EUID -ne 0 ]]; then
-            # On macOS with system scope, use sudo to create the file
-            run_elevated touch "$config_file"
-        else
-            touch "$config_file"
-        fi
     fi
+    create_config_file "$config_file"
 
     # Configure each setting individually
     add_config_if_needed "screen" "$config_file" "startup_message" "off" "startup message setting"

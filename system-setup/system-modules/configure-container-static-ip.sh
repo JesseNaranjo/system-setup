@@ -177,6 +177,9 @@ DHCP=yes
 Address=${static_ip}/${static_prefix}
 EOF
 
+    # Ensure world-readable permissions
+    run_elevated chmod 644 "$network_file"
+
     print_success "✓ Static IP configuration written to $network_file"
     echo ""
 

@@ -421,6 +421,62 @@ track_special_packages() {
 # File Management Functions
 # ============================================================================
 
+# Get current file permissions in octal format (e.g., "644")
+# Works on both macOS and Linux
+get_file_permissions() {
+    local file="$1"
+
+    if [[ "$DETECTED_OS" == "macos" ]]; then
+        # macOS stat syntax - returns last 3 digits of mode
+        stat -f "%Lp" "$file"
+    else
+        # Linux stat syntax
+        stat -c "%a" "$file"
+    fi
+}
+
+# Create a config file with specified permissions
+# Usage: create_config_file <path> [perms] [content]
+#   path: file path (required)
+#   perms: octal permissions like 644, 600 (default: 644)
+#   content: optional content to write (if omitted, creates empty file)
+#
+# Behavior:
+#   - New file: create with content (or empty), chmod to perms
+#   - Existing file: check permissions, warn if mismatch, do not modify
+#   - System paths (/etc/*): use run_elevated on macOS
+create_config_file() {
+    local file="$1"
+    local perms="${2:-644}"
+    local content="${3:-}"
+
+    if [[ -f "$file" ]]; then
+        # File exists - check permissions and warn if different
+        local actual_perms=$(get_file_permissions "$file")
+        if [[ "$actual_perms" != "$perms" ]]; then
+            print_warning "$file exists with permissions $actual_perms (expected $perms)"
+        fi
+        return 0
+    fi
+
+    # File doesn't exist - create it
+    if needs_elevation "$file"; then
+        if [[ -n "$content" ]]; then
+            echo "$content" | run_elevated tee "$file" > /dev/null
+        else
+            run_elevated touch "$file"
+        fi
+        run_elevated chmod "$perms" "$file"
+    else
+        if [[ -n "$content" ]]; then
+            echo "$content" > "$file"
+        else
+            touch "$file"
+        fi
+        chmod "$perms" "$file"
+    fi
+}
+
 # Backup file if it exists (only once per session)
 backup_file() {
     local file="$1"
