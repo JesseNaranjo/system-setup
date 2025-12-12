@@ -230,19 +230,19 @@ self_update() {
 
 # Validate configuration
 validate_config() {
-    local print_usage=false;
+    local print_usage=1
 
     if [[ -z "$SRC_ORG" ]]; then
         print_error "SRC_ORG environment variable is required"
-        print_usage=true;
+        print_usage=0
     fi
 
     if [[ -z "$DST_ORG" ]]; then
         print_error "DST_ORG environment variable is required"
-        print_usage=true;
+        print_usage=0
     fi
 
-    if [[ print_usage == true ]]; then
+    if [[ print_usage ]]; then
         echo ""
         echo "Usage: SRC_ORG=\"OldOrg\" DST_ORG=\"NewOrg\" $0"
         exit 1
@@ -258,6 +258,14 @@ validate_config() {
     echo "API throttle:          ${THROTTLE}s"
     echo "Archived PR label:     ${LABEL_ARCHIVED_PR}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    read -p "Continue? [Y/n] " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Nn]$ ]]; then
+        print_info "Aborted by user"
+        exit 0
+    fi
     echo ""
 }
 
