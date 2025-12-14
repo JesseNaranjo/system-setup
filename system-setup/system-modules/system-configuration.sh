@@ -421,7 +421,7 @@ configure_shell_for_user() {
             echo "" >> "$shell_config"
             echo "# Homebrew curl configuration" >> "$shell_config"
         fi
-        add_export_if_needed "$shell_config" "PATH" '"/opt/homebrew/opt/curl/bin:\$PATH"' "Homebrew curl PATH"
+        add_export_if_needed "$shell_config" "PATH" '"/opt/homebrew/opt/curl/bin:$PATH"' "Homebrew curl PATH"
         # Add commented compiler flags if not already present
         if ! grep -q 'LDFLAGS.*curl' "$shell_config" 2>/dev/null; then
             echo "" >> "$shell_config"
