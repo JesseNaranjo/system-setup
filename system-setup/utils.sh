@@ -693,9 +693,9 @@ add_config_if_needed() {
     if [[ $setting =~ ^[[:space:]]*set[[:space:]]+ ]]; then
         local setting_key=${setting#set }
         local escaped_key=$(escape_regex "$setting_key")
-        local setting_pattern="^[[:space:]]*set[[:space:]]+${escaped_key}"
+        local setting_pattern="set[[:space:]]+${escaped_key}"
     else
-        local setting_pattern="^[[:space:]]*${escaped_setting}"
+        local setting_pattern="${escaped_setting}"
     fi
 
     update_config_line "$config_type" "$file" "$setting_pattern" "$full_setting" "$description"
