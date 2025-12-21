@@ -32,7 +32,7 @@ echo_internal "Enabling cri-o and kubelet services..."
 
 # Start cri-o + kubelet
 
-echo_internal "Starting cri-o and kubetlet services..."
+echo_internal "Starting cri-o and kubelet services..."
 (
     set -x
     sudo systemctl start crio.service kubelet.service
