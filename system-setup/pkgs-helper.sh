@@ -148,6 +148,7 @@ list_residual_configs() {
 
     if [[ -z "$packages" ]]; then
         print_success "No packages with residual configuration files found."
+        echo ""
         return 0
     fi
 
