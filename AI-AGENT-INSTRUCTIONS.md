@@ -3,10 +3,10 @@
 ## Document Purpose
 This document provides comprehensive patterns, styles, and conventions used across all bash scripts in this repository. Optimized for LLM consumption to enable rapid, accurate code generation and modification without requiring full source file analysis.
 
-**Last Updated:** December 3, 2025
-**Primary Reference:** system-setup.sh (491 lines) + utils.sh (712 lines)
+**Last Updated:** December 21, 2025
+**Primary Reference:** system-setup.sh + utils.sh
 **Secondary Reference:** _download-*-scripts.sh (standalone script pattern)
-**Scope:** All `.sh` scripts in repository (modular and standalone)
+**Scope:** All `.sh` scripts in repository (modular, standalone, and lightweight)
 
 ---
 
@@ -150,6 +150,43 @@ This repository uses two distinct script architectures. Choose based on context:
 | New utility script in lxc/, k8s/, etc. | Standalone | Must work when downloaded individually |
 | Shared helper used by multiple modules | Add to utils.sh | Centralized maintenance |
 | One-off automation script | Standalone | Simpler, no dependencies |
+| Simple system task (start/stop services) | Lightweight | Minimal overhead, quick execution |
+
+### 3. Lightweight Scripts (kubernetes/, utils/)
+
+**When to use:** Simple automation tasks that don't need user interaction or complex output.
+
+**Structure:**
+- Minimal or no error handling (`set -euo pipefail` optional)
+- Basic `echo` output or simple `echo_internal()` helper
+- Commands grouped in subshells with `set -x` for visibility
+
+**Key characteristics:**
+- No color output or structured logging
+- No user prompts - runs non-interactively
+- Often uses subshells `( set -x; command )` to show what's executing
+- Quick, single-purpose scripts
+
+**Example:**
+```bash
+#!/usr/bin/env bash
+
+echo_internal() {
+    printf "\n$1\n"
+}
+
+echo_internal "Turning off swap..."
+(
+    set -x
+    sudo swapoff -a
+)
+
+echo_internal "Starting services..."
+(
+    set -x
+    sudo systemctl start myservice.service
+)
+```
 
 ---
 
@@ -244,6 +281,8 @@ DETECTED_OS=""
 RUNNING_IN_CONTAINER=false
 
 # Package tracking
+CURL_INSTALLED=false
+FASTFETCH_INSTALLED=false
 NANO_INSTALLED=false
 SCREEN_INSTALLED=false
 OPENSSH_SERVER_INSTALLED=false
@@ -430,6 +469,35 @@ local local_var="value"    # Function local
 local param1="$1"          # Function parameter
 ```
 
+### Environment Variable Configuration
+```bash
+# Document env vars in header comments
+# Usage:
+#   SRC_ORG="OldOrg" DST_ORG="NewOrg" ./script.sh
+
+# Optional with default
+readonly VAR="${VAR:-default_value}"
+
+# Required - validate early
+readonly REQUIRED_VAR="${REQUIRED_VAR:-}"
+[[ -z "$REQUIRED_VAR" ]] && print_error "REQUIRED_VAR is required" && exit 1
+```
+
+### Exit Codes (sysexits.h)
+```bash
+# Standard exit codes for better error reporting
+exit 0   # EX_OK - Success
+exit 1   # General error
+exit 64  # EX_USAGE - Command line usage error
+exit 65  # EX_DATAERR - Data format error
+exit 66  # EX_NOINPUT - Cannot open input
+exit 69  # EX_UNAVAILABLE - Service unavailable
+exit 70  # EX_SOFTWARE - Internal software error
+exit 73  # EX_CANTCREAT - Can't create output file
+exit 74  # EX_IOERR - Input/output error
+exit 77  # EX_NOPERM - Permission denied
+```
+
 ### Array Iteration
 ```bash
 for item in "${array[@]}"; do
@@ -581,12 +649,46 @@ configure_component() {
 
 ### Core Configuration Functions
 
+**escape_regex** - Escape special regex characters:
+```bash
+escape_regex() {
+    printf '%s' "$1" | sed 's/[.[\(*^$+?{|\\]/\\&/g'
+}
+```
+
+**grep_file** - Privilege-aware grep:
+```bash
+# Grep a file with proper elevation handling
+# Usage: grep_file [grep_options] <pattern> <file>
+# Returns: grep exit status (0 if match found, 1 if no match)
+# Note: The file must be the LAST argument, pattern second to last
+grep_file() {
+    local args=()
+    local file=""
+    local pattern=""
+
+    # Parse arguments - all but last two are options, second to last is pattern, last is file
+    while [[ $# -gt 2 ]]; do
+        args+=("$1")
+        shift
+    done
+    pattern="$1"
+    file="$2"
+
+    if needs_elevation "$file"; then
+        run_elevated grep "${args[@]+"${args[@]}"}" "$pattern" "$file"
+    else
+        grep "${args[@]+"${args[@]}"}" "$pattern" "$file"
+    fi
+}
+```
+
 **config_exists** - Check if setting exists:
 ```bash
 config_exists() {
     local file="$1"
     local pattern="$2"
-    [[ -f "$file" ]] && grep -qE "^[[:space:]]*${pattern}" "$file"
+    [[ -f "$file" ]] && grep_file -qE "^[[:space:]]*${pattern}" "$file"
 }
 ```
 
@@ -596,7 +698,7 @@ get_config_value() {
     local file="$1"
     local setting="$2"
     if [[ -f "$file" ]]; then
-        grep -E "^[[:space:]]*${setting}" "$file" | head -n 1 | \
+        grep_file -E "^[[:space:]]*${setting}" "$file" | head -n 1 | \
             sed -E "s/^[[:space:]]*${setting}[[:space:]]*//" || true
     fi
 }
@@ -677,6 +779,102 @@ add_export_if_needed() {
 }
 ```
 
+### File Management Functions
+
+**get_file_permissions** - Cross-platform permission check:
+```bash
+get_file_permissions() {
+    local file="$1"
+
+    if [[ "$DETECTED_OS" == "macos" ]]; then
+        stat -f "%Lp" "$file"  # macOS syntax
+    else
+        stat -c "%a" "$file"   # Linux syntax
+    fi
+}
+```
+
+**create_config_file** - Create file with permissions:
+```bash
+# Usage: create_config_file <path> [perms] [content]
+#   path: file path (required)
+#   perms: octal permissions like 644, 600 (default: 644)
+#   content: optional content to write (if omitted, creates empty file)
+create_config_file() {
+    local file="$1"
+    local perms="${2:-644}"
+    local content="${3:-}"
+
+    if [[ -f "$file" ]]; then
+        # File exists - check permissions and warn if different
+        local actual_perms=$(get_file_permissions "$file")
+        if [[ "$actual_perms" != "$perms" ]]; then
+            print_warning "$file exists with permissions $actual_perms (expected $perms)"
+        fi
+        return 0
+    fi
+
+    # File doesn't exist - create it
+    if needs_elevation "$file"; then
+        if [[ -n "$content" ]]; then
+            echo "$content" | run_elevated tee "$file" > /dev/null
+        else
+            run_elevated touch "$file"
+        fi
+        run_elevated chmod "$perms" "$file"
+    else
+        if [[ -n "$content" ]]; then
+            echo "$content" > "$file"
+        else
+            touch "$file"
+        fi
+        chmod "$perms" "$file"
+    fi
+}
+```
+
+**normalize_trailing_newlines** - Fix file endings:
+```bash
+# Ensure a file ends with exactly N blank lines (default: 1)
+# Usage: normalize_trailing_newlines <file> [num_lines]
+normalize_trailing_newlines() {
+    local file="$1"
+    local num_lines="${2:-1}"
+    local temp_file=$(mktemp)
+
+    # Remove all trailing blank lines (last content line keeps its newline)
+    sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$file" > "$temp_file"
+
+    # Add (N-1) more newlines since the last line already ends with one
+    for ((i=1; i<num_lines; i++)); do
+        printf '\n' >> "$temp_file"
+    done
+
+    run_elevated mv "$temp_file" "$file"
+}
+```
+
+### Package Tracking
+
+**track_special_packages** - Track installed packages for later configuration:
+```bash
+track_special_packages() {
+    local package="$1"
+
+    if [[ "$package" == "curl" ]]; then
+        CURL_INSTALLED=true
+    elif [[ "$package" == "fastfetch" ]]; then
+        FASTFETCH_INSTALLED=true
+    elif [[ "$package" == "nano" ]]; then
+        NANO_INSTALLED=true
+    elif [[ "$package" == "screen" ]]; then
+        SCREEN_INSTALLED=true
+    elif [[ "$package" == "openssh-server" ]]; then
+        OPENSSH_SERVER_INSTALLED=true
+    fi
+}
+```
+
 ---
 
 ## Output & Logging
@@ -749,6 +947,59 @@ echo -e "${YELLOW}╚════════════════╝${NC}"
 # Indented output
 echo "            - Detail item"
 echo "            • Bullet point"
+```
+
+### Optional Visual Elements
+
+These functions provide enhanced formatting for specific use cases. Not part of core utils.sh but useful patterns:
+
+**print_section** - Bordered section header (for standalone scripts):
+```bash
+print_section() {
+    echo -e "${CYAN}╭────────────────────────────────────────────────────────────────────────╮${NC}"
+    echo -e "${CYAN}│${NC} $1"
+    echo -e "${CYAN}╰────────────────────────────────────────────────────────────────────────╯${NC}"
+}
+```
+
+**print_header** - Timestamped header with borders (for long-running scripts):
+```bash
+print_header() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}[$(date +'%H:%M:%S')] $1${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+}
+```
+
+**print_step** - Indented step indicator:
+```bash
+print_step() {
+    echo -e "${BLUE}  →${NC} $1"
+}
+```
+
+**print_timestamp** - Gray timestamped log line:
+```bash
+print_timestamp() {
+    local section="$1"
+    echo -e "${GRAY}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} ${section}"
+}
+```
+
+### Log File Pattern
+
+For scripts that need persistent logging:
+```bash
+readonly LOG_FILE="${HOME}/.script-name.log"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"
+}
+
+# Usage
+log "Starting synchronization"
+log "Error: $error_message"
 ```
 
 ---
@@ -1538,65 +1789,9 @@ github/               - GitHub CLI automation (org copying, issue management)
 kubernetes/           - K8s cluster management (start, stop, update repos)
 lxc/                  - LXC container operations (create, start, stop, config)
 llm/                  - LLM tools (Ollama management)
-utils/                - Cross-platform utility scripts (rsync, monitoring)
+utils/                - Cross-platform utility scripts (rsync, monitoring, macOS display reset)
 configs/              - Documentation for tool configurations (markdown)
-walkthroughs/         - Step-by-step guides (markdown)
-```
-
-### Simple Scripts Pattern (No Color Output)
-```bash
-#!/bin/bash  # Note: Some use #!/bin/bash, not #!/usr/bin/env bash
-
-# Simple echo for status
-echo "Status message"
-
-# Group commands in subshells for atomic execution
-(
-    set -x  # Show commands
-    sudo command1
-    sudo command2
-)
-
-# Use echo_internal for complex scripts
-echo_internal() {
-    printf "\n$1\n"
-}
-```
-
-### Complex Scripts Pattern (Full Color Support)
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-# Full color constants
-readonly BLUE='\033[0;34m'
-readonly GREEN='\033[0;32m'
-# ... (all colors)
-
-# Structured output functions
-print_info() { ... }
-print_success() { ... }
-
-# Global counters for reporting
-TOTAL_REPOS_PROCESSED=0
-TOTAL_WIKIS_COPIED=0
-# ...
-
-# Timing
-START_TIME=$(date +%s)
-END_TIME=$(date +%s)
-```
-
-### Environment Variable Configuration
-```bash
-# Document env vars in header comments
-# Usage:
-#   SRC_ORG="OldOrg" DST_ORG="NewOrg" ./script.sh
-#   THROTTLE=2 ./script.sh
-
-readonly VAR="${VAR:-default_value}"
-readonly REQUIRED_VAR="${REQUIRED_VAR:-}"
-[[ -z "$REQUIRED_VAR" ]] && print_error "VAR required" && exit 1
+walkthroughs/         - Step-by-step guides (debian-f2fs, macOS external monitor fixes)
 ```
 
 ---
