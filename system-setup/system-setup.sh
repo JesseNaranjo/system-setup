@@ -30,11 +30,13 @@ readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setu
 
 # List of obsolete scripts to clean up (renamed or removed from repository)
 # Add filenames here when scripts are renamed or deprecated
-OBSOLETE_SCRIPTS=()
+OBSOLETE_SCRIPTS=(
+    "apt-pkgs-helper.sh"
+)
 
 # List of module scripts to download/update (excludes system-setup.sh and utils.sh)
 get_script_list() {
-    echo "apt-pkgs-helper.sh"
+    echo "pkgs-helper.sh"
     echo "system-modules/configure-container-static-ip.sh"
     echo "system-modules/migrate-to-systemd-networkd.sh"
     echo "system-modules/modernize-apt-sources.sh"

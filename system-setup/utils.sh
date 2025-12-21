@@ -30,6 +30,7 @@ readonly NC='\033[0m' # No Color
 
 DEBUG_MODE=false
 DETECTED_OS=""
+DETECTED_PKG_MANAGER=""
 BACKED_UP_FILES=()
 CREATED_BACKUP_FILES=()
 HEADER_ADDED_FILES=()
@@ -218,6 +219,24 @@ detect_environment() {
     # Detect container environment on Linux
     if [[ "$DETECTED_OS" == "linux" ]]; then
         detect_container
+    fi
+}
+
+# Detect the system's package manager
+# Sets DETECTED_PKG_MANAGER to: "apt", "dnf", or "unknown"
+# Extensible: Add new package managers by adding elif blocks
+detect_package_manager() {
+    if command -v apt &>/dev/null; then
+        DETECTED_PKG_MANAGER="apt"
+    elif command -v dnf &>/dev/null; then
+        DETECTED_PKG_MANAGER="dnf"
+    # Future: Add more package managers here
+    # elif command -v pacman &>/dev/null; then
+    #     DETECTED_PKG_MANAGER="pacman"
+    # elif command -v zypper &>/dev/null; then
+    #     DETECTED_PKG_MANAGER="zypper"
+    else
+        DETECTED_PKG_MANAGER="unknown"
     fi
 }
 
