@@ -289,6 +289,25 @@ needs_elevation() {
     return 1
 }
 
+# Append one or more lines to a file with proper elevation handling
+# Usage: append_to_file <file> <line1> [line2] [line3] ...
+# Each argument after the file path is written as a separate line
+# Empty string arguments create blank lines
+append_to_file() {
+    local file="$1"
+    shift
+
+    if [[ "$DEBUG_MODE" == true ]]; then
+        print_debug "append_to_file: appending $# line(s) to $file"
+    fi
+
+    if needs_elevation "$file"; then
+        printf '%s\n' "$@" | run_elevated tee -a "$file" > /dev/null
+    else
+        printf '%s\n' "$@" >> "$file"
+    fi
+}
+
 # ============================================================================
 # Package Management Functions
 # ============================================================================
@@ -548,28 +567,22 @@ add_change_header() {
         return 0
     fi
 
-    # Prepare header content
-    local header_content=""
-    header_content+=$'\n'
+    # Prepare header content based on config type
+    local header_line=""
     case "$config_type" in
         nano)
-            header_content+="# nano configuration - managed by system-setup.sh"$'\n'
+            header_line="# nano configuration - managed by system-setup.sh"
             ;;
         screen)
-            header_content+="# GNU screen configuration - managed by system-setup.sh"$'\n'
+            header_line="# GNU screen configuration - managed by system-setup.sh"
             ;;
         shell)
-            header_content+="# Shell configuration - managed by system-setup.sh"$'\n'
+            header_line="# Shell configuration - managed by system-setup.sh"
             ;;
     esac
-    header_content+="# Updated: $(date)"$'\n'
 
     # Add header before changes
-    if needs_elevation "$file"; then
-        printf '%s' "$header_content" | run_elevated tee -a "$file" > /dev/null
-    else
-        printf '%s' "$header_content" >> "$file"
-    fi
+    append_to_file "$file" "" "$header_line" "# Updated: $(date)"
 
     # Mark this file as having header added
     HEADER_ADDED_FILES+=("$file")

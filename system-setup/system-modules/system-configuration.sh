@@ -341,8 +341,7 @@ configure_shell_for_user() {
     if ! grep -q "Aliases to help avoid some mistakes" "$shell_config" 2>/dev/null; then
         backup_file "$shell_config"
         add_change_header "$shell_config" "shell"
-        echo "" >> "$shell_config"
-        echo "# Aliases to help avoid some mistakes:" >> "$shell_config"
+        append_to_file "$shell_config" "" "# Aliases to help avoid some mistakes:"
     fi
 
     add_alias_if_needed "$shell_config" "cp" "cp -aiv" "copy with attributes and interactive"
@@ -355,10 +354,9 @@ configure_shell_for_user() {
     # OS-specific ls configuration
     if [[ "$DETECTED_OS" == "macos" ]]; then
         if ! grep -q "macOS ls configuration" "$shell_config" 2>/dev/null; then
-            echo "" >> "$shell_config"
             backup_file "$shell_config"
             add_change_header "$shell_config" "shell"
-            echo "# macOS ls configuration" >> "$shell_config"
+            append_to_file "$shell_config" "" "# macOS ls configuration"
         fi
         add_export_if_needed "$shell_config" "CLICOLOR" "YES" "terminal colors"
         add_alias_if_needed "$shell_config" "ls" "ls -AFGHhl" "macOS ls with colors and formatting"
@@ -366,8 +364,7 @@ configure_shell_for_user() {
         if ! grep -q "Linux ls configuration" "$shell_config" 2>/dev/null; then
             backup_file "$shell_config"
             add_change_header "$shell_config" "shell"
-            echo "" >> "$shell_config"
-            echo "# Linux ls configuration" >> "$shell_config"
+            append_to_file "$shell_config" "" "# Linux ls configuration"
         fi
         add_config_if_needed "shell" "$shell_config" 'eval "$(dircolors -b)"' "" "dircolors initialization"
         add_alias_if_needed "$shell_config" "ls" "ls --color=auto --group-directories-first -AFHhl" "Linux ls with colors and formatting"
@@ -377,8 +374,7 @@ configure_shell_for_user() {
     if ! grep -q "Additional utility aliases" "$shell_config" 2>/dev/null; then
         backup_file "$shell_config"
         add_change_header "$shell_config" "shell"
-        echo "" >> "$shell_config"
-        echo "# Additional utility aliases" >> "$shell_config"
+        append_to_file "$shell_config" "" "# Additional utility aliases"
     fi
     add_alias_if_needed "$shell_config" "diff" "diff --color" "diff colors"
     # lsblk and lxc-ls are Linux-only utilities
@@ -395,8 +391,7 @@ configure_shell_for_user() {
         if ! grep -q "^# 7z compression helpers (macOS" "$shell_config" 2>/dev/null; then
             backup_file "$shell_config"
             add_change_header "$shell_config" "shell"
-            echo "" >> "$shell_config"
-            echo "# 7z compression helpers (macOS - using 7zz)" >> "$shell_config"
+            append_to_file "$shell_config" "" "# 7z compression helpers (macOS - using 7zz)"
         fi
         add_alias_if_needed "$shell_config" "7z-ultra1" "7zz a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 1"
         add_alias_if_needed "$shell_config" "7z-ultra2" "7zz a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 2"
@@ -405,8 +400,7 @@ configure_shell_for_user() {
         if ! grep -q "^# 7z compression helpers$" "$shell_config" 2>/dev/null; then
             backup_file "$shell_config"
             add_change_header "$shell_config" "shell"
-            echo "" >> "$shell_config"
-            echo "# 7z compression helpers" >> "$shell_config"
+            append_to_file "$shell_config" "" "# 7z compression helpers"
         fi
         add_alias_if_needed "$shell_config" "7z-ultra1" "7z a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 1"
         add_alias_if_needed "$shell_config" "7z-ultra2" "7z a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 2"
@@ -418,16 +412,12 @@ configure_shell_for_user() {
         if ! grep -q "Homebrew curl configuration" "$shell_config" 2>/dev/null; then
             backup_file "$shell_config"
             add_change_header "$shell_config" "shell"
-            echo "" >> "$shell_config"
-            echo "# Homebrew curl configuration" >> "$shell_config"
+            append_to_file "$shell_config" "" "# Homebrew curl configuration"
         fi
         add_export_if_needed "$shell_config" "PATH" '"/opt/homebrew/opt/curl/bin:$PATH"' "Homebrew curl PATH"
         # Add commented compiler flags if not already present
         if ! grep -q 'LDFLAGS.*curl' "$shell_config" 2>/dev/null; then
-            echo "" >> "$shell_config"
-            echo "# Some compilers may need this:" >> "$shell_config"
-            echo '#export LDFLAGS="-L/opt/homebrew/opt/curl/lib"' >> "$shell_config"
-            echo '#export CPPFLAGS="-I/opt/homebrew/opt/curl/include"' >> "$shell_config"
+            append_to_file "$shell_config" "" "# Some compilers may need this:" '#export LDFLAGS="-L/opt/homebrew/opt/curl/lib"' '#export CPPFLAGS="-I/opt/homebrew/opt/curl/include"'
         fi
     fi
 
