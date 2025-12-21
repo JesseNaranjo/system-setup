@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Kubernetes version to install
-readonly K8S_VERSION=v1.33
+readonly K8S_VERSION=v1.35
 
 # Colors for output
 readonly BLUE='\033[0;34m'
