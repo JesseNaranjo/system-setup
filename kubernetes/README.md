@@ -2,16 +2,35 @@
 
 ## prerequisites
 
-Install `gpg`
-- This must be installed before adding the Kubernetes package repositories.
+Install required packages:
+- `gpg` - required before adding the Kubernetes package repositories
+- `curl` - required by the Helm installer and download scripts
+
+Load required kernel modules:
+```
+sudo modprobe br_netfilter
+sudo modprobe overlay
+```
+- These modules are required for container networking to function properly
+- See the [always running](#always-running) section for how to make these persistent
 
 Edit `update-k8s-repos.sh` and make sure `K8S_VERSION` reflects the most current version of Kubernetes
-- You can find the most recent version at https://kubernetes.io/releases/.
+- You can find the most recent version at https://kubernetes.io/releases/
 - Note that this script will add repositories for:
   - Kubernetes
-  - CRI-O
+  - CRI-O (versions are aligned with Kubernetes)
 
 Run `update-k8s-repos.sh`<sup>1</sup>
+
+### auto-update scripts
+
+Run `_download-k8s-scripts.sh` to automatically download or update all managed scripts from the remote repository:
+- `install-update-helm.sh`
+- `start-k8s.sh`
+- `stop-k8s.sh`
+- `update-k8s-repos.sh`
+
+**Note:** Running this script may overwrite local modifications, including changes to `K8S_VERSION` in `update-k8s-repos.sh`. The script will show diffs and prompt for confirmation before overwriting
 - This will download the public signing key for the package repositories listed above.
 - And also add the package repositories to the deb sources.
 
@@ -43,6 +62,17 @@ Install package:
 ```
 - This script will ensure all pre-checks are done (such as swapoff, IP forwarding, etc.)
 - And then the script will enable and run all services - kubelet and crio
+
+## stop everything
+
+```
+./stop-k8s.sh
+```
+- This script reverses the start configuration:
+  - Stops and disables `kubelet.service` and `crio.service`
+  - Re-enables swap (`swapon -a`)
+  - Disables IP forwarding (`net.ipv4.conf.all.forwarding=0`)
+- Use this when you want to temporarily stop Kubernetes without removing the cluster configuration
 
 ## initialize control-plane node (not an additional node)
 
@@ -93,7 +123,36 @@ Credit:
 
 ### always running
 
-If your install is to have k8s always running, then you must permanently disable swap. This is typically disabled in `/etc/fstab`, `systemd.swap`, etc.
+If your install is to have k8s always running, you must make the following configurations persistent:
+
+**Permanently disable swap:**
+
+Comment out the swap entry in `/etc/fstab`:
+```
+# /dev/sdXn none swap sw 0 0
+```
+Or disable swap via systemd:
+```
+sudo systemctl mask swap.target
+```
+
+**Permanently enable IP forwarding:**
+
+Create `/etc/sysctl.d/k8s.conf`:
+```
+net.ipv4.ip_forward = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+```
+Apply with `sudo sysctl --system`
+
+**Permanently load kernel modules:**
+
+Create `/etc/modules-load.d/k8s.conf`:
+```
+br_netfilter
+overlay
+```
 
 ### control-plane node as worker node (aka, single node)
 
@@ -111,6 +170,90 @@ kubectl taint nodes --all node-role.kubernetes.io/control-plane-
 - Kubernetes Dashboard
   - https://github.com/kubernetes/dashboard
   - https://artifacthub.io/packages/helm/k8s-dashboard/kubernetes-dashboard
+
+## firewall / required ports
+
+If you have a firewall enabled, the following ports must be open:
+
+### control-plane node
+
+| Port | Protocol | Purpose |
+|------|----------|----------|
+| 6443 | TCP | Kubernetes API server |
+| 2379-2380 | TCP | etcd server client API |
+| 10250 | TCP | Kubelet API |
+| 10259 | TCP | kube-scheduler |
+| 10257 | TCP | kube-controller-manager |
+
+### worker nodes
+
+| Port | Protocol | Purpose |
+|------|----------|----------|
+| 10250 | TCP | Kubelet API |
+| 10256 | TCP | kube-proxy |
+| 30000-32767 | TCP | NodePort Services |
+
+References:
+- https://kubernetes.io/docs/reference/networking/ports-and-protocols/
+
+## troubleshooting
+
+### check service status
+
+```
+sudo systemctl status kubelet crio
+```
+
+### view kubelet logs
+
+```
+journalctl -xeu kubelet
+```
+
+### view cri-o logs
+
+```
+journalctl -xeu crio
+```
+
+### verify container runtime
+
+```
+sudo crictl info
+```
+- CRI-O socket path: `/var/run/crio/crio.sock`
+
+### common errors
+
+**"swap is enabled on the node"**
+- Ensure swap is disabled: `sudo swapoff -a`
+- For persistent disable, see [always running](#always-running) section
+
+**"br_netfilter" or "overlay" module not loaded**
+- Load the required modules:
+  ```
+  sudo modprobe br_netfilter
+  sudo modprobe overlay
+  ```
+- For persistent loading, see [always running](#always-running) section
+
+**"token is invalid" or "token has expired"**
+- List existing tokens: `kubeadm token list`
+- Create a new token: `kubeadm token create`
+- Generate a new join command: `kubeadm token create --print-join-command`
+
+**kubelet keeps crashing / CrashLoopBackOff**
+- Check if container runtime is running: `sudo systemctl status crio`
+- Check kubelet logs: `journalctl -xeu kubelet`
+- Verify node is initialized: `kubectl get nodes`
+
+**cannot connect to the cluster**
+- Ensure kubeconfig is set up:
+  ```
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+  ```
 
 ## cleanup
 
