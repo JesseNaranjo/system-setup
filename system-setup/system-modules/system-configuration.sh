@@ -338,7 +338,7 @@ configure_shell_for_user() {
     fi
 
     # Configure safety aliases
-    if ! grep -q "Aliases to help avoid some mistakes" "$shell_config" 2>/dev/null; then
+    if ! grep_file -q "Aliases to help avoid some mistakes" "$shell_config" 2>/dev/null; then
         backup_file "$shell_config"
         add_change_header "$shell_config" "shell"
         append_to_file "$shell_config" "" "# Aliases to help avoid some mistakes:"
@@ -353,7 +353,7 @@ configure_shell_for_user() {
 
     # OS-specific ls configuration
     if [[ "$DETECTED_OS" == "macos" ]]; then
-        if ! grep -q "macOS ls configuration" "$shell_config" 2>/dev/null; then
+        if ! grep_file -q "macOS ls configuration" "$shell_config" 2>/dev/null; then
             backup_file "$shell_config"
             add_change_header "$shell_config" "shell"
             append_to_file "$shell_config" "" "# macOS ls configuration"
@@ -361,7 +361,7 @@ configure_shell_for_user() {
         add_export_if_needed "$shell_config" "CLICOLOR" "YES" "terminal colors"
         add_alias_if_needed "$shell_config" "ls" "ls -AFGHhl" "macOS ls with colors and formatting"
     else
-        if ! grep -q "Linux ls configuration" "$shell_config" 2>/dev/null; then
+        if ! grep_file -q "Linux ls configuration" "$shell_config" 2>/dev/null; then
             backup_file "$shell_config"
             add_change_header "$shell_config" "shell"
             append_to_file "$shell_config" "" "# Linux ls configuration"
@@ -371,7 +371,7 @@ configure_shell_for_user() {
     fi
 
     # Additional utility aliases
-    if ! grep -q "Additional utility aliases" "$shell_config" 2>/dev/null; then
+    if ! grep_file -q "Additional utility aliases" "$shell_config" 2>/dev/null; then
         backup_file "$shell_config"
         add_change_header "$shell_config" "shell"
         append_to_file "$shell_config" "" "# Additional utility aliases"
@@ -388,7 +388,7 @@ configure_shell_for_user() {
 
     # 7z compression helpers
     if [[ "$DETECTED_OS" == "macos" ]]; then
-        if ! grep -q "^# 7z compression helpers (macOS" "$shell_config" 2>/dev/null; then
+        if ! grep_file -q "^# 7z compression helpers (macOS" "$shell_config" 2>/dev/null; then
             backup_file "$shell_config"
             add_change_header "$shell_config" "shell"
             append_to_file "$shell_config" "" "# 7z compression helpers (macOS - using 7zz)"
@@ -397,7 +397,7 @@ configure_shell_for_user() {
         add_alias_if_needed "$shell_config" "7z-ultra2" "7zz a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 2"
         add_alias_if_needed "$shell_config" "7z-ultra3" "7zz a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 3"
     else
-        if ! grep -q "^# 7z compression helpers$" "$shell_config" 2>/dev/null; then
+        if ! grep_file -q "^# 7z compression helpers$" "$shell_config" 2>/dev/null; then
             backup_file "$shell_config"
             add_change_header "$shell_config" "shell"
             append_to_file "$shell_config" "" "# 7z compression helpers"
@@ -409,14 +409,14 @@ configure_shell_for_user() {
 
     # Homebrew curl PATH configuration (macOS only)
     if [[ "$DETECTED_OS" == "macos" ]] && [[ "$CURL_INSTALLED" == true ]]; then
-        if ! grep -q "Homebrew curl configuration" "$shell_config" 2>/dev/null; then
+        if ! grep_file -q "Homebrew curl configuration" "$shell_config" 2>/dev/null; then
             backup_file "$shell_config"
             add_change_header "$shell_config" "shell"
             append_to_file "$shell_config" "" "# Homebrew curl configuration"
         fi
         add_export_if_needed "$shell_config" "PATH" '"/opt/homebrew/opt/curl/bin:$PATH"' "Homebrew curl PATH"
         # Add commented compiler flags if not already present
-        if ! grep -q 'LDFLAGS.*curl' "$shell_config" 2>/dev/null; then
+        if ! grep_file -q 'LDFLAGS.*curl' "$shell_config" 2>/dev/null; then
             append_to_file "$shell_config" "" "# Some compilers may need this:" '#export LDFLAGS="-L/opt/homebrew/opt/curl/lib"' '#export CPPFLAGS="-I/opt/homebrew/opt/curl/include"'
         fi
     fi

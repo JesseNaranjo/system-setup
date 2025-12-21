@@ -308,6 +308,34 @@ append_to_file() {
     fi
 }
 
+# Grep a file with proper elevation handling
+# Usage: grep_file [grep_options] <pattern> <file>
+# Returns: grep exit status (0 if match found, 1 if no match, 2 if error)
+# Note: The file must be the LAST argument, pattern second to last
+grep_file() {
+    local args=()
+    local file=""
+    local pattern=""
+
+    # Parse arguments - all but last two are options, second to last is pattern, last is file
+    while [[ $# -gt 2 ]]; do
+        args+=("$1")
+        shift
+    done
+    pattern="$1"
+    file="$2"
+
+    if [[ "$DEBUG_MODE" == true ]]; then
+        print_debug "grep_file: pattern='$pattern' file='$file' options='${args[*]:-}'"
+    fi
+
+    if needs_elevation "$file"; then
+        run_elevated grep "${args[@]+"${args[@]}"}" "$pattern" "$file"
+    else
+        grep "${args[@]+"${args[@]}"}" "$pattern" "$file"
+    fi
+}
+
 # ============================================================================
 # Package Management Functions
 # ============================================================================
@@ -603,7 +631,7 @@ config_exists() {
     local file="$1"
     local pattern="$2"
 
-    [[ -f "$file" ]] && grep -qE "^[[:space:]]*${pattern}" "$file"
+    [[ -f "$file" ]] && grep_file -qE "^[[:space:]]*${pattern}" "$file"
 }
 
 # Get current value of a configuration setting
@@ -612,7 +640,7 @@ get_config_value() {
     local setting="$2"
 
     if [[ -f "$file" ]]; then
-        grep -E "^[[:space:]]*${setting}" "$file" | head -n 1 | sed -E "s/^[[:space:]]*${setting}[[:space:]]*//" || true
+        grep_file -E "^[[:space:]]*${setting}" "$file" | head -n 1 | sed -E "s/^[[:space:]]*${setting}[[:space:]]*//" || true
     fi
 }
 
@@ -636,11 +664,11 @@ update_config_line() {
     if config_exists "$file" "$setting_pattern"; then
         # Setting exists, check if it's already correct
         local escaped_full_line=$(escape_regex "$full_line")
-        if grep -qE "^[[:space:]]*${escaped_full_line}[[:space:]]*$" "$file"; then
+        if grep_file -qE "^[[:space:]]*${escaped_full_line}[[:space:]]*$" "$file"; then
             print_success "- $description already configured correctly"
             return 0
         else
-            local current_value=$(grep -E "^[[:space:]]*${setting_pattern}" "$file" | head -n 1)
+            local current_value=$(grep_file -E "^[[:space:]]*${setting_pattern}" "$file" | head -n 1)
             print_warning "✖ $description has different value: '$current_value' in $file"
             backup_file "$file"
             add_change_header "$file" "$config_type"
