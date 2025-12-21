@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 INSTALL_SCRIPT_PATH=$(mktemp)
 trap 'rm -f "${INSTALL_SCRIPT_PATH}"' EXIT
