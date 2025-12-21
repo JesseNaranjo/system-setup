@@ -330,7 +330,7 @@ configure_shell_for_user() {
     # Create config file if it doesn't exist
     if [[ ! -f "$shell_config" ]]; then
         print_info "Creating new shell configuration file: $shell_config (user: $username)"
-        touch "$shell_config"
+        create_config_file "$shell_config" 600 # -rw-------
         # Set proper ownership if running as root
         if [[ $EUID -eq 0 ]] && [[ "$username" != "root" ]]; then
             chown "$username:$username" "$shell_config" 2>/dev/null || true

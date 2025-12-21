@@ -262,7 +262,7 @@ update_modules() {
 
         # Create file if it doesn't exist
         if [[ ! -f "${LOCAL_SCRIPT}" ]]; then
-            touch "${LOCAL_SCRIPT}"
+            create_config_file "${LOCAL_SCRIPT}" 755 # -rwxr-xr-x
         fi
 
         # Compare and handle differences
