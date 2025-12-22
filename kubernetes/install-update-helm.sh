@@ -20,8 +20,7 @@ main() {
         return 1
     fi
 
-    local install_script_path
-    install_script_path=$(mktemp)
+    local install_script_path=$(mktemp)
     trap 'rm -f "${install_script_path}"' EXIT
 
     print_info "Downloading Helm install script to ${install_script_path}..."

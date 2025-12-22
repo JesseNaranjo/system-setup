@@ -331,8 +331,7 @@ generate_network_file() {
         # Convert netmask to CIDR if needed
         if [[ -n "$address" ]]; then
             if [[ "$address" != *"/"* && -n "$netmask" ]]; then
-                local cidr
-                cidr=$(netmask_to_cidr "$netmask")
+                local cidr=$(netmask_to_cidr "$netmask")
                 address="${address}/${cidr}"
             fi
             content+="Address=$address"$'\n'
@@ -483,8 +482,7 @@ perform_migration() {
     echo ""
 
     # Get list of interfaces
-    local interfaces
-    interfaces=$(get_interface_list | sort -u)
+    local interfaces=$(get_interface_list | sort -u)
 
     if [[ -z "$interfaces" ]]; then
         print_warning "No interfaces found to migrate."
@@ -544,8 +542,7 @@ perform_migration() {
                 if [[ "$line" =~ ^[[:space:]]*iface[[:space:]]+"$iface"[[:space:]]+inet6 ]]; then
                     in_inet6=true
                     # Extract method
-                    local method6
-                    method6=$(echo "$line" | awk '{print $4}')
+                    local method6=$(echo "$line" | awk '{print $4}')
                     config_inet6+="method: $method6"$'\n'
                     continue
                 fi
@@ -577,8 +574,7 @@ perform_migration() {
 
             # Create .netdev file for bridge
             local netdev_file="${NETWORKD_DIR}/${priority}-${iface}.netdev"
-            local netdev_content
-            netdev_content=$(generate_bridge_netdev "$iface")
+            local netdev_content=$(generate_bridge_netdev "$iface")
 
             echo "$netdev_content" > "$netdev_file"
             chmod 644 "$netdev_file"
