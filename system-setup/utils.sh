@@ -409,8 +409,10 @@ populate_package_cache() {
 
     local installed_packages
     if [[ "$DETECTED_OS" == "macos" ]]; then
-        # Get all installed packages from brew
-        installed_packages=$(brew list --formula -1 2>/dev/null || true)
+        # Get all installed packages from brew (both formulae and casks)
+        local installed_formulae=$(brew list --formula -1 2>/dev/null || true)
+        local installed_casks=$(brew list --cask -1 2>/dev/null || true)
+        installed_packages=$(printf "%s\n%s" "$installed_formulae" "$installed_casks")
     else
         # Get all installed packages from dpkg
         installed_packages=$(dpkg -l 2>/dev/null | awk '/^ii/ {print $2}' || true)
@@ -427,6 +429,13 @@ populate_package_cache() {
     done
 
     PACKAGE_CACHE_POPULATED=true
+
+    if [[ "$DEBUG_MODE" == true ]]; then
+        print_debug "Package cache contents:"
+        for pkg in "${!PACKAGE_CACHE[@]}"; do
+            print_debug "  $pkg: ${PACKAGE_CACHE[$pkg]}"
+        done
+    fi
 }
 
 # Check if a package is installed (unified for both macOS and Linux)
@@ -447,7 +456,7 @@ is_package_installed() {
 
     # Fallback to direct check if not in cache (shouldn't happen normally)
     if [[ "$DETECTED_OS" == "macos" ]]; then
-        brew list "$package" &>/dev/null
+        brew list --formula "$package" &>/dev/null || brew list --cask "$package" &>/dev/null
     else
         dpkg -l "$package" 2>/dev/null | grep -q "^ii"
     fi
