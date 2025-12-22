@@ -2,15 +2,18 @@
 
 # pkgs-helper.sh - Package management helper utilities
 # Provides interactive menu for common package manager operations
-# Supports: apt (Debian/Ubuntu), dnf (Fedora/RHEL 8+), zypper (openSUSE)
+# Supports: apt (Debian/Ubuntu), brew (macOS), dnf (Fedora/RHEL 8+), zypper (openSUSE)
 #
 # Usage: ./pkgs-helper.sh
 #
 # This script provides the following operations:
 # - List packages upgradeable from backports repository (apt only)
 # - List and optionally purge packages with residual configs (apt only)
-# - Run autoremove to clean up unused packages (apt, dnf)
-# - Clean package cache (apt, dnf, zypper)
+# - Run autoremove to clean up unused packages (apt, brew, dnf, zypper)
+# - Clean package cache (apt, brew, dnf, zypper)
+# - Refresh package index and list outdated packages (all)
+# - Upgrade all packages (all)
+# - Run system diagnostics (all)
 #
 # Note: This script is downloaded/updated by system-setup.sh but runs independently.
 
@@ -42,13 +45,31 @@ supports_residual_configs() {
 # Check if the current package manager supports autoremove
 # Returns: 0 if supported, 1 if not
 supports_autoremove() {
-    [[ "$DETECTED_PKG_MANAGER" == "apt" ]] || [[ "$DETECTED_PKG_MANAGER" == "dnf" ]] || [[ "$DETECTED_PKG_MANAGER" == "zypper" ]]
+    [[ "$DETECTED_PKG_MANAGER" == "apt" ]] || [[ "$DETECTED_PKG_MANAGER" == "brew" ]] || [[ "$DETECTED_PKG_MANAGER" == "dnf" ]] || [[ "$DETECTED_PKG_MANAGER" == "zypper" ]]
 }
 
 # Check if the current package manager supports cache cleaning
 # Returns: 0 if supported, 1 if not
 supports_clean_cache() {
-    [[ "$DETECTED_PKG_MANAGER" == "apt" ]] || [[ "$DETECTED_PKG_MANAGER" == "dnf" ]] || [[ "$DETECTED_PKG_MANAGER" == "zypper" ]]
+    [[ "$DETECTED_PKG_MANAGER" == "apt" ]] || [[ "$DETECTED_PKG_MANAGER" == "brew" ]] || [[ "$DETECTED_PKG_MANAGER" == "dnf" ]] || [[ "$DETECTED_PKG_MANAGER" == "zypper" ]]
+}
+
+# Check if the current package manager supports refresh/outdated listing
+# Returns: 0 if supported, 1 if not
+supports_refresh_outdated() {
+    [[ "$DETECTED_PKG_MANAGER" == "apt" ]] || [[ "$DETECTED_PKG_MANAGER" == "brew" ]] || [[ "$DETECTED_PKG_MANAGER" == "dnf" ]] || [[ "$DETECTED_PKG_MANAGER" == "zypper" ]]
+}
+
+# Check if the current package manager supports upgrading all packages
+# Returns: 0 if supported, 1 if not
+supports_upgrade_all() {
+    [[ "$DETECTED_PKG_MANAGER" == "apt" ]] || [[ "$DETECTED_PKG_MANAGER" == "brew" ]] || [[ "$DETECTED_PKG_MANAGER" == "dnf" ]] || [[ "$DETECTED_PKG_MANAGER" == "zypper" ]]
+}
+
+# Check if the current package manager supports diagnostics
+# Returns: 0 if supported, 1 if not
+supports_diagnostics() {
+    [[ "$DETECTED_PKG_MANAGER" == "apt" ]] || [[ "$DETECTED_PKG_MANAGER" == "brew" ]] || [[ "$DETECTED_PKG_MANAGER" == "dnf" ]] || [[ "$DETECTED_PKG_MANAGER" == "zypper" ]]
 }
 
 # ============================================================================
@@ -188,6 +209,9 @@ run_autoremove() {
         zypper)
             run_elevated zypper packages --unneeded
             ;;
+        brew)
+            brew autoremove
+            ;;
     esac
     echo ""
 
@@ -214,10 +238,140 @@ clean_cache() {
         zypper)
             run_elevated zypper clean --all
             ;;
+        brew)
+            print_info "Preview of files to be cleaned:"
+            echo ""
+            brew cleanup -n
+            echo ""
+            if prompt_yes_no "→ Proceed with cleanup?" "n"; then
+                echo ""
+                brew cleanup --prune=all
+            else
+                print_info "Skipped cleanup."
+                return 0
+            fi
+            ;;
     esac
     echo ""
 
     print_success "Package cache cleaned."
+    echo ""
+}
+
+# Option 5: Refresh package index and list outdated packages (all)
+refresh_and_list_outdated() {
+    if ! check_feature_available "Refresh and list outdated" supports_refresh_outdated; then
+        return 0
+    fi
+
+    print_info "Refreshing package index and listing outdated packages..."
+    echo ""
+
+    case "$DETECTED_PKG_MANAGER" in
+        apt)
+            run_elevated apt update
+            echo ""
+            apt list --upgradable 2>/dev/null || true
+            ;;
+        dnf)
+            # dnf check-update refreshes and lists in one command
+            # Returns exit code 100 if updates available, 0 if none, 1 on error
+            run_elevated dnf check-update || [[ $? -eq 100 ]]
+            ;;
+        zypper)
+            run_elevated zypper refresh
+            echo ""
+            zypper list-updates
+            ;;
+        brew)
+            brew update
+            echo ""
+            brew outdated
+            ;;
+    esac
+    echo ""
+
+    print_success "Package index refreshed and outdated packages listed."
+    echo ""
+}
+
+# Option 6: Upgrade all packages (all)
+upgrade_all_packages() {
+    if ! check_feature_available "Upgrade all" supports_upgrade_all; then
+        return 0
+    fi
+
+    print_info "Upgrading all packages..."
+    echo ""
+
+    case "$DETECTED_PKG_MANAGER" in
+        apt)
+            # apt upgrade prompts by default
+            run_elevated apt upgrade
+            ;;
+        dnf)
+            # dnf upgrade prompts by default
+            run_elevated dnf upgrade
+            ;;
+        zypper)
+            # zypper update prompts by default
+            run_elevated zypper update
+            ;;
+        brew)
+            # brew upgrade is non-interactive, so show outdated first and confirm
+            print_info "The following packages will be upgraded:"
+            echo ""
+            brew outdated
+            echo ""
+            if prompt_yes_no "→ Proceed with upgrade?" "n"; then
+                echo ""
+                brew upgrade
+            else
+                print_info "Skipped upgrade."
+                return 0
+            fi
+            ;;
+    esac
+    echo ""
+
+    print_success "Package upgrade complete."
+    echo ""
+}
+
+# Option 7: Run system diagnostics (all)
+run_diagnostics() {
+    if ! check_feature_available "System diagnostics" supports_diagnostics; then
+        return 0
+    fi
+
+    print_info "Running system diagnostics..."
+    echo ""
+
+    case "$DETECTED_PKG_MANAGER" in
+        apt)
+            print_info "Checking for broken dependencies..."
+            run_elevated apt-get check
+            echo ""
+            print_info "Checking for unconfigured packages..."
+            run_elevated dpkg --audit
+            echo ""
+            print_info "If issues were found, run: sudo apt --fix-broken install"
+            ;;
+        dnf)
+            # dnf check reports dependency issues, duplicates, and obsoletes
+            run_elevated dnf check
+            ;;
+        zypper)
+            # zypper verify checks dependencies without making changes
+            run_elevated zypper verify --dry-run
+            ;;
+        brew)
+            brew doctor
+            ;;
+    esac
+    echo ""
+
+    print_success "Diagnostics complete."
     echo ""
 }
 
@@ -233,7 +387,7 @@ main() {
     # Verify we have a supported package manager
     if [[ "$DETECTED_PKG_MANAGER" == "unknown" ]]; then
         print_error "No supported package manager found."
-        print_error "This script supports: apt (Debian/Ubuntu), dnf (Fedora/RHEL 8+), zypper (openSUSE)"
+        print_error "This script supports: apt (Debian/Ubuntu), brew (macOS), dnf (Fedora/RHEL 8+), zypper (openSUSE)"
         exit 1
     fi
 
@@ -249,9 +403,12 @@ main() {
         print_menu_option "2" "List packages with residual configs (and optionally purge)" supports_residual_configs
         print_menu_option "3" "Run autoremove" supports_autoremove
         print_menu_option "4" "Clean package cache" supports_clean_cache
-        echo "            5) Exit (or Ctrl+C)"
+        print_menu_option "5" "Refresh package index and list outdated" supports_refresh_outdated
+        print_menu_option "6" "Upgrade all packages" supports_upgrade_all
+        print_menu_option "7" "Run system diagnostics" supports_diagnostics
+        echo "            8) Exit (or Ctrl+C)"
         echo ""
-        read -p "            Enter choice (1-5): " -r choice
+        read -p "            Enter choice (1-8): " -r choice
 
         echo ""
 
@@ -269,6 +426,15 @@ main() {
                 clean_cache
                 ;;
             5)
+                refresh_and_list_outdated
+                ;;
+            6)
+                upgrade_all_packages
+                ;;
+            7)
+                run_diagnostics
+                ;;
+            8)
                 print_info "Exiting."
                 exit 0
                 ;;

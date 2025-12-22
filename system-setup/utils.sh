@@ -223,11 +223,13 @@ detect_environment() {
 }
 
 # Detect the system's package manager
-# Sets DETECTED_PKG_MANAGER to: "apt", "dnf", "zypper", or "unknown"
+# Sets DETECTED_PKG_MANAGER to: "apt", "brew", "dnf", "zypper", or "unknown"
 # Extensible: Add new package managers by adding elif blocks
 detect_package_manager() {
     if command -v apt &>/dev/null; then
         DETECTED_PKG_MANAGER="apt"
+    elif command -v brew &>/dev/null; then
+        DETECTED_PKG_MANAGER="brew"
     elif command -v dnf &>/dev/null; then
         DETECTED_PKG_MANAGER="dnf"
     elif command -v zypper &>/dev/null; then
