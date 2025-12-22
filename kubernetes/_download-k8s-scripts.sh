@@ -32,6 +32,7 @@ readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setu
 # List of script files to download/update (excludes _download-k8s-scripts.sh)
 get_script_list() {
     echo "install-update-helm.sh"
+    echo "install-update-minikube.sh"
     echo "start-k8s.sh"
     echo "stop-k8s.sh"
     echo "update-k8s-repos.sh"
