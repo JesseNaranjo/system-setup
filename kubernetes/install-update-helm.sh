@@ -21,7 +21,7 @@ main() {
     fi
 
     local install_script_path=$(mktemp)
-    trap 'rm -f "${install_script_path}"' EXIT
+    trap "rm -f '${install_script_path}'" EXIT
 
     print_info "Downloading Helm install script to ${install_script_path}..."
     if ! curl -fsSL -o "${install_script_path}" "${HELM_INSTALL_URL}"; then

@@ -53,7 +53,7 @@ main() {
     fi
 
     local pkg_manager=$(detect_package_manager)
-    local arch pkg_url pkg_path pkg_ext install_cmd
+    local arch pkg_ext pkg_url install_cmd
 
     case "$pkg_manager" in
         apt)
@@ -79,8 +79,8 @@ main() {
         return 1
     fi
 
-    pkg_path=$(mktemp --suffix=".${pkg_ext}")
-    trap 'rm -f "${pkg_path}"' EXIT
+    local pkg_path=$(mktemp --suffix=".${pkg_ext}")
+    trap "rm -f '${pkg_path}'" EXIT
 
     print_info "Detected package manager: ${pkg_manager}"
     print_info "Downloading minikube for ${arch} to ${pkg_path}..."
