@@ -469,6 +469,18 @@ local local_var="value"    # Function local
 local param1="$1"          # Function parameter
 ```
 
+### Variable Declaration with Assignment
+```bash
+# Combine local declaration with initial assignment (inline)
+local variable="initial_value"    # ✓ Correct
+local config_file="/etc/myapp.conf"
+local count=0
+
+# Do NOT split declaration and assignment
+local variable                    # ✖ Avoid
+variable="initial_value"
+```
+
 ### Environment Variable Configuration
 ```bash
 # Document env vars in header comments
