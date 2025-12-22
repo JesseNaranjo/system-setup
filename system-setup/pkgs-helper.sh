@@ -2,7 +2,7 @@
 
 # pkgs-helper.sh - Package management helper utilities
 # Provides interactive menu for common package manager operations
-# Supports: apt (Debian/Ubuntu), dnf (Fedora/RHEL 8+)
+# Supports: apt (Debian/Ubuntu), dnf (Fedora/RHEL 8+), zypper (openSUSE)
 #
 # Usage: ./pkgs-helper.sh
 #
@@ -10,7 +10,7 @@
 # - List packages upgradeable from backports repository (apt only)
 # - List and optionally purge packages with residual configs (apt only)
 # - Run autoremove to clean up unused packages (apt, dnf)
-# - Clean package cache (apt, dnf)
+# - Clean package cache (apt, dnf, zypper)
 #
 # Note: This script is downloaded/updated by system-setup.sh but runs independently.
 
@@ -42,13 +42,13 @@ supports_residual_configs() {
 # Check if the current package manager supports autoremove
 # Returns: 0 if supported, 1 if not
 supports_autoremove() {
-    [[ "$DETECTED_PKG_MANAGER" == "apt" ]] || [[ "$DETECTED_PKG_MANAGER" == "dnf" ]]
+    [[ "$DETECTED_PKG_MANAGER" == "apt" ]] || [[ "$DETECTED_PKG_MANAGER" == "dnf" ]] || [[ "$DETECTED_PKG_MANAGER" == "zypper" ]]
 }
 
 # Check if the current package manager supports cache cleaning
 # Returns: 0 if supported, 1 if not
 supports_clean_cache() {
-    [[ "$DETECTED_PKG_MANAGER" == "apt" ]] || [[ "$DETECTED_PKG_MANAGER" == "dnf" ]]
+    [[ "$DETECTED_PKG_MANAGER" == "apt" ]] || [[ "$DETECTED_PKG_MANAGER" == "dnf" ]] || [[ "$DETECTED_PKG_MANAGER" == "zypper" ]]
 }
 
 # ============================================================================
@@ -185,6 +185,9 @@ run_autoremove() {
         dnf)
             run_elevated dnf autoremove
             ;;
+        zypper)
+            run_elevated zypper packages --unneeded
+            ;;
     esac
     echo ""
 
@@ -208,6 +211,9 @@ clean_cache() {
         dnf)
             run_elevated dnf clean all
             ;;
+        zypper)
+            run_elevated zypper clean --all
+            ;;
     esac
     echo ""
 
@@ -227,7 +233,7 @@ main() {
     # Verify we have a supported package manager
     if [[ "$DETECTED_PKG_MANAGER" == "unknown" ]]; then
         print_error "No supported package manager found."
-        print_error "This script supports: apt (Debian/Ubuntu), dnf (Fedora/RHEL 8+)"
+        print_error "This script supports: apt (Debian/Ubuntu), dnf (Fedora/RHEL 8+), zypper (openSUSE)"
         exit 1
     fi
 
