@@ -55,7 +55,7 @@ EOF
 setup_crio_repo() {
     local keyring_path="/etc/apt/keyrings/cri-o-apt-keyring.gpg"
     local sources_path="/etc/apt/sources.list.d/cri-o.sources"
-    local repo_url="https://pkgs.k8s.io/addons:/cri-o:/stable:/${K8S_VERSION}/deb/"
+    local repo_url="https://download.opensuse.org/repositories/isv:/cri-o:/stable:/${K8S_VERSION}/deb/"
 
     print_info "Downloading CRI-O GPG key..."
     curl -fsSL "${repo_url}Release.key" | sudo gpg --dearmor --yes -o "$keyring_path"
