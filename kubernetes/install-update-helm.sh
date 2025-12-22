@@ -14,6 +14,12 @@ print_error() { echo -e "${RED}[ ERROR   ]${NC} $1"; }
 readonly HELM_INSTALL_URL="https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3"
 
 main() {
+    if [[ $EUID -ne 0 ]]; then
+        print_error "This script must be run as root"
+        echo "Please run: sudo $0"
+        return 1
+    fi
+
     local install_script_path
     install_script_path=$(mktemp)
     trap 'rm -f "${install_script_path}"' EXIT
