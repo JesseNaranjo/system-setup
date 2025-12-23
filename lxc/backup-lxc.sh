@@ -83,10 +83,10 @@ prompt_yes_no() {
 # ============================================================================
 
 # Compression preset: fast (quick, larger files)
-readonly COMPRESS_FAST="-t7z -m0=lzma2 -mx=3 -md=32m -mfb=32 -mmf=hc4 -ms=on -mmt"
+readonly COMPRESS_FAST="-t7z -m0=lzma2 -mx=3 -md=128m -mfb=64 -mmf=bt2 -ms=on -mmt"
 
 # Compression preset: balanced (moderate compression and speed)
-readonly COMPRESS_BALANCED="-t7z -m0=lzma2 -mx=5 -md=128m -mfb=64 -mmf=bt4 -ms=on -mmt"
+readonly COMPRESS_BALANCED="-t7z -m0=lzma2 -mx=5 -md=512m -mfb=128 -mmf=bt4 -ms=on -mmt"
 
 # Compression preset: small (maximum compression, slower)
 readonly COMPRESS_SMALL="-t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt"
