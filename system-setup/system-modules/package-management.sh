@@ -142,7 +142,7 @@ uninstall_packages() {
         echo "  $sorted_packages"
         echo ""
 
-        if prompt_yes_no "Continue with removal?" "n"; then
+        if prompt_yes_no "Continue with removal?" "y"; then
             echo "Removing packages with brew..."
             if brew uninstall "${packages[@]}"; then
                 print_success "✓ Packages removed successfully"
@@ -161,7 +161,7 @@ uninstall_packages() {
         printf "  %s\n" "${packages[@]}"
         echo ""
 
-        if prompt_yes_no "Continue with removal?" "n"; then
+        if prompt_yes_no "Continue with removal?" "y"; then
             if apt purge -y "${packages[@]}"; then
                 print_success "✓ Packages purged successfully"
                 # Clean up orphaned dependencies
