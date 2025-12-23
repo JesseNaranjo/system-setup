@@ -395,6 +395,25 @@ get_package_list() {
     fi
 }
 
+# Get packages that should be removed if installed
+# Returns: "Display Name:package-name" pairs for packages to remove
+get_removable_package_list() {
+    if [[ "$DETECTED_OS" == "macos" ]]; then
+        # macOS packages to remove (brew)
+        # Empty for now - add packages here as needed
+        :
+    else
+        # Linux packages to remove (apt)
+        # These are typically unnecessary locale/i18n packages
+        echo "Debconf i18n:debconf-i18n"
+        echo "GnuPG Utils:gnupg-utils"
+        echo "GPG WKS Client:gpg-wks-client"
+        echo "GPG Error l10n:libgpg-error-l10n"
+        echo "Util-Linux Locales:util-linux-locales"
+        echo "Kerberos Locales:krb5-locales"
+    fi
+}
+
 # Populate the package cache with installed packages from the package list
 populate_package_cache() {
     if [[ "$DEBUG_MODE" == true ]]; then
