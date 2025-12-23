@@ -392,6 +392,7 @@ get_package_list() {
         echo "Nano Editor:nano"
         echo "OpenSSH Server:openssh-server"
         echo "Screen (GNU):screen"
+        echo "sudo:sudo"
     fi
 }
 
