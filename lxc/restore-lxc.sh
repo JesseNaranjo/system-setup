@@ -173,9 +173,10 @@ main() {
 
     print_info "Inspecting backup archive..."
 
-    # List the first entry in the archive to get the container directory name
+    # List the first entry in the tar archive to get the container directory name
     # The archive structure is: <container_name>/config, <container_name>/rootfs/...
-    local ORIGINAL_NAME=$(7z l "$BACKUP_FILE" | grep -oP '^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[^\s]+\s+\d+\s+\d+\s+\K[^/]+(?=/)' | head -1)
+    # We pipe the tar from 7z and list its contents, extracting the top-level directory
+    local ORIGINAL_NAME=$(7z x -so "$BACKUP_FILE" 2>/dev/null | tar -tf - 2>/dev/null | head -1 | cut -d'/' -f1)
 
     if [[ -z "$ORIGINAL_NAME" ]]; then
         print_error "Could not determine container name from backup archive"
@@ -222,7 +223,7 @@ main() {
 
         if prompt_yes_no "Delete existing container and restore from backup?" "n"; then
             print_info "Removing existing container..."
-            su -c "rm -rf '$CONTAINER_PATH'"
+            sudo rm -rf "$CONTAINER_PATH"
         else
             print_info "Restore cancelled by user"
             exit 75  # EX_TEMPFAIL
@@ -240,7 +241,7 @@ main() {
     # ========================================================================
 
     print_info "Extracting backup archive (this may take a while)..."
-    print_info "Using su to restore files with correct ownership..."
+    print_info "Using sudo to restore files with correct ownership..."
     echo ""
 
     # Create a temporary directory for extraction if we need to rename
@@ -254,12 +255,12 @@ main() {
     fi
 
     # Extract: 7z outputs to stdout, tar extracts with numeric ownership
-    if 7z x -so "$BACKUP_FILE" | su -c "tar --numeric-owner -xvf - -C '$EXTRACT_PATH'"; then
+    if 7z x -so "$BACKUP_FILE" | sudo tar --xattrs --xattrs-include='*' --acls --numeric-owner -xvf - -C "$EXTRACT_PATH"; then
         echo ""
         print_success "Archive extracted successfully"
     else
         print_error "Extraction failed"
-        [[ -n "$TEMP_DIR" ]] && su -c "rm -rf '$TEMP_DIR'"
+        [[ -n "$TEMP_DIR" ]] && sudo rm -rf "$TEMP_DIR"
         exit 74  # EX_IOERR
     fi
 
@@ -268,17 +269,18 @@ main() {
         print_info "Renaming container from '${ORIGINAL_NAME}' to '${CONTAINER_NAME}'..."
 
         # Move the extracted directory to final location with new name
-        su -c "mv '${TEMP_DIR}/${ORIGINAL_NAME}' '$CONTAINER_PATH'"
+        sudo mv "${TEMP_DIR}/${ORIGINAL_NAME}" "$CONTAINER_PATH"
 
-        # Update lxc.uts.name in config file
+        # Update lxc.uts.name and lxc.rootfs.path in config file
         local CONFIG_FILE="${CONTAINER_PATH}/config"
         if [[ -f "$CONFIG_FILE" ]]; then
-            print_info "Updating lxc.uts.name in config..."
-            su -c "sed -i 's/^lxc\.uts\.name\s*=.*/lxc.uts.name = ${CONTAINER_NAME}/' '$CONFIG_FILE'"
+            print_info "Updating container name and rootfs path in config..."
+            sudo sed -i "s/^lxc\.uts\.name\s*=.*/lxc.uts.name = ${CONTAINER_NAME}/" "$CONFIG_FILE"
+            sudo sed -i "s|/${ORIGINAL_NAME}/rootfs|/${CONTAINER_NAME}/rootfs|g" "$CONFIG_FILE"
         fi
 
         # Clean up temp directory
-        su -c "rm -rf '$TEMP_DIR'"
+        sudo rm -rf "$TEMP_DIR"
     fi
 
     # ========================================================================
@@ -295,7 +297,7 @@ main() {
     if [[ -f "$CONFIG_FILE" ]]; then
         if prompt_yes_no "Edit the container config file before starting?" "n"; then
             print_info "Opening config in nano..."
-            su -c "nano '$CONFIG_FILE'"
+            sudo nano "$CONFIG_FILE"
         fi
     fi
 

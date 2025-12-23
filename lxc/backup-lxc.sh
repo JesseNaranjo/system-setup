@@ -260,12 +260,12 @@ main() {
 
     # Perform backup
     print_info "Creating backup archive (this may take a while)..."
-    print_info "Using su to read all rootfs files..."
+    print_info "Using sudo to read all rootfs files..."
     echo ""
 
     # Use tar to archive with numeric ownership, pipe to 7z for compression
     # We cd to LXC_PATH and archive the container directory by name to get clean paths
-    if su -c "tar --numeric-owner -cvf - -C '$LXC_PATH' '$CONTAINER_NAME'" | \
+    if sudo tar --xattrs --xattrs-include='*' --acls --numeric-owner -cvf - -C "$LXC_PATH" "$CONTAINER_NAME" | \
        7z a -si $COMPRESS_OPTS "$BACKUP_FILE"; then
         echo ""
         local BACKUP_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
