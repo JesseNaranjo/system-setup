@@ -374,6 +374,7 @@ get_package_list() {
         echo "Fastfetch:fastfetch"
         echo "Git:git"
         echo "htop:htop"
+        echo "Monocle:monocle-app"
         echo "Nano Editor:nano"
         echo "Ollama:ollama"
         echo "OrbStack:orbstack"
