@@ -445,7 +445,7 @@ main() {
 
     # Configure each container
     for container in "${containers[@]}"; do
-        configure_container_ssh "$container" "$public_key_content"
+        configure_container_ssh "$container" "$public_key_content" || true
         echo ""
     done
 
