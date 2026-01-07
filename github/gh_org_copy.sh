@@ -29,7 +29,7 @@
 #   SRC_ORG            - Source organization name (required)
 #   DST_ORG            - Destination organization name (required)
 #   WORKDIR            - Working directory for temporary clones (default: /tmp/org-copy-...)
-#   THROTTLE           - Seconds to sleep between API calls (default: 1.25)
+#   THROTTLE           - Time (in seconds) to sleep between API calls (default: 1.5)
 #   LABEL_ARCHIVED_PR  - Label name for archived PRs (default: archived-pr)
 #
 # Note: This is a comprehensive migration tool. Always test with a small
@@ -50,7 +50,7 @@ readonly NC='\033[0m' # No Color
 readonly SRC_ORG="${SRC_ORG:-}"
 readonly DST_ORG="${DST_ORG:-}"
 readonly WORKDIR="${WORKDIR:-${TMPDIR:-/tmp}/org-copy-${SRC_ORG}-to-${DST_ORG}}"
-readonly THROTTLE="${THROTTLE:-1.25}"
+readonly THROTTLE="${THROTTLE:-1.5}"
 readonly LABEL_ARCHIVED_PR="${LABEL_ARCHIVED_PR:-archived-pr}"
 
 # Global counters
