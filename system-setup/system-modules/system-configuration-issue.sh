@@ -206,6 +206,7 @@ configure_issue_network() {
         echo -e "\n$new_content" | run_elevated tee -a "$issue_file" > /dev/null
         normalize_trailing_newlines "$issue_file" 2
         run_elevated chmod 600 "$issue_file"
+        run_elevated chown root:root "$issue_file"
         print_success "✓ Added network interface info to $issue_file"
     else
         # If the marker exists, replace the entire block.
@@ -248,6 +249,7 @@ configure_issue_network() {
         run_elevated mv "$temp_issue" "$issue_file"
         normalize_trailing_newlines "$issue_file" 2
         run_elevated chmod 600 "$issue_file"
+        run_elevated chown root:root "$issue_file"
         print_success "✓ Updated network interface info in $issue_file"
     fi
 }

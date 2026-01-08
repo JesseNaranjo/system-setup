@@ -526,6 +526,7 @@ perform_migration() {
 
             echo "$port_content" > "$port_file"
             chmod 644 "$port_file"
+            chown root:root "$port_file"
             CREATED_NETWORK_FILES+=("$port_file")
             print_success "  ✓ Created $port_file"
             continue
@@ -580,6 +581,7 @@ perform_migration() {
 
             echo "$netdev_content" > "$netdev_file"
             chmod 644 "$netdev_file"
+            chown root:root "$netdev_file"
             CREATED_NETDEV_FILES+=("$netdev_file")
             print_success "  ✓ Created $netdev_file"
         fi
@@ -590,6 +592,7 @@ perform_migration() {
 
         echo "$network_content" > "$network_file"
         chmod 644 "$network_file"
+        chown root:root "$network_file"
         CREATED_NETWORK_FILES+=("$network_file")
         print_success "  ✓ Created $network_file"
 

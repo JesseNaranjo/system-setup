@@ -181,6 +181,7 @@ EOF
 
     # Ensure world-readable permissions
     run_elevated chmod 644 "$network_file"
+    run_elevated chown root:root "$network_file"
 
     print_success "✓ Static IP configuration written to $network_file"
     echo ""
