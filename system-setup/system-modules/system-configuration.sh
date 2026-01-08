@@ -8,6 +8,8 @@
 # - Configures GNU screen with scrollback and mouse support
 # - Configures shell aliases and prompt colors for users
 
+set -euo pipefail
+
 # Get the directory where this script is located
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
     readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

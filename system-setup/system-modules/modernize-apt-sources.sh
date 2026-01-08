@@ -8,6 +8,8 @@
 # - Configures non-free components for Debian
 # - Consolidates updates and backports into main sources file
 
+set -euo pipefail
+
 # Get the directory where this script is located
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
     readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

@@ -8,6 +8,8 @@
 # - Updates /etc/issue with network interface information
 # - Maintains formatting and updates automatically
 
+set -euo pipefail
+
 # Get the directory where this script is located
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
     readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

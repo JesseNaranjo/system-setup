@@ -8,6 +8,8 @@
 # - Installs packages via apt (Linux) or Homebrew (macOS)
 # - Tracks special packages for later configuration
 
+set -euo pipefail
+
 # Get the directory where this script is located
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
     readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

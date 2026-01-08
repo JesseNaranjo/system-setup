@@ -8,6 +8,8 @@
 # - Creates and enables swap file if needed
 # - Adds swap entry to /etc/fstab for persistence
 
+set -euo pipefail
+
 # Get the directory where this script is located
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
     readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
