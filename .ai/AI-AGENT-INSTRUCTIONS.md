@@ -3,7 +3,9 @@
 ## Document Purpose
 This document provides comprehensive patterns, styles, and conventions used across all bash scripts in this repository. Optimized for LLM consumption to enable rapid, accurate code generation and modification without requiring full source file analysis.
 
-**Last Updated:** December 21, 2025
+**This is the detailed reference document for bash scripting in this repository. See [CLAUDE.md](../CLAUDE.md) for a quick overview and running instructions.**
+
+**Last Updated:** January 2026
 **Primary Reference:** system-setup.sh + utils.sh
 **Secondary Reference:** _download-*-scripts.sh (standalone script pattern)
 **Scope:** All `.sh` scripts in repository (modular, standalone, and lightweight)
