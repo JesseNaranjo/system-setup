@@ -390,6 +390,7 @@ get_package_list() {
         echo "Git:git"
         echo "gpm:gpm"
         echo "htop:htop"
+        echo "jq (JSON data processor):jq"
         echo "Nano Editor:nano"
         echo "OpenSSH Server:openssh-server"
         echo "Screen (GNU):screen"
