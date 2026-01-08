@@ -338,6 +338,7 @@ else
     backup_file "/etc/lxc/lxc-usernet"
     echo "$VETH_ENTRY" | tee -a /etc/lxc/lxc-usernet > /dev/null
     chmod 644 /etc/lxc/lxc-usernet
+    chown root:root /etc/lxc/lxc-usernet
     print_success "- Added: $VETH_ENTRY"
 fi
 echo ""
@@ -353,6 +354,7 @@ else
     backup_file "/etc/subuid"
     echo "$SUB_ENTRY" | tee -a /etc/subuid > /dev/null
     chmod 644 /etc/subuid
+    chown root:root /etc/subuid
     print_success "- Added: $SUB_ENTRY"
 fi
 echo ""
@@ -366,6 +368,7 @@ else
     backup_file "/etc/subgid"
     echo "$SUB_ENTRY" | tee -a /etc/subgid > /dev/null
     chmod 644 /etc/subgid
+    chown root:root /etc/subgid
     print_success "- Added: $SUB_ENTRY"
 fi
 echo ""
@@ -382,6 +385,7 @@ else
     sysctl -w kernel.unprivileged_userns_clone=1
     echo "kernel.unprivileged_userns_clone = 1" | tee /etc/sysctl.d/99-lxc.conf > /dev/null
     chmod 644 /etc/sysctl.d/99-lxc.conf
+    chown root:root /etc/sysctl.d/99-lxc.conf
     sysctl --system > /dev/null 2>&1
     print_success "- Enabled user namespace support"
 fi
@@ -414,7 +418,11 @@ lxc.net.0.link = $BRIDGE_LINK
 lxc.net.0.flags = up
 EOF
 
+chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG"
+
 chmod 644 "$LIMITED_USER_CONFIG_LXC/default.conf"
+chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_LXC"
+chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_LXC/default.conf"
 print_success "- Created LXC default configuration"
 echo ""
 
@@ -432,10 +440,6 @@ if [[ -d "$LIMITED_USER_HOME/.local" ]]; then
         fi
     fi
 fi
-
-chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG"
-chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_LXC"
-chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_LXC/default.conf"
 
 print_success "- Permissions set correctly"
 echo ""
