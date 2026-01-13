@@ -44,6 +44,7 @@ get_script_list() {
     echo "system-modules/system-configuration-issue.sh"
     echo "system-modules/system-configuration-openssh-server.sh"
     echo "system-modules/system-configuration-swap.sh"
+    echo "system-modules/system-configuration-timezone.sh"
     echo "system-modules/system-configuration.sh"
 }
 
@@ -449,18 +450,19 @@ main() {
     main_configure_system "$scope"
     echo ""
 
-    # Step 4: Swap configuration (system scope only, Linux only)
+    # All further steps are system scope only
     if [[ "$scope" == "system" ]]; then
+        # Step 4: Timezone configuration (system scope only)
+        source "${SCRIPT_DIR}/system-modules/system-configuration-timezone.sh"
+        main_configure_timezone
+        echo ""
+
+        # Step 5: Swap configuration (system scope only, Linux only)
         source "${SCRIPT_DIR}/system-modules/system-configuration-swap.sh"
         main_configure_swap
         echo ""
-    fi
 
-    # Step 5: Static IP configuration (containers only, already done above if in container)
-    # Skip here as it was already offered at the beginning
-
-    # Step 6: OpenSSH Server configuration (system scope only, Linux only)
-    if [[ "$scope" == "system" ]]; then
+        # Step 6: OpenSSH Server configuration (system scope only, Linux only)
         if [[ "$OPENSSH_SERVER_INSTALLED" == true ]]; then
             source "${SCRIPT_DIR}/system-modules/system-configuration-openssh-server.sh"
             main_configure_openssh_server
@@ -468,10 +470,8 @@ main() {
             print_info "Skipping OpenSSH Server configuration (not installed)"
         fi
         echo ""
-    fi
 
-    # Step 7: /etc/issue configuration (system scope only, Linux only)
-    if [[ "$scope" == "system" ]]; then
+        # Step 7: /etc/issue configuration (system scope only, Linux only)
         source "${SCRIPT_DIR}/system-modules/system-configuration-issue.sh"
         main_configure_issue
         echo ""
