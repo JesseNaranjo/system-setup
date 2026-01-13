@@ -2,71 +2,64 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**For comprehensive bash coding standards, patterns, and conventions, see [.ai/AI-AGENT-INSTRUCTIONS.md](.ai/AI-AGENT-INSTRUCTIONS.md).**
+**For comprehensive coding standards, patterns, and conventions, see [.ai/AI-AGENT-INSTRUCTIONS.md](.ai/AI-AGENT-INSTRUCTIONS.md).**
 
-> **Note:** Keep Quick Reference in sync with [.github/copilot-instructions.md](.github/copilot-instructions.md).
+> **Note:** Keep this file in sync with [.github/copilot-instructions.md](.github/copilot-instructions.md).
 
-## Repository Overview
+## Folder Documentation
 
-This is a personal system configuration repository containing bash scripts and documentation for setting up Linux and macOS systems. The scripts handle package management, system configuration, LXC container management, Kubernetes setup, and various utilities.
+Each folder contains a README.md documenting its contents. **Read the README before modifying any folder.** Update READMEs when adding, removing, or changing files.
 
-## Key Directories
+## Quick Reference for LLMs
 
-- `system-setup/` - Main modular system configuration suite (the core of the repository)
-- `lxc/` - LXC container management scripts (standalone)
-- `kubernetes/` - Kubernetes cluster management scripts (standalone)
-- `github/` - GitHub CLI automation scripts (standalone)
-- `llm/` - Ollama/LLM management scripts (standalone)
-- `utils/` - Cross-platform utility scripts (standalone)
-- `configs/` - Configuration documentation (markdown)
-- `walkthroughs/` - Step-by-step guides (markdown)
-
-## Running the Scripts
-
-**Main system setup:**
+### Minimal Script Template
 ```bash
-cd system-setup
-./system-setup.sh           # Interactive setup
-./system-setup.sh --debug   # Debug mode
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly BLUE='\033[0;34m'
+readonly GREEN='\033[0;32m'
+readonly RED='\033[0;31m'
+readonly YELLOW='\033[1;33m'
+readonly NC='\033[0m'
+
+print_info() { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
+print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
+print_error() { echo -e "${RED}[ ERROR   ]${NC} $1"; }
+
+main() {
+    print_info "Starting..."
+    # Logic here
+    print_success "Complete"
+}
+
+[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"
 ```
 
-**Individual modules:**
+### Most Common Operations
+
+**Idempotent Config:**
 ```bash
-./system-modules/package-management.sh
-./system-modules/system-configuration.sh user    # User scope
-./system-modules/system-configuration.sh system  # System scope (requires root)
+config_exists "$file" "$setting" && [[ "$(get_config_value "$file" "$setting")" == "$val" ]] && return 0
+backup_file "$file"
+add_change_header "$file" "type"
+echo "$setting $val" >> "$file"
 ```
 
-**LXC scripts:**
+**User Prompt:**
 ```bash
-cd lxc
-./_download-lxc-scripts.sh  # Update all LXC scripts
-./create-lxc.sh             # Create container
-./start-lxc.sh              # Start container
+prompt_yes_no "Action?" "n" && execute || { print_info "Skipped"; return 0; }
 ```
 
-**Kubernetes scripts:**
+**Platform Branch:**
 ```bash
-cd kubernetes
-./_download-k8s-scripts.sh  # Update all k8s scripts
-./start-k8s.sh              # Start k8s services
-./stop-k8s.sh               # Stop k8s services
+[[ "$os" == "macos" ]] && macos_cmd || linux_cmd
 ```
 
-## Quick Reference
-
-**Critical requirements for all scripts:**
-- Always use `set -euo pipefail` at script start
-- Always quote variables: `"$var"` and `"${array[@]}"`
-- Use `[[ ]]` for conditionals, not `[ ]`
-- Use arrays, not space-separated strings
-- Use `$(cmd)` not backticks for command substitution
-
-**Platform support:**
-- **Linux (Debian/Ubuntu):** apt package management, systemd, bash
-- **macOS:** Homebrew, launchd, zsh
-- **Containers:** LXC, Docker detection via `/proc/1/environ`, `/proc/1/cgroup`, `/.dockerenv`
-
-**Script architectures:**
-1. **Modular** (`system-setup/`): Shared `utils.sh`, feature modules in `system-modules/`
-2. **Standalone** (`lxc/`, `kubernetes/`, etc.): Self-contained, managed by `_download-*-scripts.sh` updaters
+**Loop with Check:**
+```bash
+for item in "${array[@]}"; do
+    [[ condition ]] && continue
+    process "$item"
+done
+```

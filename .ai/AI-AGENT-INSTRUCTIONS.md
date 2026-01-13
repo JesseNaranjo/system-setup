@@ -3,7 +3,9 @@
 ## Document Purpose
 This document provides comprehensive patterns, styles, and conventions used across all bash scripts in this repository. Optimized for LLM consumption to enable rapid, accurate code generation and modification without requiring full source file analysis.
 
-**This is the detailed reference document for bash scripting in this repository. See [CLAUDE.md](../CLAUDE.md) for a quick overview and running instructions.**
+**This is the detailed reference document for bash scripting in this repository.**
+
+> **Note:** Keep Quick Reference in sync with [CLAUDE.md](../CLAUDE.md) and [.github/copilot-instructions.md](../.github/copilot-instructions.md).
 
 **Last Updated:** January 2026
 **Primary Reference:** system-setup.sh + utils.sh
@@ -106,6 +108,11 @@ done
 - Handle both brew and apt package managers
 - Support user and system-wide configurations
 - Detect container environments (Docker, LXC)
+
+### Folder Documentation
+- Each folder contains a README.md documenting its contents
+- **Read the README before modifying any folder**
+- Update READMEs when adding, removing, or changing files
 
 ---
 
@@ -1788,25 +1795,59 @@ fi
 
 ## Repository-Specific Patterns
 
+### Repository Overview
+
+This is a personal system configuration repository containing bash scripts and documentation for setting up Linux and macOS systems. The scripts handle package management, system configuration, LXC container management, Kubernetes setup, and various utilities.
+
+### Key Directories
+
+| Directory | Type | Description |
+|-----------|------|-------------|
+| `system-setup/` | Modular | Main system configuration suite (the core of the repository) |
+| `lxc/` | Standalone | LXC container management scripts |
+| `kubernetes/` | Standalone | Kubernetes cluster management scripts |
+| `github/` | Standalone | GitHub CLI automation scripts |
+| `llm/` | Standalone | Ollama/LLM management scripts |
+| `utils/` | Standalone | Cross-platform utility scripts |
+| `configs/` | Documentation | Configuration documentation (markdown) |
+| `walkthroughs/` | Documentation | Step-by-step guides (markdown) |
+
+### Running the Scripts
+
+**Main system setup:**
+```bash
+cd system-setup
+./system-setup.sh           # Interactive setup
+./system-setup.sh --debug   # Debug mode
+```
+
+**Individual modules:**
+```bash
+./system-modules/package-management.sh
+./system-modules/system-configuration.sh user    # User scope
+./system-modules/system-configuration.sh system  # System scope (requires root)
+```
+
+**LXC scripts:**
+```bash
+cd lxc
+./_download-lxc-scripts.sh  # Update all LXC scripts
+./create-lxc.sh             # Create container
+./start-lxc.sh              # Start container
+```
+
+**Kubernetes scripts:**
+```bash
+cd kubernetes
+./_download-k8s-scripts.sh  # Update all k8s scripts
+./start-k8s.sh              # Start k8s services
+./stop-k8s.sh               # Stop k8s services
+```
+
 ### Script Naming Conventions
 - **Main scripts**: `action-noun.sh` (e.g., `system-setup.sh`, `ollama-screen.sh`)
 - **Download helpers**: `_download-*-scripts.sh` (underscore prefix for utilities)
 - **Action scripts**: `verb-noun.sh` (e.g., `start-k8s.sh`, `stop-lxc.sh`, `config-lxc-ssh.sh`)
-
-### Script Organization by Directory
-```
-system-setup/         - Main system configuration suite (modular)
-    system-modules/   - Feature modules (sourced, not run directly)
-    utils.sh          - Shared utilities for all modules
-    system-setup.sh   - Main orchestrator script
-github/               - GitHub CLI automation (org copying, issue management)
-kubernetes/           - K8s cluster management (start, stop, update repos)
-lxc/                  - LXC container operations (create, start, stop, config)
-llm/                  - LLM tools (Ollama management)
-utils/                - Cross-platform utility scripts (rsync, monitoring, macOS display reset)
-configs/              - Documentation for tool configurations (markdown)
-walkthroughs/         - Step-by-step guides (debian-f2fs, macOS external monitor fixes)
-```
 
 ---
 
