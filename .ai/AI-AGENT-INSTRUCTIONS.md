@@ -1927,7 +1927,7 @@ install_packages() {
     local packages=("nano" "screen" "htop")
     for pkg in "${packages[@]}"; do
         if is_package_installed "$os" "$pkg"; then
-            print_success "✓ $pkg already installed"
+            print_success "- $pkg already installed"
         else
             if prompt_yes_no "Install $pkg?" "y"; then
                 if [[ "$os" == "macos" ]]; then

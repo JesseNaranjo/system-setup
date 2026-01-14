@@ -87,7 +87,7 @@ configure_container_static_ip() {
 
     if [[ -f "$network_file" ]] &&  grep -q "^\[Address\]" "$network_file" 2>/dev/null; then
         has_static_ip=true
-        print_success "Static IP configuration already exists in $network_file"
+        print_success "- Static IP configuration already exists in $network_file"
 
         # Show configured static IPs
         local static_ips=$(grep -A 1 "^\[Address\]" "$network_file" | grep "^Address=" | cut -d= -f2)

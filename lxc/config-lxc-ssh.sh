@@ -170,7 +170,7 @@ generate_ssh_keypair() {
 
         # Verify the key is valid
         if ssh-keygen -l -f "$private_key" &>/dev/null; then
-            print_success "✓ Existing SSH key pair is valid"
+            print_success "- Existing SSH key pair is valid"
             return 0
         else
             print_warning "Existing key appears invalid"
@@ -297,7 +297,7 @@ configure_container_ssh() {
 
     # Check if key is already in authorized_keys
     if [[ -f "$authorized_keys" ]] && grep -qF "$public_key_content" "$authorized_keys"; then
-        print_success "SSH key already configured in container: $container"
+        print_success "- SSH key already configured in container: $container"
     else
         # Backup existing authorized_keys if it exists (only if we're modifying it)
         if [[ -f "$authorized_keys" ]]; then

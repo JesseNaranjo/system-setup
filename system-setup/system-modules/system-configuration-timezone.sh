@@ -77,7 +77,7 @@ configure_timezone() {
 
     # Check if timezone contains UTC (handles "UTC", "Etc/UTC", etc.)
     if [[ "$current_tz" != *"UTC"* ]]; then
-        print_success "Timezone is already configured: $current_tz"
+        print_success "- Timezone is already configured: $current_tz"
         return 0
     fi
 
@@ -132,7 +132,7 @@ configure_timezone() {
     if set_timezone "$new_tz"; then
         local verified_tz
         verified_tz=$(get_current_timezone)
-        print_success "Timezone updated to: $verified_tz"
+        print_success "✓ Timezone updated to: $verified_tz"
     else
         print_error "Failed to set timezone"
         return 1
