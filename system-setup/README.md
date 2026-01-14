@@ -24,12 +24,14 @@ system-setup/
 ├── utils.sh                                   # Shared utilities and functions
 └── system-modules/
     ├── configure-container-static-ip.sh       # Static IP for containers
+    ├── migrate-to-systemd-networkd.sh         # ifupdown to systemd-networkd migration
     ├── modernize-apt-sources.sh               # APT DEB822 migration
     ├── package-management.sh                  # Package installation
     ├── system-configuration.sh                # Nano/screen/shell setup
     ├── system-configuration-issue.sh          # /etc/issue network display
     ├── system-configuration-openssh-server.sh # SSH socket activation
-    └── system-configuration-swap.sh           # Swap memory setup
+    ├── system-configuration-swap.sh           # Swap memory setup
+    └── system-configuration-timezone.sh       # Timezone configuration
 ```
 
 ---
@@ -122,6 +124,58 @@ Shared utility library providing common functionality across all modules.
 ---
 
 ## Module Scripts
+
+### system-modules/migrate-to-systemd-networkd.sh
+
+Migrates Linux systems from ifupdown to systemd-networkd (Linux only).
+
+**Functionality:**
+- Parses `/etc/network/interfaces` using `ifquery` for reliable extraction
+- Generates systemd-networkd `.network` files for each interface
+- Creates `.netdev` files for bridge configurations
+- Handles DHCP, static IPs, and bridges with best-effort migration
+- Appends original interface stanza as comments for reference
+- Manages service transitions (networking → systemd-networkd)
+- Configures systemd-resolved for DNS management
+- Provides detailed rollback instructions
+
+**Supported Configurations:**
+- DHCP interfaces
+- Static IP addresses with gateway and DNS
+- Bridge interfaces with member ports
+- Loopback interfaces (preserved)
+
+**Unsupported Configurations (warnings displayed):**
+- VLANs (`vlan-raw-device`)
+- Bonding (`bond-master`, `bond-slaves`, `bond-mode`)
+- Pre/post hooks (`pre-up`, `post-up`, `pre-down`, `post-down`)
+- Wireless (`wpa-ssid`, `wpa-psk`, `wpa-conf`)
+- PPP connections
+- MTU and hardware address overrides
+
+**Generated Files:**
+```
+/etc/systemd/network/
+├── 10-eth0.network     # Standard interfaces
+├── 20-br0.netdev       # Bridge device definition
+└── 20-br0.network      # Bridge network config
+```
+
+**Process:**
+1. Checks for ifupdown presence and non-loopback interfaces
+2. Validates systemd-networkd availability
+3. Detects unsupported configurations and warns
+4. Parses each interface stanza with `ifquery`
+5. Generates systemd-networkd configuration files
+6. Optionally symlinks `/etc/resolv.conf` to systemd-resolved
+7. Disables networking.service, enables systemd-networkd
+8. Displays rollback instructions
+
+**Requirements:**
+- Linux with ifupdown currently in use
+- systemd-networkd available
+- Root privileges
+- `ifquery` command (from ifupdown package)
 
 ### system-modules/modernize-apt-sources.sh
 
@@ -343,6 +397,58 @@ echo "/var/swapfile none swap sw 0 0" >> /etc/fstab
 - Linux with systemd
 - Not in container
 - Root privileges
+
+### system-modules/system-configuration-timezone.sh
+
+Configures system timezone interactively.
+
+**Functionality:**
+- Detects current system timezone
+- Only prompts if timezone is set to UTC (common default for fresh installs)
+- Offers common US timezone presets for quick selection
+- Supports custom timezone input via "Other" option
+- Works on both Linux (timedatectl) and macOS (systemsetup)
+
+**Timezone Options:**
+1. Eastern (America/New_York)
+2. Central (America/Chicago)
+3. Mountain (America/Denver)
+4. Pacific (America/Los_Angeles)
+5. Other (displays all available timezones)
+
+**Platform Support:**
+
+**Linux:**
+- Uses `timedatectl` to get/set timezone
+- Lists timezones via `timedatectl list-timezones`
+
+**macOS:**
+- Reads timezone from `/etc/localtime` symlink
+- Uses `systemsetup` for setting timezone (requires admin)
+- Lists timezones via `systemsetup -listtimezones`
+
+**Example Output:**
+```
+[ INFO    ] Checking timezone configuration...
+[ WARNING ] System timezone is set to UTC: Etc/UTC
+
+Would you like to update the timezone? (y/N):
+[ INFO    ] Select a timezone:
+            1) Eastern  (America/New_York)
+            2) Central  (America/Chicago)
+            3) Mountain (America/Denver)
+            4) Pacific  (America/Los_Angeles)
+            5) Other    (show all timezones)
+
+            Enter choice (1-5): 1
+
+[ INFO    ] Setting timezone to: America/New_York
+[ SUCCESS ] ✓ Timezone updated to: America/New_York
+```
+
+**Requirements:**
+- Linux with timedatectl or macOS with systemsetup
+- Root/admin privileges for setting timezone
 
 ### system-modules/configure-container-static-ip.sh
 
@@ -626,6 +732,9 @@ sudo ./system-modules/system-configuration.sh system
 # Swap setup
 sudo ./system-modules/system-configuration-swap.sh
 
+# Timezone configuration
+sudo ./system-modules/system-configuration-timezone.sh
+
 # Container static IP
 sudo ./system-modules/configure-container-static-ip.sh
 
@@ -634,6 +743,9 @@ sudo ./system-modules/system-configuration-openssh-server.sh
 
 # /etc/issue
 sudo ./system-modules/system-configuration-issue.sh
+
+# Migrate ifupdown to systemd-networkd
+sudo ./system-modules/migrate-to-systemd-networkd.sh
 ```
 
 ### Debug Mode
@@ -805,13 +917,15 @@ Each module can be run independently for focused configuration:
 When running the main script, modules are executed in this order:
 
 1. **Environment Detection** - OS and container detection
-2. **Container Static IP** - Offered if running in a container
-3. **Modernize APT Sources** - Updates APT sources (Linux only)
-4. **Package Management** - Checks and installs packages
-5. **System Configuration** - Configures nano, screen, and shell
-6. **Swap Configuration** - Sets up swap memory (system scope only)
-7. **OpenSSH Server** - Configures SSH socket activation (system scope only)
-8. **Issue Configuration** - Updates /etc/issue (system scope only)
+2. **Timezone Configuration** - Prompts if system is set to UTC
+3. **Container Static IP** - Offered if running in a container
+4. **Network Migration** - Offered if system uses ifupdown (Linux only)
+5. **Modernize APT Sources** - Updates APT sources (Linux only)
+6. **Package Management** - Checks and installs packages
+7. **System Configuration** - Configures nano, screen, and shell
+8. **Swap Configuration** - Sets up swap memory (system scope only)
+9. **OpenSSH Server** - Configures SSH socket activation (system scope only)
+10. **Issue Configuration** - Updates /etc/issue (system scope only)
 
 ## Key Features
 
