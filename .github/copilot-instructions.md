@@ -4,11 +4,13 @@ This file provides guidance to GitHub Copilot when working with code in this rep
 
 **For comprehensive coding standards, patterns, and conventions, see [.ai/AI-AGENT-INSTRUCTIONS.md](../.ai/AI-AGENT-INSTRUCTIONS.md).**
 
-> **Note:** Keep this file in sync with [CLAUDE.md](../CLAUDE.md).
+> **Note:** You MUST keep this file in sync with [CLAUDE.md](../CLAUDE.md).
 
 ## Folder Documentation
 
 Each folder contains a README.md documenting its contents. **Read the README before modifying any folder.** Update READMEs when adding, removing, or changing files.
+
+For detailed README templates and content standards by folder type, see [README Content Standards](../.ai/AI-AGENT-INSTRUCTIONS.md#readme-content-standards).
 
 ## Quick Reference for LLMs
 

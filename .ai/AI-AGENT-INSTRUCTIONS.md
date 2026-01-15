@@ -1,16 +1,212 @@
-# AI Agent Instructions for Bash Scripts
+# AI Agent Instructions
 
 ## Document Purpose
+
 This document provides comprehensive patterns, styles, and conventions used across all bash scripts in this repository. Optimized for LLM consumption to enable rapid, accurate code generation and modification without requiring full source file analysis.
 
-**This is the detailed reference document for bash scripting in this repository.**
+**This is the detailed reference document for this repository.**
 
-> **Note:** Keep Quick Reference in sync with [CLAUDE.md](../CLAUDE.md) and [.github/copilot-instructions.md](../.github/copilot-instructions.md).
+> **Note:** You MUST keep the Quick Reference in sync with [CLAUDE.md](../CLAUDE.md) and [.github/copilot-instructions.md](../.github/copilot-instructions.md).
 
 **Last Updated:** January 2026
-**Primary Reference:** system-setup.sh + utils.sh
-**Secondary Reference:** _download-*-scripts.sh (standalone script pattern)
+**Primary Reference:** system-setup/system-setup.sh + system-setup/utils.sh
+**Secondary Reference:** `_download-*-scripts.sh` (standalone script pattern)
 **Scope:** All `.sh` scripts in repository (modular, standalone, and lightweight)
+
+## Table of Contents
+
+1. [Folder Documentation](#folder-documentation)
+2. [README Content Standards](#readme-content-standards)
+3. [Quick Reference for LLMs](#quick-reference-for-llms)
+4. [DRY Principle](#dry-principle)
+5. [Core Principles](#core-principles)
+6. [Script Architecture](#script-architecture)
+7. [Script Structure](#script-structure)
+8. [Modular Script Patterns](#modular-script-patterns)
+9. [Bash Standards](#bash-standards)
+10. [Function Patterns](#function-patterns)
+11. [User Interaction](#user-interaction)
+12. [Configuration Management](#configuration-management)
+13. [Output & Logging](#output--logging)
+14. [Cross-Platform Support](#cross-platform-support)
+15. [Error Handling](#error-handling)
+16. [File Modification](#file-modification)
+17. [Security & Safety](#security--safety)
+18. [Download & Self-Update Patterns](#download--self-update-patterns)
+19. [Common Patterns](#common-patterns)
+20. [Anti-Patterns](#anti-patterns)
+21. [Documentation Standards](#documentation-standards)
+22. [LLM Optimization Guidelines](#llm-optimization-guidelines)
+23. [Repository-Specific Patterns](#repository-specific-patterns)
+24. [Complete Function Templates](#complete-function-templates)
+
+---
+
+## Folder Documentation
+
+Each significant folder contains a `README.md` that documents its contents, patterns, and usage. **These READMEs are the source of truth for understanding each component.**
+
+### Required Workflow
+
+1. **Read Before Modifying** - Before making changes to any folder, read its README.md first
+2. **Update After Changes** - When adding, removing, or significantly modifying files in a folder, update its README.md
+3. **Current State Only** - READMEs document the current codebase, not historical or removed code. Remove documentation for deleted features.
+
+### README Locations
+
+✅ = exists, ❌ = needs creation
+
+#### Script Directories
+
+| Path | Documents | Status |
+|------|-----------|--------|
+| `README.md` | Repository overview | ✅ |
+| `github/README.md` | GitHub CLI automation scripts | ✅ |
+| `kubernetes/README.md` | Kubernetes cluster scripts | ✅ |
+| `llm/README.md` | Ollama/LLM management scripts | ✅ |
+| `lxc/README.md` | LXC container management scripts | ✅ |
+| `system-setup/README.md` | Main system setup suite | ✅ |
+| `system-setup/system-modules/README.md` | Module scripts documentation | ✅ |
+| `git/README.md` | Git-related scripts | ❌ |
+| `raspberry-pi/README.md` | Raspberry Pi setup scripts | ❌ |
+| `utils/README.md` | Cross-platform utilities | ❌ |
+
+#### Documentation Folders
+
+| Path | Documents | Status |
+|------|-----------|--------|
+| `.ai/AI-AGENT-INSTRUCTIONS.md` | LLM coding standards (this document) | ✅ |
+| `configs/README.md` | Configuration documentation files | ❌ |
+| `walkthroughs/README.md` | Step-by-step guides | ❌ |
+
+### README Maintenance Rules
+
+When modifying code:
+
+- **Adding a file**: Add an entry describing the file's purpose to the folder's README
+- **Removing a file**: Remove the file's documentation from the README
+- **Renaming a file**: Update the README to reflect the new name
+- **Changing behavior**: Update the README to describe current behavior
+- **Adding a folder**: Create a README.md in the new folder documenting its purpose
+
+**Never document:**
+- Removed or deprecated code
+- Planned but unimplemented features
+- Historical context (use git history for that)
+
+---
+
+## README Content Standards
+
+Each folder type requires different documentation. Use these templates when creating or updating READMEs.
+
+### Standard Section Order
+
+All READMEs should follow this section order (omit sections that don't apply):
+
+1. Title (H1)
+2. Purpose/Overview (paragraph under title)
+3. Features (if service root)
+4. Structure (table of sub-folders/files)
+5. Files (detailed file descriptions)
+6. Key Concepts (if complex patterns)
+7. Configuration (if applicable)
+8. Usage (code examples)
+9. Adding New [Items] (extension guide)
+
+### Template: Script Directory
+
+Use for: `lxc/`, `github/`, `kubernetes/`, `llm/`, `utils/` - directories containing standalone scripts.
+
+```markdown
+# Directory Name
+
+Brief description of what these scripts do.
+
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `script-a.sh` | What script-a does |
+| `script-b.sh` | What script-b does |
+| `_download-*.sh` | Auto-updater for this directory |
+
+## Usage
+
+\`\`\`bash
+./script-a.sh [options]
+\`\`\`
+
+## Adding New Scripts
+
+1. Create script following repository conventions (see AI-AGENT-INSTRUCTIONS.md)
+2. Add to `get_script_list()` in the download script
+3. Update this README
+```
+
+### Template: Module Suite
+
+Use for: `system-setup/` - directories containing a main script with sourced modules.
+
+```markdown
+# Suite Name
+
+Brief description of the suite and its purpose.
+
+## Structure
+
+| Component | Purpose |
+|-----------|---------|
+| `main.sh` | Orchestrator script |
+| `utils.sh` | Shared utilities |
+| `modules/` | Feature modules |
+
+## Running
+
+\`\`\`bash
+./main.sh           # Interactive mode
+./main.sh --debug   # Debug mode
+\`\`\`
+
+## Modules
+
+### module-a.sh
+Description of what this module configures.
+
+### module-b.sh
+Description of what this module configures.
+
+## Adding New Modules
+
+1. Create module in `modules/` following existing patterns
+2. Source `utils.sh` for shared functions
+3. Add `main_<module_name>()` entry point
+4. Source and call from main script
+5. Update this README
+```
+
+### Template: Documentation Folder
+
+Use for: `configs/`, `walkthroughs/` - directories containing markdown documentation.
+
+```markdown
+# Folder Name
+
+Brief description of what documentation this folder contains.
+
+## Contents
+
+| File | Topic |
+|------|-------|
+| `topic-a.md` | What topic-a covers |
+| `topic-b.md` | What topic-b covers |
+
+## Adding Documentation
+
+1. Create markdown file with descriptive name
+2. Follow existing format conventions
+3. Update this README
+```
 
 ---
 
@@ -110,9 +306,97 @@ done
 - Detect container environments (Docker, LXC)
 
 ### Folder Documentation
-- Each folder contains a README.md documenting its contents
-- **Read the README before modifying any folder**
-- Update READMEs when adding, removing, or changing files
+See [Folder Documentation](#folder-documentation) section for detailed README requirements and templates.
+
+---
+
+## DRY Principle
+
+Apply the DRY (Don't Repeat Yourself) principle when code duplication creates maintenance risk. Extract shared code when:
+
+### When to Extract
+
+1. **Sensitive Logic** - Code that is delicate, complex, or where bugs would have serious consequences
+   ```bash
+   # Backup with ownership preservation - used by multiple modules
+   backup_file() {
+       local file="$1"
+       [[ ! -f "$file" ]] && return 0
+
+       local backup="${file}.backup.$(date +%Y%m%d_%H%M%S).bak"
+       cp -p "$file" "$backup"
+
+       # Preserve ownership (platform-specific)
+       if [[ "$OSTYPE" == "darwin"* ]]; then
+           local owner=$(stat -f "%u:%g" "$file")
+       else
+           local owner=$(stat -c "%u:%g" "$file")
+       fi
+       chown "$owner" "$backup" 2>/dev/null || true
+   }
+   ```
+
+2. **Multi-Step Operations** - Sequences of 3+ statements that perform a cohesive action
+   ```bash
+   # Idempotent config update - 3+ steps that belong together
+   add_config_if_needed() {
+       local file="$1" setting="$2" value="$3"
+
+       # Step 1: Check if already correct
+       config_exists "$file" "$setting" && \
+           [[ "$(get_config_value "$file" "$setting")" == "$value" ]] && return 0
+
+       # Step 2: Backup before modifying
+       backup_file "$file"
+
+       # Step 3: Add change header
+       add_change_header "$file" "config"
+
+       # Step 4: Apply change
+       echo "${setting} ${value}" >> "$file"
+   }
+   ```
+
+3. **Business Rules** - Logic encoding domain rules that may change
+   ```bash
+   # Container detection - rules may change as new container types emerge
+   detect_container() {
+       [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ && return 0
+       [[ -f /.dockerenv ]] && return 0
+       [[ -f /run/systemd/container ]] && return 0
+       grep -q lxc /proc/1/cgroup 2>/dev/null && return 0
+       return 1
+   }
+   ```
+
+4. **Configuration Patterns** - Repeated setup/configuration code
+   ```bash
+   # Color constants - extracted because used everywhere
+   readonly BLUE='\033[0;34m'
+   readonly GREEN='\033[0;32m'
+   readonly RED='\033[0;31m'
+   readonly NC='\033[0m'
+
+   # Output functions - extracted because pattern repeats
+   print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
+   print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
+   print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1"; }
+   ```
+
+### When NOT to Extract
+
+- **Coincidentally Similar Code** - Code that looks the same but serves different purposes and may evolve independently
+- **Simple One-Liners** - Trivial operations where extraction adds indirection without value
+- **Single Use** - Code used in only one place (wait for the second use case)
+
+### Extraction Strategies
+
+| Scenario | Strategy |
+|----------|----------|
+| Same script | Private function (defined before use) |
+| Same directory/suite | Source shared `utils.sh` |
+| Cross-repository | Standalone script with inline functions |
+| Configuration | Constants at script top with `readonly` |
 
 ---
 
@@ -1761,7 +2045,21 @@ fi
 | `result=\`cmd\`` | `result=$(cmd)` |
 | `str="$str item"` | `arr+=("item")` |
 
+---
 
+## Documentation Standards
+
+### Folder READMEs
+
+- Every significant folder has a README.md
+- READMEs describe current contents only
+- Update READMEs when modifying folder contents
+- Read READMEs before making changes
+
+### Code Comments
+
+- Explain "why" not "what" in inline comments
+- Keep comments up-to-date with code changes
 
 ---
 
