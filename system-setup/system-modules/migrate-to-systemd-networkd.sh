@@ -614,10 +614,12 @@ install_systemd_resolved() {
             print_success "✓ systemd-resolved installed"
         else
             print_warning "Could not install systemd-resolved - DNS resolution may need manual configuration"
+            return 1
         fi
     else
         print_success "✓ systemd-resolved is already installed"
     fi
+    return 0
 }
 
 # Configure resolv.conf symlink

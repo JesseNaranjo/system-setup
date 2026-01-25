@@ -408,7 +408,7 @@ main() {
         print_menu_option "7" "Run system diagnostics" supports_diagnostics
         echo "            8) Exit (or Ctrl+C)"
         echo ""
-        read -p "            Enter choice (1-8): " -r choice
+        read -p "            Enter choice (1-8): " -r choice </dev/tty
 
         echo ""
 

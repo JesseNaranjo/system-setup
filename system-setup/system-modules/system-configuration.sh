@@ -16,7 +16,7 @@ if [[ -z "${SCRIPT_DIR:-}" ]]; then
 fi
 
 # Source utilities
-# shellcheck source=utils.sh
+# shellcheck source=../utils.sh
 source "${SCRIPT_DIR}/utils.sh"
 
 # ============================================================================
@@ -553,7 +553,7 @@ main_configure_system() {
         print_info "Usage: $0 <user|system>"
         print_info "  user   - Configure for current user only"
         print_info "  system - Configure system-wide for all users"
-        exit 1
+        return 1
     fi
 
     # Validate scope value
@@ -562,7 +562,7 @@ main_configure_system() {
         print_info "Usage: $0 <user|system>"
         print_info "  user   - Configure for current user only"
         print_info "  system - Configure system-wide for all users"
-        exit 1
+        return 1
     fi
 
     detect_environment

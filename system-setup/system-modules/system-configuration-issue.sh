@@ -16,7 +16,7 @@ if [[ -z "${SCRIPT_DIR:-}" ]]; then
 fi
 
 # Source utilities
-# shellcheck source=utils.sh
+# shellcheck source=../utils.sh
 source "${SCRIPT_DIR}/utils.sh"
 
 # ============================================================================

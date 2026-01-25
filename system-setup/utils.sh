@@ -27,6 +27,18 @@ readonly NC='\033[0m' # No Color
 # ============================================================================
 # Global Variables
 # ============================================================================
+#
+# MODULE DEPENDENCY NOTES:
+# These global variables create dependencies between modules. The orchestrator
+# (system-setup.sh) must ensure proper initialization order:
+#
+# 1. detect_environment() must be called first - sets DETECTED_OS, RUNNING_IN_CONTAINER
+# 2. package-management.sh populates *_INSTALLED flags via track_special_packages()
+# 3. system-configuration.sh reads *_INSTALLED flags to decide what to configure
+#
+# When running modules standalone, call detect_environment() and verify that
+# any required *_INSTALLED flags are set (they default to false).
+# ============================================================================
 
 DEBUG_MODE=false
 DETECTED_OS=""
@@ -34,14 +46,23 @@ DETECTED_PKG_MANAGER=""
 BACKED_UP_FILES=()
 CREATED_BACKUP_FILES=()
 HEADER_ADDED_FILES=()
+
+# Package installation tracking flags
+# Set by: track_special_packages() called from package-management.sh
+# Read by: system-configuration.sh to determine what to configure
 CURL_INSTALLED=false
 FASTFETCH_INSTALLED=false
 NANO_INSTALLED=false
 SCREEN_INSTALLED=false
 OPENSSH_SERVER_INSTALLED=false
+
+# Environment detection flags
+# Set by: detect_container() called from detect_environment()
 RUNNING_IN_CONTAINER=false
 
 # Package cache for performance optimization
+# Populated by: ensure_package_cache_populated() or lazily by is_package_installed()
+# Requires: DETECTED_OS must be set first
 declare -A PACKAGE_CACHE=()
 PACKAGE_CACHE_POPULATED=false
 
@@ -460,15 +481,24 @@ populate_package_cache() {
     fi
 }
 
-# Check if a package is installed (unified for both macOS and Linux)
-# Uses cache for performance optimization
-is_package_installed() {
-    local package="$1"
-
-    # Populate cache if not yet populated
+# Ensure the package cache is populated (explicit initialization)
+# Call this early in orchestration to avoid hidden side effects in is_package_installed
+# Requires: DETECTED_OS must be set (call detect_os first)
+ensure_package_cache_populated() {
     if [[ "$PACKAGE_CACHE_POPULATED" != "true" ]]; then
         populate_package_cache
     fi
+}
+
+# Check if a package is installed (unified for both macOS and Linux)
+# Uses cache for performance optimization
+# Note: Will populate cache on first call if not already populated via ensure_package_cache_populated()
+# Requires: DETECTED_OS must be set (call detect_os or detect_environment first)
+is_package_installed() {
+    local package="$1"
+
+    # Populate cache if not yet populated (lazy initialization)
+    ensure_package_cache_populated
 
     # Check cache first
     if [[ -n "${PACKAGE_CACHE[$package]:-}" ]]; then
@@ -729,7 +759,7 @@ update_config_line() {
             local temp_file=$(mktemp)
 
             # Use awk to find the line, comment it, and append the new line at the end of the file
-            awk -v pattern="^[[:space:]]*${setting_pattern}" -v new_line="${full_line}" '
+            if ! awk -v pattern="^[[:space:]]*${setting_pattern}" -v new_line="${full_line}" '
             BEGIN { found=0 }
             $0 ~ pattern {
                 "date +%Y-%m-%d" | getline datestr;
@@ -743,13 +773,25 @@ update_config_line() {
                     print new_line;
                 }
             }
-            ' "$file" > "$temp_file"
+            ' "$file" > "$temp_file"; then
+                rm -f "$temp_file"
+                print_error "Failed to process $file with awk"
+                return 1
+            fi
 
             # Replace the original file with the updated temporary file
             if needs_elevation "$file"; then
-                run_elevated mv "$temp_file" "$file"
+                if ! run_elevated mv "$temp_file" "$file"; then
+                    rm -f "$temp_file"
+                    print_error "Failed to update $file"
+                    return 1
+                fi
             else
-                mv "$temp_file" "$file"
+                if ! mv "$temp_file" "$file"; then
+                    rm -f "$temp_file"
+                    print_error "Failed to update $file"
+                    return 1
+                fi
             fi
             print_success "✓ $description updated in $file"
         fi
