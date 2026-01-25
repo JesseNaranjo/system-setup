@@ -86,6 +86,20 @@ alias ls="ls -AFGHhl"
 ```
 - `G` - displays color (**macOS only**, equivalent to `CLICOLOR=YES`)
 
+## editor configuration
+
+Set the default editor for command-line tools (e.g., `git commit`, `crontab -e`, `kubectl edit`):
+
+```bash
+export EDITOR=nano
+export VISUAL=nano
+```
+
+- `EDITOR` - used by programs that expect a line-based editor
+- `VISUAL` - used by programs that expect a full-screen editor
+
+> **Note:** Many programs check `VISUAL` first, then fall back to `EDITOR`. Setting both ensures consistent behavior across all tools.
+
 ## `diff`
 
 ```

@@ -423,6 +423,17 @@ configure_shell_for_user() {
         fi
     fi
 
+    # Editor configuration (only if nano is installed)
+    if [[ "$NANO_INSTALLED" == true ]]; then
+        if ! grep_file -q "Editor configuration" "$shell_config" 2>/dev/null; then
+            backup_file "$shell_config"
+            add_change_header "$shell_config" "shell"
+            append_to_file "$shell_config" "" "# Editor configuration"
+        fi
+        add_export_if_needed "$shell_config" "EDITOR" "nano" "default editor"
+        add_export_if_needed "$shell_config" "VISUAL" "nano" "visual editor"
+    fi
+
     # Restore ownership if running as root
     if [[ $EUID -eq 0 ]] && [[ "$username" != "root" ]]; then
         chown "$username:$username" "$shell_config" 2>/dev/null || true
@@ -466,6 +477,39 @@ configure_fastfetch() {
     } | run_elevated tee -a "$shell_config" > /dev/null
 
     print_success "✓ Fastfetch configured to run on shell startup in $shell_config"
+}
+
+# Configure system-wide EDITOR and VISUAL environment variables
+configure_editor_system() {
+    # Determine shell config file based on OS
+    local shell_config
+    if [[ "$DETECTED_OS" == "macos" ]]; then
+        shell_config="/etc/zshrc"
+    else
+        shell_config="/etc/bash.bashrc"
+    fi
+
+    # Skip if config file doesn't exist
+    if [[ ! -f "$shell_config" ]]; then
+        print_warning "Shell configuration file $shell_config does not exist, skipping editor configuration"
+        return 0
+    fi
+
+    print_info "Configuring EDITOR and VISUAL in $shell_config..."
+
+    # Add editor configuration section if not present
+    if ! grep_file -q "Editor configuration" "$shell_config" 2>/dev/null; then
+        backup_file "$shell_config"
+        add_change_header "$shell_config" "shell"
+        echo "" | run_elevated tee -a "$shell_config" > /dev/null
+        echo "# Editor configuration" | run_elevated tee -a "$shell_config" > /dev/null
+    fi
+
+    # Add EDITOR and VISUAL exports
+    add_export_if_needed "$shell_config" "EDITOR" "nano" "default editor"
+    add_export_if_needed "$shell_config" "VISUAL" "nano" "visual editor"
+
+    print_success "✓ EDITOR and VISUAL configured in $shell_config"
 }
 
 # Configure shell
@@ -536,6 +580,12 @@ configure_shell() {
         if [[ "$FASTFETCH_INSTALLED" == true ]]; then
             echo ""
             configure_fastfetch
+        fi
+
+        # Configure system-wide editor environment variables (only if nano is installed)
+        if [[ "$NANO_INSTALLED" == true ]]; then
+            echo ""
+            configure_editor_system
         fi
     fi
 }
