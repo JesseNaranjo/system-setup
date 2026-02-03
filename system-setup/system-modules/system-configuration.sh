@@ -65,6 +65,9 @@ configure_nano() {
     add_config_if_needed "nano" "$config_file" "set softwrap" "" "softwrap setting"
     add_config_if_needed "nano" "$config_file" "set tabsize" "4" "tab size setting"
 
+    add_config_if_needed "nano" "$config_file" "bind M-[" "prevword all" "Option-[ for previous word"
+    add_config_if_needed "nano" "$config_file" "bind M-]" "nextword all" "Option-] for next word"
+
     # Add homebrew include for macOS
     if [[ "$DETECTED_OS" == "macos" ]]; then
         local include_line_pattern='include "\/opt\/homebrew\/share\/nano\/\*\.nanorc"'

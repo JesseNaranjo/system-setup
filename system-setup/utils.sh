@@ -703,10 +703,10 @@ add_change_header() {
 # Configuration Management Functions
 # ============================================================================
 
-# Escape special regex characters in a string for use in grep/sed patterns
+# Escape special regex characters in a string for use in grep/sed/awk patterns
 # Usage: escaped=$(escape_regex "string with $pecial (chars)")
 escape_regex() {
-    printf '%s' "$1" | sed 's/[.[\(*^$+?{|\\]/\\&/g'
+    printf '%s' "$1" | sed 's/[.[\](*^$+?{|\\]/\\&/g'
 }
 
 # Check if a configuration line exists in a file
