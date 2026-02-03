@@ -705,8 +705,9 @@ add_change_header() {
 
 # Escape special regex characters in a string for use in grep/sed/awk patterns
 # Usage: escaped=$(escape_regex "string with $pecial (chars)")
+# Note: In the character class, ] must come first and [ must come last for proper escaping
 escape_regex() {
-    printf '%s' "$1" | sed 's/[.[\](*^$+?{|\\]/\\&/g'
+    printf '%s' "$1" | sed 's/[].[^$*+?{}|()\\[]/\\&/g'
 }
 
 # Check if a configuration line exists in a file
