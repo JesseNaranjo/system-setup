@@ -73,6 +73,10 @@ INTERFACES_BACKUP_PATH=""
 # Track unsupported configurations found
 declare -a UNSUPPORTED_FOUND=()
 
+# Stanza cache for performance optimization (avoids N+1 file reads)
+declare -A STANZA_CACHE=()
+STANZA_CACHE_POPULATED=false
+
 # ============================================================================
 # Precondition Checks
 # ============================================================================
@@ -229,6 +233,69 @@ extract_original_stanza() {
     echo "$stanza_lines"
 }
 
+# Pre-load all interface stanzas into cache
+# Args: $1 = space-separated list of interfaces
+populate_stanza_cache() {
+    local interfaces="$1"
+
+    for iface in $interfaces; do
+        local stanza
+        stanza=$(extract_original_stanza "$iface")
+        if [[ -z "$stanza" ]]; then
+            print_warning "Could not extract stanza for interface: $iface"
+        fi
+        STANZA_CACHE["$iface"]="$stanza"
+    done
+    STANZA_CACHE_POPULATED=true
+}
+
+# Get stanza from cache (or extract if cache not populated)
+# Args: $1 = interface name
+get_cached_stanza() {
+    local iface="$1"
+
+    if [[ "$STANZA_CACHE_POPULATED" == true ]]; then
+        echo "${STANZA_CACHE[$iface]:-}"
+    else
+        extract_original_stanza "$iface"
+    fi
+}
+
+# Write config file with error checking
+# Args: $1=file_path $2=content $3=file_type(network|netdev)
+# Returns: 0 on success, 1 on failure
+write_config_file() {
+    local file="$1"
+    local content="$2"
+    local file_type="${3:-network}"
+
+    if ! printf '%s\n' "$content" > "$file" 2>/dev/null; then
+        print_error "Failed to write $file"
+        return 1
+    fi
+
+    if ! chmod 644 "$file"; then
+        print_error "Failed to set permissions on $file"
+        rm -f "$file"
+        return 1
+    fi
+
+    if ! chown root:root "$file"; then
+        print_error "Failed to set ownership on $file"
+        rm -f "$file"
+        return 1
+    fi
+
+    if [[ "$file_type" == "netdev" ]]; then
+        CREATED_NETDEV_FILES+=("$file")
+    else
+        CREATED_NETWORK_FILES+=("$file")
+    fi
+
+    print_success "  ✓ Created $file"
+    return 0
+}
+
 # Check for unsupported configurations in interface
 # Args: $1 = interface name, $2 = ifquery output
 check_unsupported_config() {
@@ -242,7 +309,7 @@ check_unsupported_config() {
     done
 
     # Check original stanza for pre/post commands
-    local stanza=$(extract_original_stanza "$iface")
+    local stanza=$(get_cached_stanza "$iface")
     for keyword in pre-up post-up up pre-down post-down down; do
         if echo "$stanza" | grep -qE "^[[:space:]]+${keyword}[[:space:]]"; then
             # Avoid duplicates
@@ -401,7 +468,7 @@ generate_network_file() {
     content+="# Original /etc/network/interfaces stanza:"$'\n'
     content+="# ============================================================================"$'\n'
 
-    local original_stanza=$(extract_original_stanza "$iface")
+    local original_stanza=$(get_cached_stanza "$iface")
     if [[ -n "$original_stanza" ]]; then
         while IFS= read -r line; do
             content+="# $line"$'\n'
@@ -497,6 +564,9 @@ perform_migration() {
     done
     echo ""
 
+    # Pre-load stanzas for performance (avoids N+1 file reads)
+    populate_stanza_cache "$interfaces"
+
     # Track bridge ports to avoid duplicate processing
     declare -A bridge_ports_map
 
@@ -524,11 +594,7 @@ perform_migration() {
             local port_file="${NETWORKD_DIR}/${PRIORITY_STANDARD}-${iface}.network"
             local port_content=$(generate_bridge_port_network "$iface" "$bridge")
 
-            echo "$port_content" > "$port_file"
-            chmod 644 "$port_file"
-            chown root:root "$port_file"
-            CREATED_NETWORK_FILES+=("$port_file")
-            print_success "  ✓ Created $port_file"
+            write_config_file "$port_file" "$port_content" "network" || return 1
             continue
         fi
 
@@ -579,22 +645,14 @@ perform_migration() {
             local netdev_file="${NETWORKD_DIR}/${priority}-${iface}.netdev"
             local netdev_content=$(generate_bridge_netdev "$iface")
 
-            echo "$netdev_content" > "$netdev_file"
-            chmod 644 "$netdev_file"
-            chown root:root "$netdev_file"
-            CREATED_NETDEV_FILES+=("$netdev_file")
-            print_success "  ✓ Created $netdev_file"
+            write_config_file "$netdev_file" "$netdev_content" "netdev" || return 1
         fi
 
         # Generate .network file
         local network_file="${NETWORKD_DIR}/${priority}-${iface}.network"
         local network_content=$(generate_network_file "$iface" "$config_inet" "$config_inet6")
 
-        echo "$network_content" > "$network_file"
-        chmod 644 "$network_file"
-        chown root:root "$network_file"
-        CREATED_NETWORK_FILES+=("$network_file")
-        print_success "  ✓ Created $network_file"
+        write_config_file "$network_file" "$network_content" "network" || return 1
 
         echo ""
     done
@@ -638,9 +696,29 @@ configure_resolv_conf() {
     fi
 
     if prompt_yes_no "Symlink $RESOLV_CONF to systemd-resolved stub?" "y"; then
+        # Verify stub file exists (systemd-resolved must be running)
+        if [[ ! -e "$RESOLVED_STUB" ]]; then
+            print_warning "systemd-resolved stub not found: $RESOLVED_STUB"
+            print_warning "Ensure systemd-resolved is running before symlinking"
+            print_warning "⚠ Skipped resolv.conf symlink - DNS may need manual configuration"
+            return 0
+        fi
+
         backup_file "$RESOLV_CONF"
         rm -f "$RESOLV_CONF"
-        ln -s "$RESOLVED_STUB" "$RESOLV_CONF"
+
+        if ! ln -s "$RESOLVED_STUB" "$RESOLV_CONF"; then
+            print_error "Failed to create symlink: $RESOLV_CONF -> $RESOLVED_STUB"
+            # Restore from backup
+            local latest_backup
+            latest_backup=$(ls -t "${RESOLV_CONF}.backup."*.bak 2>/dev/null | head -1)
+            if [[ -n "$latest_backup" && -f "$latest_backup" ]]; then
+                cp -p "$latest_backup" "$RESOLV_CONF"
+                print_info "Restored $RESOLV_CONF from backup"
+            fi
+            return 1
+        fi
+
         RESOLV_CONF_SYMLINKED=true
         print_success "✓ Created symlink: $RESOLV_CONF -> $RESOLVED_STUB"
     else
@@ -708,6 +786,99 @@ enable_systemd_networkd() {
     fi
 
     return 0
+}
+
+# Verify systemd-networkd has configured interfaces
+# Returns: 0 if interfaces are configured, 1 otherwise
+verify_network_connectivity() {
+    local max_attempts=5
+    local wait_seconds=2
+
+    print_info "Verifying systemd-networkd configuration..."
+
+    for ((i=1; i<=max_attempts; i++)); do
+        sleep "$wait_seconds"
+
+        # Check systemd-networkd is active
+        if ! systemctl is-active --quiet systemd-networkd.service; then
+            if [[ $i -lt $max_attempts ]]; then
+                print_info "Waiting for systemd-networkd to become active... ($i/$max_attempts)"
+                continue
+            fi
+            print_error "systemd-networkd is not active"
+            return 1
+        fi
+
+        # Check for interfaces in routable/configured state via networkctl
+        local networkctl_output configured_count
+        networkctl_output=$(networkctl --no-pager --no-legend 2>/dev/null)
+        configured_count=$(echo "$networkctl_output" | awk '$4 == "routable" || $4 == "configured" {count++} END {print count+0}')
+
+        if [[ "$configured_count" -gt 0 ]]; then
+            print_success "✓ systemd-networkd has $configured_count configured interface(s)"
+            # Show interface status for verification
+            echo "$networkctl_output" | while read -r idx name type state; do
+                if [[ "$state" == "routable" || "$state" == "configured" ]]; then
+                    print_info "  - $name: $state"
+                fi
+            done
+            return 0
+        fi
+
+        if [[ $i -lt $max_attempts ]]; then
+            print_info "Waiting for interfaces to be configured... ($i/$max_attempts)"
+        fi
+    done
+
+    print_error "systemd-networkd verification failed - no interfaces in configured/routable state"
+    return 1
+}
+
+# Rollback new networking: stop services, delete created files, restore resolv.conf
+rollback_new_networking() {
+    print_warning "Rolling back to old networking..."
+
+    # Stop and disable systemd-networkd
+    systemctl stop systemd-networkd.service 2>/dev/null || true
+    systemctl disable systemd-networkd.service 2>/dev/null || true
+
+    # Stop and disable systemd-resolved
+    systemctl stop systemd-resolved.service 2>/dev/null || true
+    systemctl disable systemd-resolved.service 2>/dev/null || true
+
+    # Delete created network config files
+    local deleted_count=0
+    for file in "${CREATED_NETWORK_FILES[@]}"; do
+        if [[ -f "$file" ]]; then
+            rm -f "$file"
+            print_info "  Removed $file"
+            ((deleted_count++))
+        fi
+    done
+    for file in "${CREATED_NETDEV_FILES[@]}"; do
+        if [[ -f "$file" ]]; then
+            rm -f "$file"
+            print_info "  Removed $file"
+            ((deleted_count++))
+        fi
+    done
+
+    if [[ $deleted_count -gt 0 ]]; then
+        print_info "  Removed $deleted_count config file(s)"
+    fi
+
+    # Restore resolv.conf from backup if we symlinked it
+    if [[ "$RESOLV_CONF_SYMLINKED" == true ]]; then
+        local latest_backup
+        latest_backup=$(ls -t "${RESOLV_CONF}.backup."*.bak 2>/dev/null | head -1)
+        if [[ -n "$latest_backup" && -f "$latest_backup" ]]; then
+            rm -f "$RESOLV_CONF"
+            cp -p "$latest_backup" "$RESOLV_CONF"
+            print_info "  Restored $RESOLV_CONF from backup"
+        fi
+    fi
+
+    print_success "✓ Rolled back to old networking"
 }
 
 # ============================================================================
@@ -823,16 +994,25 @@ migrate_to_systemd_networkd() {
     configure_resolv_conf
     echo ""
 
-    # Disable old networking
-    disable_old_networking
-    echo ""
-
-    # Enable systemd-networkd
+    # Enable new networking FIRST (before disabling old)
     if ! enable_systemd_networkd; then
         print_error "Failed to enable systemd-networkd services"
         print_rollback_instructions
         return 1
     fi
+
+    # Verify connectivity before disabling old networking
+    if ! verify_network_connectivity; then
+        print_error "New networking failed connectivity test"
+        rollback_new_networking
+        print_info "Old networking remains active"
+        print_rollback_instructions
+        return 1
+    fi
+    echo ""
+
+    # Only NOW disable old networking (new is verified working)
+    disable_old_networking
     echo ""
 
     print_success "═══════════════════════════════════════════════════════════════════════"
