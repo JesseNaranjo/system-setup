@@ -520,7 +520,7 @@ BACKED_UP_FILES=()
 CREATED_BACKUP_FILES=()
 HEADER_ADDED_FILES=()
 NANO_INSTALLED=false
-SCREEN_INSTALLED=false
+TMUX_INSTALLED=false
 RUNNING_IN_CONTAINER=false
 DEBUG_MODE=false
 ```
@@ -577,7 +577,7 @@ RUNNING_IN_CONTAINER=false
 CURL_INSTALLED=false
 FASTFETCH_INSTALLED=false
 NANO_INSTALLED=false
-SCREEN_INSTALLED=false
+TMUX_INSTALLED=false
 OPENSSH_SERVER_INSTALLED=false
 
 # Package cache for performance
@@ -1012,7 +1012,7 @@ get_config_value() {
 **update_config_line** - Idempotent update (internal):
 ```bash
 update_config_line() {
-    local config_type="$1"  # "nano", "screen", "shell"
+    local config_type="$1"  # "nano", "tmux", "shell"
     local file="$2"
     local setting_pattern="$3"  # Regex to match
     local full_line="$4"        # Complete line to add
@@ -1172,8 +1172,8 @@ track_special_packages() {
         FASTFETCH_INSTALLED=true
     elif [[ "$package" == "nano" ]]; then
         NANO_INSTALLED=true
-    elif [[ "$package" == "screen" ]]; then
-        SCREEN_INSTALLED=true
+    elif [[ "$package" == "tmux" ]]; then
+        TMUX_INSTALLED=true
     elif [[ "$package" == "openssh-server" ]]; then
         OPENSSH_SERVER_INSTALLED=true
     fi
@@ -1495,9 +1495,9 @@ fi
 get_package_list() {
     local os="$1"
     if [[ "$os" == "macos" ]]; then
-        echo "Nano:nano" "Screen:screen"
+        echo "Nano:nano" "tmux:tmux"
     else
-        echo "Nano:nano" "Screen:screen" "OpenSSH:openssh-server"
+        echo "Nano:nano" "tmux:tmux" "OpenSSH:openssh-server"
     fi
 }
 ```
@@ -1602,7 +1602,7 @@ backup_file() {
 ```bash
 add_change_header() {
     local file="$1"
-    local config_type="$2"  # "nano", "screen", "shell"
+    local config_type="$2"  # "nano", "tmux", "shell"
     local already_added=false
 
     for added_file in "${HEADER_ADDED_FILES[@]}"; do
@@ -1613,7 +1613,7 @@ add_change_header() {
     echo "" >> "$file"
     case "$config_type" in
         nano)   echo "# nano configuration - managed by script" >> "$file" ;;
-        screen) echo "# GNU screen configuration - managed by script" >> "$file" ;;
+        tmux)   echo "# tmux configuration - managed by system-setup.sh" >> "$file" ;;
         shell)  echo "# Shell configuration - managed by script" >> "$file" ;;
     esac
     echo "# Updated: $(date)" >> "$file"
@@ -2222,7 +2222,7 @@ install_packages() {
     local os=$(detect_os)
     verify_package_manager "$os" || return 1
 
-    local packages=("nano" "screen" "htop")
+    local packages=("nano" "tmux" "htop")
     for pkg in "${packages[@]}"; do
         if is_package_installed "$os" "$pkg"; then
             print_success "- $pkg already installed"

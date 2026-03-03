@@ -20,7 +20,6 @@ alias chown="chown -vv"
 alias diff="diff --color"
 alias lsblk='lsblk -o "NAME,FSTYPE,FSVER,LABEL,FSAVAIL,SIZE,FSUSE%,MOUNTPOINTS,UUID"'
 alias lxc-ls="lxc-ls -f"
-alias screen="screen -T $TERM"
 
 # 7z compression helpers
 alias 7z-ultra1="7z a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on -mmt"
@@ -116,12 +115,6 @@ alias lsblk='lsblk -o "NAME,FSTYPE,FSVER,LABEL,FSAVAIL,SIZE,FSUSE%,MOUNTPOINTS,U
 
 ```
 alias lxc-ls="lxc-ls -f"
-```
-
-## `screen`
-
-```
-alias screen="screen -T $TERM"
 ```
 
 ## `7z` compression helpers

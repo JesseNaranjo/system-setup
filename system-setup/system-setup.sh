@@ -445,7 +445,7 @@ main() {
     print_info "Using scope: $scope"
     echo ""
 
-    # Step 3: System Configuration (nano, screen, shell)
+    # Step 3: System Configuration (nano, tmux, shell)
     source "${SCRIPT_DIR}/system-modules/system-configuration.sh"
     main_configure_system "$scope"
     echo ""

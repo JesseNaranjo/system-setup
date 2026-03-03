@@ -13,7 +13,7 @@ The script will:
 1. Auto-update all scripts from GitHub (if curl/wget available)
 2. Detect your OS (Linux/macOS) and environment (container/host)
 3. Offer to install required packages
-4. Configure nano, screen, and shell settings
+4. Configure nano, tmux, and shell settings
 5. Apply system-level configurations (swap, SSH, /etc/issue) if running with appropriate privileges
 
 ## Directory Structure
@@ -27,7 +27,7 @@ system-setup/
     ├── migrate-to-systemd-networkd.sh         # ifupdown to systemd-networkd migration
     ├── modernize-apt-sources.sh               # APT DEB822 migration
     ├── package-management.sh                  # Package installation
-    ├── system-configuration.sh                # Nano/screen/shell setup
+    ├── system-configuration.sh                # Nano/tmux/shell setup
     ├── system-configuration-issue.sh          # /etc/issue network display
     ├── system-configuration-openssh-server.sh # SSH socket activation
     ├── system-configuration-swap.sh           # Swap memory setup
@@ -75,7 +75,7 @@ Shared utility library providing common functionality across all modules.
 **Global Variables:**
 - `DETECTED_OS`: "linux", "macos", or "unknown"
 - `RUNNING_IN_CONTAINER`: Boolean for container detection
-- `NANO_INSTALLED`, `SCREEN_INSTALLED`, `OPENSSH_SERVER_INSTALLED`: Package tracking
+- `NANO_INSTALLED`, `TMUX_INSTALLED`, `OPENSSH_SERVER_INSTALLED`: Package tracking
 - `BACKED_UP_FILES[]`: List of files backed up in current session
 - `CREATED_BACKUP_FILES[]`: List of backup files created
 - `HEADER_ADDED_FILES[]`: Files that have received change headers
@@ -99,7 +99,7 @@ Shared utility library providing common functionality across all modules.
 - `get_package_list()`: Returns OS-specific package definitions
 - `is_package_installed()`: Checks if package exists (works with apt/Homebrew)
 - `verify_package_manager()`: Ensures apt or Homebrew is available
-- `track_special_packages()`: Sets flags for nano, screen, openssh-server
+- `track_special_packages()`: Sets flags for nano, tmux, openssh-server
 
 **File Management:**
 - `backup_file()`: Creates timestamped backups (once per session per file)
@@ -223,7 +223,7 @@ Checks for and installs required packages.
 - htop → `htop`
 - Nano Editor → `nano`
 - OpenSSH Server → `openssh-server`
-- Screen (GNU) → `screen`
+- tmux (terminal multiplexer) → `tmux`
 
 **macOS (Homebrew):**
 - 7-zip → `sevenzip`
@@ -232,7 +232,7 @@ Checks for and installs required packages.
 - htop → `htop`
 - Nano Editor → `nano`
 - Ollama → `ollama`
-- Screen (GNU) → `screen`
+- tmux (terminal multiplexer) → `tmux`
 
 **Functionality:**
 - Checks each package individually with interactive prompts
@@ -240,7 +240,7 @@ Checks for and installs required packages.
 - On macOS: Uses `brew list` to check installation
 - Displays dependency tree before installation (macOS only)
 - Prompts for confirmation before installing
-- Tracks special packages (nano, screen, openssh-server) for later configuration
+- Tracks special packages (nano, tmux, openssh-server) for later configuration
 - Continues with partial success (doesn't abort on installation failure)
 
 **Installation Process:**
@@ -254,10 +254,10 @@ brew install <packages>
 
 ### system-modules/system-configuration.sh
 
-Configures nano editor, GNU screen, and shell settings.
+Configures nano editor, tmux, and shell settings.
 
 **Parameters:**
-- `user`: Configure current user only (`~/.nanorc`, `~/.screenrc`, `~/.bashrc` or `~/.zshrc`)
+- `user`: Configure current user only (`~/.nanorc`, `~/.tmux.conf`, `~/.bashrc` or `~/.zshrc`)
 - `system`: Configure system-wide (all users in `/home/` plus root)
 
 #### Nano Configuration
@@ -285,20 +285,20 @@ set tabsize 4
 **Linux:**
 - Creates config at `/etc/nanorc` (system) or `~/.nanorc` (user)
 
-#### GNU Screen Configuration
+#### tmux Configuration
 
 **Settings Applied:**
 ```bash
-startup_message off
-defscrollback 9999
-scrollback 9999
-defmousetrack on
-mousetrack on
+set -g mouse on
+set -g history-limit 50000
+set -g base-index 1
+set -g pane-base-index 1
+set -g default-terminal "tmux-256color"
 ```
 
 **Config Locations:**
-- System: `/etc/screenrc`
-- User: `~/.screenrc`
+- System: `/etc/tmux.conf`
+- User: `~/.tmux.conf`
 
 #### Shell Configuration
 
@@ -330,7 +330,6 @@ alias ls='ls --color=auto --group-directories-first -AFHhl'
 alias diff='diff --color'
 alias lsblk='lsblk -o "NAME,FSTYPE,FSVER,LABEL,FSAVAIL,SIZE,FSUSE%,MOUNTPOINTS,UUID"'
 alias lxc-ls='lxc-ls -f'
-alias screen='screen -T $TERM'
 ```
 
 **7-Zip Compression Helpers:**
@@ -575,7 +574,7 @@ Updates `/etc/issue` with network interface information (Linux only, system scop
 
 **Modifications:**
 - `~/.nanorc`
-- `~/.screenrc`
+- `~/.tmux.conf`
 - `~/.bashrc` (Linux) or `~/.zshrc` (macOS)
 
 **Behavior:**
@@ -589,9 +588,9 @@ Updates `/etc/issue` with network interface information (Linux only, system scop
 **Target:** All users + system-wide configs
 
 **Modifications:**
-- Root user: `/root/.nanorc`, `/root/.screenrc`, `/root/.bashrc` or `/root/.zshrc`
-- All users: `/home/*/.nanorc`, `/home/*/.screenrc`, `/home/*/.bashrc` or `/home/*/.zshrc`
-- System-wide: `/etc/nanorc`, `/etc/screenrc`, `/etc/bash.bashrc` or `/etc/zshrc`
+- Root user: `/root/.nanorc`, `/root/.tmux.conf`, `/root/.bashrc` or `/root/.zshrc`
+- All users: `/home/*/.nanorc`, `/home/*/.tmux.conf`, `/home/*/.bashrc` or `/home/*/.zshrc`
+- System-wide: `/etc/nanorc`, `/etc/tmux.conf`, `/etc/bash.bashrc` or `/etc/zshrc`
 - System configs: `/etc/fstab`, `/etc/issue`, `/etc/systemd/system/ssh.socket.d/`
 
 **Additional Features:**
@@ -852,7 +851,7 @@ source ~/.zshrc   # macOS
 
 All global variables managed in `utils.sh`:
 - Detection flags: `DETECTED_OS`, `RUNNING_IN_CONTAINER`
-- Package flags: `NANO_INSTALLED`, `SCREEN_INSTALLED`, `OPENSSH_SERVER_INSTALLED`
+- Package flags: `NANO_INSTALLED`, `TMUX_INSTALLED`, `OPENSSH_SERVER_INSTALLED`
 - Tracking arrays: `BACKED_UP_FILES[]`, `CREATED_BACKUP_FILES[]`, `HEADER_ADDED_FILES[]`
 
 ### Module Independence
@@ -895,7 +894,7 @@ Each module can be run independently for focused configuration:
 # Install/check packages only
 ./system-modules/package-management.sh
 
-# Configure nano, screen, and shell only
+# Configure nano, tmux, and shell only
 ./system-modules/system-configuration.sh user    # User scope
 ./system-modules/system-configuration.sh system  # System scope
 
@@ -922,7 +921,7 @@ When running the main script, modules are executed in this order:
 4. **Network Migration** - Offered if system uses ifupdown (Linux only)
 5. **Modernize APT Sources** - Updates APT sources (Linux only)
 6. **Package Management** - Checks and installs packages
-7. **System Configuration** - Configures nano, screen, and shell
+7. **System Configuration** - Configures nano, tmux, and shell
 8. **Swap Configuration** - Sets up swap memory (system scope only)
 9. **OpenSSH Server** - Configures SSH socket activation (system scope only)
 10. **Issue Configuration** - Updates /etc/issue (system scope only)
@@ -969,12 +968,12 @@ The `utils.sh` file provides common functionality used by all modules:
 
 ### User Scope
 - Configures settings for the current user only
-- Modifies `~/.nanorc`, `~/.screenrc`, `~/.bashrc` (or `~/.zshrc`)
+- Modifies `~/.nanorc`, `~/.tmux.conf`, `~/.bashrc` (or `~/.zshrc`)
 - Does not require root privileges
 
 ### System Scope
 - Configures settings system-wide
-- Modifies `/etc/nanorc`, `/etc/screenrc`, `/etc/bash.bashrc` (or `/etc/zshrc`)
+- Modifies `/etc/nanorc`, `/etc/tmux.conf`, `/etc/bash.bashrc` (or `/etc/zshrc`)
 - Configures all users in `/home/` and root
 - Includes system-level tasks: swap, SSH, /etc/issue
 - Requires root privileges on Linux

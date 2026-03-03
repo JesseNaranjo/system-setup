@@ -664,7 +664,7 @@ backup_file() {
 # Add change header to file (only once per session)
 add_change_header() {
     local file="$1"
-    local config_type="$2"  # "nano", "screen", or "shell"
+    local config_type="$2"  # "nano", "tmux", or "shell"
     local already_added=false
 
     # Check if header already added in this session
@@ -809,7 +809,7 @@ update_config_line() {
     fi
 }
 
-# Wrapper for simple key-value or key-only settings (e.g., nano, screen)
+# Wrapper for simple key-value or key-only settings (e.g., nano, tmux)
 add_config_if_needed() {
     local config_type="$1"
     local file="$2"

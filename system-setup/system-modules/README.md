@@ -10,7 +10,7 @@ This directory contains modular configuration scripts for the system-setup suite
 | `migrate-to-systemd-networkd.sh` | Migrate from ifupdown to systemd-networkd | Linux | System |
 | `modernize-apt-sources.sh` | Convert APT sources to DEB822 format | Linux | System |
 | `package-management.sh` | Install and verify required packages | Linux/macOS | System |
-| `system-configuration.sh` | Configure nano, screen, and shell | Linux/macOS | User/System |
+| `system-configuration.sh` | Configure nano, tmux, and shell | Linux/macOS | User/System |
 | `system-configuration-issue.sh` | Update /etc/issue with network info | Linux | System |
 | `system-configuration-openssh-server.sh` | Configure SSH socket activation | Linux | System |
 | `system-configuration-swap.sh` | Create and enable swap memory | Linux | System |
