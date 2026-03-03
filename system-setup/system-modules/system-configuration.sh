@@ -418,8 +418,13 @@ configure_shell_for_user() {
         add_alias_if_needed "$shell_config" "lsblk" 'lsblk -o "NAME,FSTYPE,FSVER,LABEL,FSAVAIL,SIZE,FSUSE%,MOUNTPOINTS,UUID"' "enhanced lsblk"
         add_alias_if_needed "$shell_config" "lxc-ls" "lxc-ls -f" "formatted lxc-ls"
     fi
-    if [[ "$SCREEN_INSTALLED" == true ]]; then
-        add_alias_if_needed "$shell_config" "screen" 'screen -T $TERM' "screen with proper terminal type"
+    # Clean up old screen alias if GNU Screen is no longer installed
+    if ! command -v screen &>/dev/null; then
+        if config_exists "$shell_config" "alias[[:space:]]+screen="; then
+            update_config_line "shell" "$shell_config" "alias[[:space:]]+screen=" \
+                "# Screen alias removed - GNU Screen uninstalled" \
+                "screen alias cleanup (Screen uninstalled)"
+        fi
     fi
 
     # 7z compression helpers
@@ -667,9 +672,14 @@ main_configure_system() {
         echo ""
     fi
 
-    if [[ "$SCREEN_INSTALLED" == true ]] || [[ -f $(get_screen_config_file "$scope") ]]; then
-        configure_screen "$scope"
+    if [[ "$TMUX_INSTALLED" == true ]] || [[ -f $(get_tmux_config_file "$scope") ]]; then
+        configure_tmux "$scope"
         echo ""
+    fi
+
+    # Clean up Screen config files if Screen is no longer installed
+    if ! command -v screen &>/dev/null; then
+        cleanup_screen_config "$scope"
     fi
 
     configure_shell "$scope"
