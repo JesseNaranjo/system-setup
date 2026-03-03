@@ -92,41 +92,42 @@ configure_nano() {
 }
 
 # ============================================================================
-# Screen Configuration
+# tmux Configuration
 # ============================================================================
 
-get_screen_config_file() {
+get_tmux_config_file() {
     local scope="$1"  # "user" or "system"
 
     if [[ "$scope" == "system" ]]; then
-        echo "/etc/screenrc"
+        echo "/etc/tmux.conf"
     else
-        echo "$HOME/.screenrc"
+        echo "$HOME/.tmux.conf"
     fi
 }
 
-# Configure GNU screen
-configure_screen() {
+# Configure tmux
+configure_tmux() {
     local scope="$1"  # "user" or "system"
 
-    print_info "Configuring GNU screen..."
+    print_info "Configuring tmux..."
 
-    local config_file=$(get_screen_config_file "$scope")
+    local config_file
+    config_file=$(get_tmux_config_file "$scope")
 
     # Create config file if it doesn't exist (with world-readable permissions)
     if [[ ! -f "$config_file" ]]; then
-        print_info "Creating new screen configuration file: $config_file"
+        print_info "Creating new tmux configuration file: $config_file"
     fi
     create_config_file "$config_file"
 
     # Configure each setting individually
-    add_config_if_needed "screen" "$config_file" "startup_message" "off" "startup message setting"
-    add_config_if_needed "screen" "$config_file" "defscrollback" "9999" "default scrollback setting"
-    add_config_if_needed "screen" "$config_file" "scrollback" "9999" "scrollback setting"
-    add_config_if_needed "screen" "$config_file" "defmousetrack" "on" "default mouse tracking setting"
-    add_config_if_needed "screen" "$config_file" "mousetrack" "on" "mouse tracking setting"
+    add_config_if_needed "tmux" "$config_file" "set -g mouse" "on" "mouse support"
+    add_config_if_needed "tmux" "$config_file" "set -g history-limit" "50000" "scrollback history"
+    add_config_if_needed "tmux" "$config_file" "set -g base-index" "1" "1-indexed windows"
+    add_config_if_needed "tmux" "$config_file" "set -g pane-base-index" "1" "1-indexed panes"
+    add_config_if_needed "tmux" "$config_file" "set -g default-terminal" '"tmux-256color"' "terminal type"
 
-    print_success "GNU screen configuration completed for $config_file"
+    print_success "tmux configuration completed for $config_file"
 }
 
 # ============================================================================
