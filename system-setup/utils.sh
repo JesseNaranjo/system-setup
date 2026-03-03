@@ -53,7 +53,7 @@ HEADER_ADDED_FILES=()
 CURL_INSTALLED=false
 FASTFETCH_INSTALLED=false
 NANO_INSTALLED=false
-SCREEN_INSTALLED=false
+TMUX_INSTALLED=false
 OPENSSH_SERVER_INSTALLED=false
 
 # Environment detection flags
@@ -387,8 +387,8 @@ get_package_list() {
     if [[ "$DETECTED_OS" == "macos" ]]; then
         # macOS packages (brew)
         echo "7-zip:sevenzip"
-        echo "Apple Containers:container"
         echo "AWK:awk"
+        echo "Apple Containers:container"
         echo "Bash:bash"
         echo "CA Certificates:ca-certificates"
         echo "cURL:curl"
@@ -399,7 +399,7 @@ get_package_list() {
         echo "Nano Editor:nano"
         echo "Ollama:ollama"
         echo "OrbStack:orbstack"
-        echo "Screen (GNU):screen"
+        echo "tmux (terminal multiplexer):tmux"
         echo "UTM:utm"
     else
         # Linux packages (apt)
@@ -414,8 +414,8 @@ get_package_list() {
         echo "jq (JSON data processor):jq"
         echo "Nano Editor:nano"
         echo "OpenSSH Server:openssh-server"
-        echo "Screen (GNU):screen"
         echo "sudo:sudo"
+        echo "tmux (terminal multiplexer):tmux"
     fi
 }
 
@@ -425,16 +425,17 @@ get_removable_package_list() {
     if [[ "$DETECTED_OS" == "macos" ]]; then
         # macOS packages to remove (brew)
         # Empty for now - add packages here as needed
-        :
+        echo "Screen (GNU):screen"
     else
         # Linux packages to remove (apt)
         # These are typically unnecessary locale/i18n packages
         echo "Debconf i18n:debconf-i18n"
-        echo "GnuPG Utils:gnupg-utils"
-        echo "GPG WKS Client:gpg-wks-client"
         echo "GPG Error l10n:libgpg-error-l10n"
-        echo "Util-Linux Locales:util-linux-locales"
+        echo "GPG WKS Client:gpg-wks-client"
+        echo "GnuPG Utils:gnupg-utils"
         echo "Kerberos Locales:krb5-locales"
+        echo "Screen (GNU):screen"
+        echo "Util-Linux Locales:util-linux-locales"
     fi
 }
 
@@ -540,8 +541,8 @@ track_special_packages() {
         FASTFETCH_INSTALLED=true
     elif [[ "$package" == "nano" ]]; then
         NANO_INSTALLED=true
-    elif [[ "$package" == "screen" ]]; then
-        SCREEN_INSTALLED=true
+    elif [[ "$package" == "tmux" ]]; then
+        TMUX_INSTALLED=true
     elif [[ "$package" == "openssh-server" ]]; then
         OPENSSH_SERVER_INSTALLED=true
     fi
@@ -684,8 +685,8 @@ add_change_header() {
         nano)
             header_line="# nano configuration - managed by system-setup.sh"
             ;;
-        screen)
-            header_line="# GNU screen configuration - managed by system-setup.sh"
+        tmux)
+            header_line="# tmux configuration - managed by system-setup.sh"
             ;;
         shell)
             header_line="# Shell configuration - managed by system-setup.sh"
