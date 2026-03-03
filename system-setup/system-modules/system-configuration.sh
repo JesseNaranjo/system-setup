@@ -5,7 +5,7 @@
 #
 # This script:
 # - Configures nano editor with sensible defaults and syntax highlighting
-# - Configures GNU screen with scrollback and mouse support
+# - Configures tmux with mouse support and sensible defaults
 # - Configures shell aliases and prompt colors for users
 
 set -euo pipefail
