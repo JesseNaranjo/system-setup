@@ -99,7 +99,11 @@ get_tmux_config_file() {
     local scope="$1"  # "user" or "system"
 
     if [[ "$scope" == "system" ]]; then
-        echo "/etc/tmux.conf"
+        if [[ "$DETECTED_OS" == "macos" ]]; then
+            echo "/opt/homebrew/etc/tmux.conf"
+        else
+            echo "/etc/tmux.conf"
+        fi
     else
         echo "$HOME/.tmux.conf"
     fi

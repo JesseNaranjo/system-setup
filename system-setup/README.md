@@ -313,7 +313,8 @@ unbind \"
 ```
 
 **Config Locations:**
-- System: `/etc/tmux.conf`
+- System (Linux): `/etc/tmux.conf`
+- System (macOS): `/opt/homebrew/etc/tmux.conf`
 - User: `~/.tmux.conf`
 
 #### Shell Configuration
