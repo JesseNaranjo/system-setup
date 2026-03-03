@@ -541,10 +541,10 @@ track_special_packages() {
         FASTFETCH_INSTALLED=true
     elif [[ "$package" == "nano" ]]; then
         NANO_INSTALLED=true
-    elif [[ "$package" == "tmux" ]]; then
-        TMUX_INSTALLED=true
     elif [[ "$package" == "openssh-server" ]]; then
         OPENSSH_SERVER_INSTALLED=true
+    elif [[ "$package" == "tmux" ]]; then
+        TMUX_INSTALLED=true
     fi
 }
 
@@ -685,11 +685,11 @@ add_change_header() {
         nano)
             header_line="# nano configuration - managed by system-setup.sh"
             ;;
-        tmux)
-            header_line="# tmux configuration - managed by system-setup.sh"
-            ;;
         shell)
             header_line="# Shell configuration - managed by system-setup.sh"
+            ;;
+        tmux)
+            header_line="# tmux configuration - managed by system-setup.sh"
             ;;
     esac
 
