@@ -131,6 +131,36 @@ configure_tmux() {
 }
 
 # ============================================================================
+# Screen Cleanup (transitional - removes Screen configs when Screen is uninstalled)
+# ============================================================================
+
+# Clean up GNU Screen configuration files when Screen is no longer installed.
+# Backs up files before deletion. Silently skips if files don't exist.
+cleanup_screen_config() {
+    local scope="$1"  # "user" or "system"
+
+    # Determine screenrc path based on scope
+    local screenrc
+    if [[ "$scope" == "system" ]]; then
+        screenrc="/etc/screenrc"
+    else
+        screenrc="$HOME/.screenrc"
+    fi
+
+    # Remove screenrc file if it exists (backup_file provides safety net)
+    if [[ -f "$screenrc" ]]; then
+        print_info "Cleaning up GNU Screen configuration (Screen is no longer installed)..."
+        backup_file "$screenrc"
+        if needs_elevation "$screenrc"; then
+            run_elevated rm -f "$screenrc"
+        else
+            rm -f "$screenrc"
+        fi
+        print_success "✓ Removed $screenrc (backup created)"
+    fi
+}
+
+# ============================================================================
 # Shell Configuration
 # ============================================================================
 
