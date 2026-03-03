@@ -759,6 +759,7 @@ update_config_line() {
             add_change_header "$file" "$config_type"
 
             local temp_file=$(mktemp)
+            local original_perms=$(get_file_permissions "$file")
 
             # Use awk to find the line, comment it, and append the new line at the end of the file
             if ! awk -v pattern="^[[:space:]]*${setting_pattern}" -v new_line="${full_line}" '
@@ -782,18 +783,21 @@ update_config_line() {
             fi
 
             # Replace the original file with the updated temporary file
+            # and restore original permissions (mktemp creates files with 600)
             if needs_elevation "$file"; then
                 if ! run_elevated mv "$temp_file" "$file"; then
                     rm -f "$temp_file"
                     print_error "Failed to update $file"
                     return 1
                 fi
+                run_elevated chmod "$original_perms" "$file"
             else
                 if ! mv "$temp_file" "$file"; then
                     rm -f "$temp_file"
                     print_error "Failed to update $file"
                     return 1
                 fi
+                chmod "$original_perms" "$file"
             fi
             print_success "✓ $description updated in $file"
         fi
