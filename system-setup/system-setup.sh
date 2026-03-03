@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 
 # system-setup.sh - System configuration and package management orchestrator
-# Implements configurations from nano.md, screen-gnu.md, and shell.md
+# Implements configurations from nano.md, tmux.md, and shell.md
 #
 # Usage: ./system-setup.sh
 #
 # This script orchestrates multiple focused configuration modules:
 # - APT sources modernization
 # - Package management (apt/Homebrew)
-# - System configuration (nano, screen, shell)
+# - System configuration (nano, tmux, shell)
 # - Swap memory setup
 # - Container static IP configuration
 # - OpenSSH server socket configuration
@@ -395,10 +395,10 @@ main() {
     else
         echo "            ✖ nano editor (not installed, will be skipped)"
     fi
-    if [[ "$SCREEN_INSTALLED" == true ]]; then
-        echo "            ✓ GNU screen settings"
+    if [[ "$TMUX_INSTALLED" == true ]]; then
+        echo "            ✓ tmux settings"
     else
-        echo "            ✖ GNU screen (not installed, will be skipped)"
+        echo "            ✖ tmux (not installed, will be skipped)"
     fi
     if [[ "$OPENSSH_SERVER_INSTALLED" == true ]]; then
         echo "            ✓ OpenSSH Server (socket-based activation option)"
@@ -414,8 +414,8 @@ main() {
 
     # Ask for scope (user vs system) for all components
     print_info "Choose configuration scope:"
-    echo "            1) User-specific - nano/screen/shell for current user"
-    echo "            2) System-wide (root) - nano/screen system-wide, /etc/issue, shell all users, swap, SSH socket"
+    echo "            1) User-specific - nano/tmux/shell for current user"
+    echo "            2) System-wide (root) - nano/tmux system-wide, /etc/issue, shell all users, swap, SSH socket"
     echo "            Ctrl+C to cancel configuration and exit"
     echo ""
     read -p "            Enter choice (1-2): " -r scope_choice
