@@ -9,6 +9,7 @@ set -g default-terminal "tmux-256color"
 
 set -g history-limit 50000
 set -g mouse on
+set -g remain-on-exit on
 
 set -g window-style 'bg=color235'
 set -g window-active-style 'bg=color233'
