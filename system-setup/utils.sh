@@ -416,6 +416,7 @@ get_package_list() {
         echo "OpenSSH Server:openssh-server"
         echo "sudo:sudo"
         echo "tmux (terminal multiplexer):tmux"
+        echo "UDisks:udisks2"
     fi
 }
 
