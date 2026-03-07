@@ -133,7 +133,7 @@ configure_tmux() {
     # Behavior
     add_config_if_needed "tmux" "$config_file" "set -g history-limit" "50000" "scrollback history"
     add_config_if_needed "tmux" "$config_file" "set -g mouse" "on" "mouse support"
-    add_config_if_needed "tmux" "$config_file" "set -g remain-on-exit" "on" "keep panes open after process exits"
+    #add_config_if_needed "tmux" "$config_file" "set -g remain-on-exit" "on" "keep panes open after process exits"
 
     # Appearance
     add_config_if_needed "tmux" "$config_file" "set -g window-style" "'bg=color235'" "inactive window background"
