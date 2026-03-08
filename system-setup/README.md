@@ -13,7 +13,7 @@ The script will:
 1. Auto-update all scripts from GitHub (if curl/wget available)
 2. Detect your OS (Linux/macOS) and environment (container/host)
 3. Offer to install required packages
-4. Configure nano, tmux, and shell settings
+4. Configure git, nano, tmux, and shell settings
 5. Apply system-level configurations (swap, SSH, /etc/issue) if running with appropriate privileges
 
 ## Directory Structure
@@ -27,6 +27,7 @@ system-setup/
     ├── migrate-to-systemd-networkd.sh         # ifupdown to systemd-networkd migration
     ├── modernize-apt-sources.sh               # APT DEB822 migration
     ├── package-management.sh                  # Package installation
+    ├── system-configuration-git.sh            # Git configuration
     ├── system-configuration.sh                # Nano/tmux/shell setup
     ├── system-configuration-issue.sh          # /etc/issue network display
     ├── system-configuration-openssh-server.sh # SSH socket activation
@@ -58,7 +59,8 @@ Main orchestrator that coordinates all configuration modules.
 6. Modernize APT sources (Linux only)
 7. Check and install packages
 8. Prompt for configuration scope (user vs system)
-9. Run configuration modules
+9. Configure git (if installed)
+10. Run configuration modules (nano, tmux, shell)
 10. Display summary of changes
 
 **Self-Update Process:**
@@ -75,7 +77,7 @@ Shared utility library providing common functionality across all modules.
 **Global Variables:**
 - `DETECTED_OS`: "linux", "macos", or "unknown"
 - `RUNNING_IN_CONTAINER`: Boolean for container detection
-- `NANO_INSTALLED`, `TMUX_INSTALLED`, `OPENSSH_SERVER_INSTALLED`: Package tracking
+- `GIT_INSTALLED`, `NANO_INSTALLED`, `TMUX_INSTALLED`, `OPENSSH_SERVER_INSTALLED`: Package tracking
 - `BACKED_UP_FILES[]`: List of files backed up in current session
 - `CREATED_BACKUP_FILES[]`: List of backup files created
 - `HEADER_ADDED_FILES[]`: Files that have received change headers
@@ -99,7 +101,7 @@ Shared utility library providing common functionality across all modules.
 - `get_package_list()`: Returns OS-specific package definitions
 - `is_package_installed()`: Checks if package exists (works with apt/Homebrew)
 - `verify_package_manager()`: Ensures apt or Homebrew is available
-- `track_special_packages()`: Sets flags for nano, tmux, openssh-server
+- `track_special_packages()`: Sets flags for git, nano, tmux, openssh-server
 
 **File Management:**
 - `backup_file()`: Creates timestamped backups (once per session per file)
@@ -113,6 +115,7 @@ Shared utility library providing common functionality across all modules.
 - `add_config_if_needed()`: Wrapper for key-value settings
 - `add_alias_if_needed()`: Wrapper for shell aliases
 - `add_export_if_needed()`: Wrapper for environment variables
+- `add_git_config_if_needed()`: Wrapper for git config settings (user/system scope)
 
 **User Interaction:**
 - `prompt_yes_no()`: Interactive confirmation with default values
@@ -251,6 +254,38 @@ apt update && apt install <packages>
 # macOS
 brew install <packages>
 ```
+
+### system-modules/system-configuration-git.sh
+
+Configures git with sensible defaults using `git config` commands.
+
+**Parameters:**
+- `user`: Configure current user only (`~/.gitconfig`)
+- `system`: Configure system-wide (`/etc/gitconfig` or `/opt/homebrew/etc/gitconfig`)
+
+**Settings Applied:**
+```bash
+init.defaultBranch = development
+fetch.prune = true
+branch.sort = -committerdate
+push.autoSetupRemote = true
+column.ui = auto
+tag.sort = -version:refname
+diff.colorMoved = zebra
+diff.algorithm = histogram
+merge.conflictstyle = diff3
+help.autocorrect = prompt
+```
+
+**Conditional Settings:**
+- `core.editor = nano` (only if nano is installed)
+- Git LFS initialization (only if git-lfs is installed)
+
+**Architecture:**
+- Uses `git config` commands directly (not file editing) for correct INI format handling
+- Data-driven settings array for DRY iteration
+- Backs up gitconfig file before modifications
+- Idempotent: skips settings already at desired value
 
 ### system-modules/system-configuration.sh
 
@@ -590,6 +625,7 @@ Updates `/etc/issue` with network interface information (Linux only, system scop
 **Target:** Current user only
 
 **Modifications:**
+- `~/.gitconfig`
 - `~/.nanorc`
 - `~/.tmux.conf`
 - `~/.bashrc` (Linux) or `~/.zshrc` (macOS)
@@ -607,7 +643,7 @@ Updates `/etc/issue` with network interface information (Linux only, system scop
 **Modifications:**
 - Root user: `/root/.nanorc`, `/root/.tmux.conf`, `/root/.bashrc` or `/root/.zshrc`
 - All users: `/home/*/.nanorc`, `/home/*/.tmux.conf`, `/home/*/.bashrc` or `/home/*/.zshrc`
-- System-wide: `/etc/nanorc`, `/etc/tmux.conf`, `/etc/bash.bashrc` or `/etc/zshrc`
+- System-wide: `/etc/gitconfig`, `/etc/nanorc`, `/etc/tmux.conf`, `/etc/bash.bashrc` or `/etc/zshrc`
 - System configs: `/etc/fstab`, `/etc/issue`, `/etc/systemd/system/ssh.socket.d/`
 
 **Additional Features:**
@@ -739,6 +775,10 @@ sudo ./system-modules/modernize-apt-sources.sh
 # Package check only
 ./system-modules/package-management.sh
 
+# Git configuration
+./system-modules/system-configuration-git.sh user    # User scope
+sudo ./system-modules/system-configuration-git.sh system  # System scope
+
 # User-level config
 ./system-modules/system-configuration.sh user
 
@@ -868,7 +908,7 @@ source ~/.zshrc   # macOS
 
 All global variables managed in `utils.sh`:
 - Detection flags: `DETECTED_OS`, `RUNNING_IN_CONTAINER`
-- Package flags: `NANO_INSTALLED`, `TMUX_INSTALLED`, `OPENSSH_SERVER_INSTALLED`
+- Package flags: `GIT_INSTALLED`, `NANO_INSTALLED`, `TMUX_INSTALLED`, `OPENSSH_SERVER_INSTALLED`
 - Tracking arrays: `BACKED_UP_FILES[]`, `CREATED_BACKUP_FILES[]`, `HEADER_ADDED_FILES[]`
 
 ### Module Independence
@@ -911,6 +951,10 @@ Each module can be run independently for focused configuration:
 # Install/check packages only
 ./system-modules/package-management.sh
 
+# Configure git only
+./system-modules/system-configuration-git.sh user    # User scope
+./system-modules/system-configuration-git.sh system  # System scope
+
 # Configure nano, tmux, and shell only
 ./system-modules/system-configuration.sh user    # User scope
 ./system-modules/system-configuration.sh system  # System scope
@@ -938,7 +982,8 @@ When running the main script, modules are executed in this order:
 4. **Network Migration** - Offered if system uses ifupdown (Linux only)
 5. **Modernize APT Sources** - Updates APT sources (Linux only)
 6. **Package Management** - Checks and installs packages
-7. **System Configuration** - Configures nano, tmux, and shell
+7. **Git Configuration** - Configures git defaults (if installed)
+8. **System Configuration** - Configures nano, tmux, and shell
 8. **Swap Configuration** - Sets up swap memory (system scope only)
 9. **OpenSSH Server** - Configures SSH socket activation (system scope only)
 10. **Issue Configuration** - Updates /etc/issue (system scope only)
