@@ -52,9 +52,10 @@ HEADER_ADDED_FILES=()
 # Read by: system-configuration.sh to determine what to configure
 CURL_INSTALLED=false
 FASTFETCH_INSTALLED=false
+GIT_INSTALLED=false
 NANO_INSTALLED=false
-TMUX_INSTALLED=false
 OPENSSH_SERVER_INSTALLED=false
+TMUX_INSTALLED=false
 
 # Environment detection flags
 # Set by: detect_container() called from detect_environment()
@@ -394,6 +395,7 @@ get_package_list() {
         echo "cURL:curl"
         echo "Fastfetch:fastfetch"
         echo "Git:git"
+        echo "Git LFS:git-lfs"
         echo "htop:htop"
         echo "Monocle:monocle-app"
         echo "Nano Editor:nano"
@@ -409,6 +411,7 @@ get_package_list() {
         echo "cURL:curl"
         echo "Fastfetch:fastfetch"
         echo "Git:git"
+        echo "Git LFS:git-lfs"
         echo "gpm:gpm"
         echo "htop:htop"
         echo "jq (JSON data processor):jq"
@@ -540,6 +543,8 @@ track_special_packages() {
         CURL_INSTALLED=true
     elif [[ "$package" == "fastfetch" ]]; then
         FASTFETCH_INSTALLED=true
+    elif [[ "$package" == "git" ]]; then
+        GIT_INSTALLED=true
     elif [[ "$package" == "nano" ]]; then
         NANO_INSTALLED=true
     elif [[ "$package" == "openssh-server" ]]; then
@@ -870,6 +875,45 @@ add_export_if_needed() {
     local setting_pattern="export[[:space:]]+${var_name}="
 
     update_config_line "shell" "$file" "$setting_pattern" "$full_export" "$description"
+}
+
+# Add or update a git config setting if not already set to the desired value
+# Uses git config commands directly (handles INI format correctly)
+# Usage: add_git_config_if_needed "scope" "key" "value" "description"
+#   scope: "user" (--global) or "system" (--system)
+add_git_config_if_needed() {
+    local scope="$1"
+    local key="$2"
+    local value="$3"
+    local description="$4"
+
+    local git_scope_flag
+    if [[ "$scope" == "system" ]]; then
+        git_scope_flag="--system"
+    else
+        git_scope_flag="--global"
+    fi
+
+    # Check current value
+    local current_value
+    current_value=$(git config "$git_scope_flag" --get "$key" 2>/dev/null || echo "")
+
+    if [[ "$current_value" == "$value" ]]; then
+        print_success "- $description already configured correctly"
+        return 0
+    fi
+
+    if [[ -n "$current_value" ]]; then
+        print_info "+ Updating $description ($current_value → $value)"
+    else
+        print_info "+ Setting $description"
+    fi
+
+    if [[ "$scope" == "system" ]]; then
+        run_elevated git config --system "$key" "$value"
+    else
+        git config --global "$key" "$value"
+    fi
 }
 
 # Ensure a file ends with exactly N blank lines (default: 1)
