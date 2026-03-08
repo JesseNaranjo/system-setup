@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 
 # system-setup.sh - System configuration and package management orchestrator
-# Implements configurations from nano.md, tmux.md, and shell.md
+# Implements configurations from git.md, nano.md, tmux.md, and shell.md
 #
 # Usage: ./system-setup.sh
 #
 # This script orchestrates multiple focused configuration modules:
 # - APT sources modernization
 # - Package management (apt/Homebrew)
+# - Git configuration
 # - System configuration (nano, tmux, shell)
 # - Swap memory setup
 # - Container static IP configuration
@@ -41,6 +42,7 @@ get_script_list() {
     echo "system-modules/migrate-to-systemd-networkd.sh"
     echo "system-modules/modernize-apt-sources.sh"
     echo "system-modules/package-management.sh"
+    echo "system-modules/system-configuration-git.sh"
     echo "system-modules/system-configuration-issue.sh"
     echo "system-modules/system-configuration-openssh-server.sh"
     echo "system-modules/system-configuration-swap.sh"
@@ -390,6 +392,11 @@ main() {
     print_info "Step 2: Configuration"
     print_info "---------------------"
     print_info "This script will configure:"
+    if [[ "$GIT_INSTALLED" == true ]]; then
+        echo "            ✓ git settings"
+    else
+        echo "            ✖ git (not installed, will be skipped)"
+    fi
     if [[ "$NANO_INSTALLED" == true ]]; then
         echo "            ✓ nano editor settings"
     else
@@ -414,8 +421,8 @@ main() {
 
     # Ask for scope (user vs system) for all components
     print_info "Choose configuration scope:"
-    echo "            1) User-specific - nano/tmux/shell for current user"
-    echo "            2) System-wide (root) - nano/tmux system-wide, /etc/issue, shell all users, swap, SSH socket"
+    echo "            1) User-specific - git/nano/tmux/shell for current user"
+    echo "            2) System-wide (root) - git/nano/tmux system-wide, /etc/issue, shell all users, swap, SSH socket"
     echo "            Ctrl+C to cancel configuration and exit"
     echo ""
     read -p "            Enter choice (1-2): " -r scope_choice
@@ -444,6 +451,13 @@ main() {
 
     print_info "Using scope: $scope"
     echo ""
+
+    # Git configuration
+    if [[ "$GIT_INSTALLED" == true ]]; then
+        source "${SCRIPT_DIR}/system-modules/system-configuration-git.sh"
+        main_configure_git "$scope"
+        echo ""
+    fi
 
     # Step 3: System Configuration (nano, tmux, shell)
     source "${SCRIPT_DIR}/system-modules/system-configuration.sh"
