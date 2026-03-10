@@ -55,13 +55,18 @@ Main orchestrator that coordinates all configuration modules.
 2. Update `system-setup.sh` itself and restart if changed
 3. Update all module scripts
 4. Detect OS and container environment
-5. Offer container static IP configuration (if in container)
-6. Modernize APT sources (Linux only)
-7. Check and install packages
-8. Prompt for configuration scope (user vs system)
-9. Configure git (if installed)
-10. Run configuration modules (nano, tmux, shell)
-10. Display summary of changes
+5. Migrate network to systemd-networkd (if ifupdown present, Linux only)
+6. Offer container static IP configuration (if in container)
+7. Modernize APT sources (Linux only)
+8. Check and install packages
+9. Prompt for configuration scope (user vs system)
+10. Configure git (if installed)
+11. Run configuration modules (nano, tmux, shell)
+12. Configure timezone (system scope only)
+13. Configure swap (system scope, Linux only)
+14. Configure OpenSSH socket (system scope, if installed)
+15. Update /etc/issue (system scope, Linux only)
+16. Display summary of changes
 
 **Self-Update Process:**
 - Fetches scripts from: `https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/system-setup`
@@ -832,7 +837,7 @@ Edit `get_package_list()` function in `utils.sh` to add or remove packages.
 - systemd (for service/socket management)
 
 **macOS:**
-- bash 3.2+ (built-in)
+- bash 4.0+ (install via Homebrew: `brew install bash`)
 - Homebrew (for package management)
 
 ### Optional (Enhanced Features)
@@ -977,16 +982,17 @@ Each module can be run independently for focused configuration:
 When running the main script, modules are executed in this order:
 
 1. **Environment Detection** - OS and container detection
-2. **Timezone Configuration** - Prompts if system is set to UTC
+2. **Network Migration** - Offered if system uses ifupdown (Linux only)
 3. **Container Static IP** - Offered if running in a container
-4. **Network Migration** - Offered if system uses ifupdown (Linux only)
-5. **Modernize APT Sources** - Updates APT sources (Linux only)
-6. **Package Management** - Checks and installs packages
+4. **Modernize APT Sources** - Updates APT sources (Linux only)
+5. **Package Management** - Checks and installs packages
+6. **Configuration Scope** - Prompts for user vs system-wide
 7. **Git Configuration** - Configures git defaults (if installed)
 8. **System Configuration** - Configures nano, tmux, and shell
-8. **Swap Configuration** - Sets up swap memory (system scope only)
-9. **OpenSSH Server** - Configures SSH socket activation (system scope only)
-10. **Issue Configuration** - Updates /etc/issue (system scope only)
+9. **Timezone Configuration** - Prompts if system is set to UTC (system scope only)
+10. **Swap Configuration** - Sets up swap memory (system scope only)
+11. **OpenSSH Server** - Configures SSH socket activation (system scope only)
+12. **Issue Configuration** - Updates /etc/issue (system scope only)
 
 ## Key Features
 
