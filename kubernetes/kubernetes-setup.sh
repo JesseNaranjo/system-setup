@@ -53,6 +53,8 @@ get_script_list() {
     echo "kubernetes-modules/validate-cluster.sh"
     echo "kubernetes-modules/manage-certificates.sh"
     echo "kubernetes-modules/configure-kube-editor.sh"
+    echo "start-k8s.sh"
+    echo "stop-k8s.sh"
 }
 
 # ============================================================================
