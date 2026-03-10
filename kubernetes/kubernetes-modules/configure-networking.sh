@@ -14,12 +14,16 @@ source "${SCRIPT_DIR}/utils-k8s.sh"
 # Sysctl Settings
 # ============================================================================
 
-readonly SYSCTL_SETTINGS=(
-    "net.ipv4.ip_forward|1|IPv4 forwarding"
-    "net.bridge.bridge-nf-call-iptables|1|bridge netfilter for iptables"
-    "net.bridge.bridge-nf-call-ip6tables|1|bridge netfilter for ip6tables"
-)
-readonly SYSCTL_CONF="/etc/sysctl.d/k8s.conf"
+if [[ -z "${SYSCTL_SETTINGS+x}" ]]; then
+    readonly SYSCTL_SETTINGS=(
+        "net.ipv4.ip_forward|1|IPv4 forwarding"
+        "net.bridge.bridge-nf-call-iptables|1|bridge netfilter for iptables"
+        "net.bridge.bridge-nf-call-ip6tables|1|bridge netfilter for ip6tables"
+    )
+fi
+if [[ -z "${SYSCTL_CONF+x}" ]]; then
+    readonly SYSCTL_CONF="/etc/sysctl.d/k8s.conf"
+fi
 
 # ============================================================================
 # Sysctl Management
@@ -94,7 +98,9 @@ main_configure_networking() {
     print_info "Configuring Kubernetes networking..."
 
     # Warn if br_netfilter module is not loaded (required for bridge-nf-call settings)
-    if command -v lsmod &>/dev/null && ! lsmod | grep -q br_netfilter; then
+    local lsmod_output
+    lsmod_output="$(lsmod 2>/dev/null || cat /proc/modules 2>/dev/null || true)"
+    if [[ -n "$lsmod_output" ]] && ! echo "$lsmod_output" | grep -q br_netfilter; then
         print_warning "br_netfilter kernel module is not loaded; bridge-nf-call settings may fail"
     fi
 

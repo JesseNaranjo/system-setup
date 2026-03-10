@@ -14,8 +14,12 @@ source "${SCRIPT_DIR}/utils-k8s.sh"
 # Configuration
 # ============================================================================
 
-readonly REQUIRED_MODULES=("br_netfilter" "overlay")
-readonly MODULES_CONF="/etc/modules-load.d/k8s.conf"
+if [[ -z "${REQUIRED_MODULES+x}" ]]; then
+    readonly REQUIRED_MODULES=("br_netfilter" "overlay")
+fi
+if [[ -z "${MODULES_CONF+x}" ]]; then
+    readonly MODULES_CONF="/etc/modules-load.d/k8s.conf"
+fi
 
 # ============================================================================
 # Module Loading
@@ -26,11 +30,13 @@ readonly MODULES_CONF="/etc/modules-load.d/k8s.conf"
 # Returns: 0 if loaded, 1 otherwise
 is_module_loaded() {
     local module="$1"
-    if ! command -v lsmod &>/dev/null; then
-        print_warning "lsmod not found (kmod not installed); cannot check if ${module} is loaded"
+    if command -v lsmod &>/dev/null; then
+        lsmod | grep -q "^${module}"
+    elif [[ -r /proc/modules ]]; then
+        grep -q "^${module} " /proc/modules
+    else
         return 1
     fi
-    lsmod | grep -q "^${module}"
 }
 
 # Load a kernel module if not already loaded
@@ -94,6 +100,12 @@ persist_modules() {
 
 main_configure_kernel_modules() {
     detect_environment
+
+    if ! command -v modprobe &>/dev/null; then
+        print_error "modprobe not found; cannot load kernel modules"
+        print_info "Install kmod first: apt install -y kmod"
+        return 1
+    fi
 
     print_info "Configuring required kernel modules..."
 

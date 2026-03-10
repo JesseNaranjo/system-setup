@@ -332,7 +332,11 @@ show_status_overview() {
     echo "            ======================================================="
 
     # Check kernel modules
-    if command -v lsmod &>/dev/null && lsmod | grep -q "^br_netfilter" && lsmod | grep -q "^overlay"; then
+    local lsmod_check="lsmod"
+    if ! command -v lsmod &>/dev/null; then
+        lsmod_check="cat /proc/modules"
+    fi
+    if $lsmod_check 2>/dev/null | grep -q "^br_netfilter" && $lsmod_check 2>/dev/null | grep -q "^overlay"; then
         print_success "Kernel modules (br_netfilter, overlay) loaded"
     else
         print_warning "Kernel modules not fully loaded"

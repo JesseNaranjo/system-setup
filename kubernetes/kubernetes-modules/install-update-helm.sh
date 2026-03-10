@@ -9,7 +9,9 @@ fi
 # shellcheck source=../utils-k8s.sh
 source "${SCRIPT_DIR}/utils-k8s.sh"
 
-readonly HELM_INSTALL_URL="https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3"
+if [[ -z "${HELM_INSTALL_URL+x}" ]]; then
+    readonly HELM_INSTALL_URL="https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3"
+fi
 
 # Verify that curl is available for downloading the installer
 check_prerequisites() {

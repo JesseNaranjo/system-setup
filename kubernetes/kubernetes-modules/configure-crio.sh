@@ -14,8 +14,12 @@ source "${SCRIPT_DIR}/utils-k8s.sh"
 # Configuration
 # ============================================================================
 
-readonly CRIO_CONF_DIR="/etc/crio/crio.conf.d"
-readonly CRIO_K8S_CONF="${CRIO_CONF_DIR}/10-k8s.conf"
+if [[ -z "${CRIO_CONF_DIR+x}" ]]; then
+    readonly CRIO_CONF_DIR="/etc/crio/crio.conf.d"
+fi
+if [[ -z "${CRIO_K8S_CONF+x}" ]]; then
+    readonly CRIO_K8S_CONF="${CRIO_CONF_DIR}/10-k8s.conf"
+fi
 
 # ============================================================================
 # CRI-O Configuration
