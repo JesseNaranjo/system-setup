@@ -26,6 +26,10 @@ readonly MODULES_CONF="/etc/modules-load.d/k8s.conf"
 # Returns: 0 if loaded, 1 otherwise
 is_module_loaded() {
     local module="$1"
+    if ! command -v lsmod &>/dev/null; then
+        print_warning "lsmod not found (kmod not installed); cannot check if ${module} is loaded"
+        return 1
+    fi
     lsmod | grep -q "^${module}"
 }
 

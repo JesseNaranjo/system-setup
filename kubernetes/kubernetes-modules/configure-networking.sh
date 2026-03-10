@@ -94,7 +94,7 @@ main_configure_networking() {
     print_info "Configuring Kubernetes networking..."
 
     # Warn if br_netfilter module is not loaded (required for bridge-nf-call settings)
-    if ! lsmod | grep -q br_netfilter; then
+    if command -v lsmod &>/dev/null && ! lsmod | grep -q br_netfilter; then
         print_warning "br_netfilter kernel module is not loaded; bridge-nf-call settings may fail"
     fi
 
