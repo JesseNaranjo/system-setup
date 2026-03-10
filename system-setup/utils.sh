@@ -925,7 +925,11 @@ normalize_trailing_newlines() {
         printf '\n' >> "$temp_file"
     done
 
-    run_elevated mv "$temp_file" "$file"
+    if needs_elevation "$file"; then
+        run_elevated mv "$temp_file" "$file"
+    else
+        mv "$temp_file" "$file"
+    fi
 }
 
 # ============================================================================
