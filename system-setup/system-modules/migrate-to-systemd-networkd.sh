@@ -92,6 +92,11 @@ check_migration_preconditions() {
         return 1
     fi
 
+    if ! check_privileges "system_config"; then
+        print_error "Network migration requires root privileges"
+        return 1
+    fi
+
     # Check for /etc/network/interfaces
     if [[ ! -f "$INTERFACES_FILE" ]]; then
         print_info "No $INTERFACES_FILE found - system doesn't use ifupdown."

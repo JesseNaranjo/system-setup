@@ -318,6 +318,10 @@ configure_swap() {
     # Convert to MB for dd count
     local swap_mb=$((swap_gb * 1024))
 
+    if ! check_disk_space "/var" "$swap_mb"; then
+        return 1
+    fi
+
     print_info "- Detected RAM: ${ram_gb} GB"
     print_info "- Calculated swap size: ${swap_gb} GB (${swap_mb} MB)"
     echo ""

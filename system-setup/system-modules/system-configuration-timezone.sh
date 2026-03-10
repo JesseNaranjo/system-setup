@@ -98,15 +98,16 @@ configure_timezone() {
     echo "            5) Other    (show all timezones)"
     echo ""
 
+    local -a tz_presets=("America/New_York" "America/Chicago" "America/Denver" "America/Los_Angeles")
+
     local tz_choice
     read -p "            Enter choice (1-5): " -r tz_choice </dev/tty
 
     local new_tz=""
     case "$tz_choice" in
-        1) new_tz="America/New_York" ;;
-        2) new_tz="America/Chicago" ;;
-        3) new_tz="America/Denver" ;;
-        4) new_tz="America/Los_Angeles" ;;
+        [1-4])
+            new_tz="${tz_presets[$((tz_choice - 1))]}"
+            ;;
         5)
             echo ""
             print_info "Available timezones:"

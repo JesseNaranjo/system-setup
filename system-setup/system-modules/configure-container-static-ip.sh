@@ -35,6 +35,11 @@ configure_container_static_ip() {
         return 0
     fi
 
+    if ! check_privileges "system_config"; then
+        print_error "Container static IP configuration requires root privileges"
+        return 1
+    fi
+
     print_info "Checking static IP configuration for container..."
 
     # Check if systemd-networkd is available

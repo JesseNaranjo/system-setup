@@ -453,25 +453,23 @@ configure_shell_for_user() {
     fi
 
     # 7z compression helpers
+    local sevenz_bin sevenz_comment
     if [[ "$DETECTED_OS" == "macos" ]]; then
-        if ! grep_file -q "^# 7z compression helpers (macOS" "$shell_config" 2>/dev/null; then
-            backup_file "$shell_config"
-            add_change_header "$shell_config" "shell"
-            append_to_file "$shell_config" "" "# 7z compression helpers (macOS - using 7zz)"
-        fi
-        add_alias_if_needed "$shell_config" "7z-ultra1" "7zz a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 1"
-        add_alias_if_needed "$shell_config" "7z-ultra2" "7zz a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 2"
-        add_alias_if_needed "$shell_config" "7z-ultra3" "7zz a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 3"
+        sevenz_bin="7zz"
+        sevenz_comment="# 7z compression helpers (macOS - using 7zz)"
     else
-        if ! grep_file -q "^# 7z compression helpers$" "$shell_config" 2>/dev/null; then
-            backup_file "$shell_config"
-            add_change_header "$shell_config" "shell"
-            append_to_file "$shell_config" "" "# 7z compression helpers"
-        fi
-        add_alias_if_needed "$shell_config" "7z-ultra1" "7z a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 1"
-        add_alias_if_needed "$shell_config" "7z-ultra2" "7z a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 2"
-        add_alias_if_needed "$shell_config" "7z-ultra3" "7z a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 3"
+        sevenz_bin="7z"
+        sevenz_comment="# 7z compression helpers"
     fi
+
+    if ! grep_file -q "^# 7z compression helpers" "$shell_config" 2>/dev/null; then
+        backup_file "$shell_config"
+        add_change_header "$shell_config" "shell"
+        append_to_file "$shell_config" "" "$sevenz_comment"
+    fi
+    add_alias_if_needed "$shell_config" "7z-ultra1" "$sevenz_bin a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 1"
+    add_alias_if_needed "$shell_config" "7z-ultra2" "$sevenz_bin a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 2"
+    add_alias_if_needed "$shell_config" "7z-ultra3" "$sevenz_bin a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt" "7z ultra compression level 3"
 
     # Homebrew curl PATH configuration (macOS only)
     if [[ "$DETECTED_OS" == "macos" ]] && [[ "$CURL_INSTALLED" == true ]]; then

@@ -36,6 +36,16 @@ configure_ssh_socket() {
         return 0
     fi
 
+    if ! check_privileges "system_config"; then
+        print_error "OpenSSH configuration requires root privileges"
+        return 1
+    fi
+
+    if ! is_package_installed "openssh-server"; then
+        print_info "OpenSSH Server is not installed. Skipping SSH socket configuration."
+        return 0
+    fi
+
     print_info "Checking OpenSSH Server configuration..."
 
     # Check current state of ssh.service and ssh.socket
