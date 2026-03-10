@@ -46,6 +46,7 @@ DETECTED_PKG_MANAGER=""
 BACKED_UP_FILES=()
 CREATED_BACKUP_FILES=()
 HEADER_ADDED_FILES=()
+CREATED_CONFIG_FILES=()
 
 # Package installation tracking flags
 # Set by: track_special_packages() called from package-management.sh
@@ -56,6 +57,15 @@ GIT_INSTALLED=false
 NANO_INSTALLED=false
 OPENSSH_SERVER_INSTALLED=false
 TMUX_INSTALLED=false
+
+declare -A SPECIAL_PACKAGE_FLAGS=(
+    [curl]=CURL_INSTALLED
+    [fastfetch]=FASTFETCH_INSTALLED
+    [git]=GIT_INSTALLED
+    [nano]=NANO_INSTALLED
+    [openssh-server]=OPENSSH_SERVER_INSTALLED
+    [tmux]=TMUX_INSTALLED
+)
 
 # Environment detection flags
 # Set by: detect_container() called from detect_environment()
@@ -246,22 +256,18 @@ detect_environment() {
 
 # Detect the system's package manager
 # Sets DETECTED_PKG_MANAGER to: "apt", "brew", "dnf", "zypper", or "unknown"
-# Extensible: Add new package managers by adding elif blocks
+# Extensible: Add new package managers by adding to the array
 detect_package_manager() {
-    if command -v apt &>/dev/null; then
-        DETECTED_PKG_MANAGER="apt"
-    elif command -v brew &>/dev/null; then
-        DETECTED_PKG_MANAGER="brew"
-    elif command -v dnf &>/dev/null; then
-        DETECTED_PKG_MANAGER="dnf"
-    elif command -v zypper &>/dev/null; then
-        DETECTED_PKG_MANAGER="zypper"
-    # Future: Add more package managers here
-    # elif command -v pacman &>/dev/null; then
-    #     DETECTED_PKG_MANAGER="pacman"
-    else
-        DETECTED_PKG_MANAGER="unknown"
-    fi
+    local -a pkg_managers=("apt" "brew" "dnf" "zypper")
+
+    for mgr in "${pkg_managers[@]}"; do
+        if command -v "$mgr" &>/dev/null; then
+            DETECTED_PKG_MANAGER="$mgr"
+            return 0
+        fi
+    done
+
+    DETECTED_PKG_MANAGER="unknown"
 }
 
 # ============================================================================
@@ -455,6 +461,10 @@ populate_package_cache() {
         package_list+=("${line##*:}")
     done < <(get_package_list)
 
+    while read -r line; do
+        package_list+=("${line##*:}")
+    done < <(get_removable_package_list)
+
     local installed_packages
     if [[ "$DETECTED_OS" == "macos" ]]; then
         # Get all installed packages from brew (both formulae and casks)
@@ -538,19 +548,9 @@ verify_package_manager() {
 # Track if specific packages are installed for later configuration
 track_special_packages() {
     local package="$1"
-
-    if [[ "$package" == "curl" ]]; then
-        CURL_INSTALLED=true
-    elif [[ "$package" == "fastfetch" ]]; then
-        FASTFETCH_INSTALLED=true
-    elif [[ "$package" == "git" ]]; then
-        GIT_INSTALLED=true
-    elif [[ "$package" == "nano" ]]; then
-        NANO_INSTALLED=true
-    elif [[ "$package" == "openssh-server" ]]; then
-        OPENSSH_SERVER_INSTALLED=true
-    elif [[ "$package" == "tmux" ]]; then
-        TMUX_INSTALLED=true
+    local flag_name="${SPECIAL_PACKAGE_FLAGS[$package]:-}"
+    if [[ -n "$flag_name" ]]; then
+        printf -v "$flag_name" '%s' 'true'
     fi
 }
 
@@ -612,6 +612,32 @@ create_config_file() {
         fi
         chmod "$perms" "$file"
     fi
+
+    CREATED_CONFIG_FILES+=("$file")
+}
+
+# Check if a filesystem has enough free space
+# Usage: check_disk_space "/var" 4096  (checks /var has 4096 MB free)
+# Returns: 0 if enough space, 1 if not (prints error)
+check_disk_space() {
+    local path="$1"
+    local required_mb="$2"
+    local buffer_mb="${3:-512}"
+    local total_needed=$((required_mb + buffer_mb))
+
+    local available_mb
+    available_mb=$(df -BM "$path" --output=avail 2>/dev/null | tail -1 | tr -d ' M')
+
+    # Fallback for macOS (no --output flag)
+    if [[ -z "$available_mb" ]]; then
+        available_mb=$(df -m "$path" | tail -1 | awk '{print $4}')
+    fi
+
+    if [[ -z "$available_mb" || "$available_mb" -lt "$total_needed" ]]; then
+        print_error "Insufficient disk space on ${path} (${available_mb:-unknown} MB available, need ${required_mb} MB + ${buffer_mb} MB buffer)"
+        return 1
+    fi
+    return 0
 }
 
 # Backup file if it exists (only once per session)
@@ -938,13 +964,21 @@ normalize_trailing_newlines() {
 
 # Print a summary of all changes made
 print_session_summary() {
-    if [[ ${#BACKED_UP_FILES[@]} -eq 0 && ${#CREATED_BACKUP_FILES[@]} -eq 0 ]]; then
+    if [[ ${#BACKED_UP_FILES[@]} -eq 0 && ${#CREATED_BACKUP_FILES[@]} -eq 0 && ${#CREATED_CONFIG_FILES[@]} -eq 0 ]]; then
         echo -e "            ${GRAY}No files were modified during this session.${NC}"
         return
     fi
 
     print_summary "─── Session ─────────────────────────────────────────────────────────"
     echo ""
+
+    if [[ ${#CREATED_CONFIG_FILES[@]} -gt 0 ]]; then
+        print_info "Files Created:"
+        for file in "${CREATED_CONFIG_FILES[@]+"${CREATED_CONFIG_FILES[@]}"}"; do
+            echo "            - $file"
+        done
+        echo ""
+    fi
 
     if [[ ${#BACKED_UP_FILES[@]} -gt 0 ]]; then
         print_success "${GREEN}Files Updated:${NC}"
