@@ -21,6 +21,9 @@
 
 set -euo pipefail
 
+# Debug trap: print location when script exits unexpectedly
+trap 'echo "DEBUG: script exited at line $LINENO in ${BASH_SOURCE[0]:-unknown} (exit code: $?)" >&2' ERR
+
 # Get the directory where this script is located
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -332,11 +335,7 @@ show_status_overview() {
     echo "            ======================================================="
 
     # Check kernel modules
-    local lsmod_check="lsmod"
-    if ! command -v lsmod &>/dev/null; then
-        lsmod_check="cat /proc/modules"
-    fi
-    if $lsmod_check 2>/dev/null | grep -q "^br_netfilter" && $lsmod_check 2>/dev/null | grep -q "^overlay"; then
+    if command -v lsmod &>/dev/null && lsmod | grep -q "^br_netfilter" && lsmod | grep -q "^overlay"; then
         print_success "Kernel modules (br_netfilter, overlay) loaded"
     else
         print_warning "Kernel modules not fully loaded"
@@ -449,10 +448,13 @@ main() {
     # Step 1: Configure kernel modules (must be before networking)
     print_info "Step 1: Kernel Modules"
     print_info "----------------------"
+    print_debug "About to source configure-kernel-modules.sh"
     source "${SCRIPT_DIR}/kubernetes-modules/configure-kernel-modules.sh"
+    print_debug "Source complete, calling main_configure_kernel_modules"
     if ! main_configure_kernel_modules; then
         print_error "Kernel module configuration failed. Continuing..."
     fi
+    print_debug "Step 1 complete"
     echo ""
 
     # Step 2: Configure APT repositories

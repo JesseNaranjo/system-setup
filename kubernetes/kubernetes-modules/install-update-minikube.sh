@@ -11,9 +11,7 @@ fi
 # shellcheck source=../utils-k8s.sh
 source "${SCRIPT_DIR}/utils-k8s.sh"
 
-if [[ -z "${MINIKUBE_BASE_URL+x}" ]]; then
-    readonly MINIKUBE_BASE_URL="https://storage.googleapis.com/minikube/releases/latest"
-fi
+readonly MINIKUBE_BASE_URL="https://storage.googleapis.com/minikube/releases/latest"
 
 # ============================================================================
 # Prerequisites

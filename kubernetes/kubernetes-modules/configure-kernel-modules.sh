@@ -14,12 +14,8 @@ source "${SCRIPT_DIR}/utils-k8s.sh"
 # Configuration
 # ============================================================================
 
-if [[ -z "${REQUIRED_MODULES+x}" ]]; then
-    readonly REQUIRED_MODULES=("br_netfilter" "overlay")
-fi
-if [[ -z "${MODULES_CONF+x}" ]]; then
-    readonly MODULES_CONF="/etc/modules-load.d/k8s.conf"
-fi
+readonly REQUIRED_MODULES=("br_netfilter" "overlay")
+readonly MODULES_CONF="/etc/modules-load.d/k8s.conf"
 
 # ============================================================================
 # Module Loading
@@ -103,7 +99,7 @@ main_configure_kernel_modules() {
 
     if ! command -v modprobe &>/dev/null; then
         print_error "modprobe not found; cannot load kernel modules"
-        print_info "Install kmod first: apt install -y kmod"
+        print_info "Install kmod: apt install -y kmod"
         return 1
     fi
 
