@@ -116,7 +116,7 @@ All READMEs should follow this section order (omit sections that don't apply):
 
 ### Template: Script Directory
 
-Use for: `lxc/`, `github/`, `kubernetes/`, `llm/`, `utils/` - directories containing standalone scripts.
+Use for: `lxc/`, `github/`, `llm/`, `utils/` - directories containing standalone scripts.
 
 ```markdown
 # Directory Name
@@ -420,7 +420,7 @@ This repository uses two distinct script architectures. Choose based on context:
 - Modules can be run standalone for testing but are designed to be sourced
 - Global state shared via variables in `utils.sh`
 
-### 2. Standalone Scripts (github/, kubernetes/, lxc/, llm/)
+### 2. Standalone Scripts (github/, lxc/, llm/)
 
 **When to use:** Self-contained scripts that must work when downloaded individually.
 
@@ -440,12 +440,12 @@ This repository uses two distinct script architectures. Choose based on context:
 | Scenario | Architecture | Reason |
 |----------|-------------|--------|
 | New feature for system-setup | Modular | Add to existing module or create new one |
-| New utility script in lxc/, k8s/, etc. | Standalone | Must work when downloaded individually |
+| New utility script in lxc/, llm/, etc. | Standalone | Must work when downloaded individually |
 | Shared helper used by multiple modules | Add to utils.sh | Centralized maintenance |
 | One-off automation script | Standalone | Simpler, no dependencies |
 | Simple system task (start/stop services) | Lightweight | Minimal overhead, quick execution |
 
-### 3. Lightweight Scripts (kubernetes/, utils/)
+### 3. Lightweight Scripts (utils/)
 
 **When to use:** Simple automation tasks that don't need user interaction or complex output.
 
@@ -2103,7 +2103,7 @@ This is a personal system configuration repository containing bash scripts and d
 |-----------|------|-------------|
 | `system-setup/` | Modular | Main system configuration suite (the core of the repository) |
 | `lxc/` | Standalone | LXC container management scripts |
-| `kubernetes/` | Standalone | Kubernetes cluster management scripts |
+| `kubernetes/` | Modular | Kubernetes cluster setup and configuration suite |
 | `github/` | Standalone | GitHub CLI automation scripts |
 | `llm/` | Standalone | Ollama/LLM management scripts |
 | `utils/` | Standalone | Cross-platform utility scripts |
@@ -2137,7 +2137,7 @@ cd lxc
 **Kubernetes scripts:**
 ```bash
 cd kubernetes
-./_download-k8s-scripts.sh  # Update all k8s scripts
+sudo ./kubernetes-setup.sh  # Full orchestrated setup
 ./start-k8s.sh              # Start k8s services
 ./stop-k8s.sh               # Stop k8s services
 ```
