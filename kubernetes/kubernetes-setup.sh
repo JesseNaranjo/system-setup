@@ -37,6 +37,7 @@ OBSOLETE_SCRIPTS=(
     "update-k8s-repos.sh"
     "install-update-helm.sh"
     "install-update-minikube.sh"
+    "utils.sh"
 )
 
 # List of module scripts to download/update (excludes kubernetes-setup.sh and utils-k8s.sh)
