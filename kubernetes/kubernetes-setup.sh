@@ -331,10 +331,12 @@ update_modules() {
 
 # Show status overview of Kubernetes components
 show_status_overview() {
+    print_debug "Entering show_status_overview"
     print_info "Kubernetes Component Status"
     echo "            ======================================================="
 
     # Check kernel modules
+    print_debug "Checking kernel modules"
     if command -v lsmod &>/dev/null && lsmod | grep -q "^br_netfilter" && lsmod | grep -q "^overlay"; then
         print_success "Kernel modules (br_netfilter, overlay) loaded"
     else
@@ -342,6 +344,7 @@ show_status_overview() {
     fi
 
     # Check packages
+    print_debug "Checking packages"
     while IFS=':' read -r display_name package_name; do
         if is_package_installed "$package_name"; then
             print_success "$display_name is installed"
@@ -352,6 +355,7 @@ show_status_overview() {
     done < <(get_package_list)
 
     # Check networking
+    print_debug "Checking networking"
     local ip_forward
     ip_forward=$(sysctl -n net.ipv4.ip_forward 2>/dev/null || echo "0")
     if [[ "$ip_forward" == "1" ]]; then
@@ -361,6 +365,7 @@ show_status_overview() {
     fi
 
     # Check swap
+    print_debug "Checking swap"
     if [[ -z "$(swapon --show --noheadings 2>/dev/null)" ]]; then
         print_success "Swap disabled"
     else
@@ -368,6 +373,7 @@ show_status_overview() {
     fi
 
     # Check Helm
+    print_debug "Checking helm/minikube/cluster"
     if command -v helm &>/dev/null; then
         print_success "Helm installed ($(helm version --short 2>/dev/null || echo 'unknown version'))"
     else
@@ -418,6 +424,7 @@ main() {
         print_debug "- DEBUG MODE ENABLED"
     fi
 
+    print_debug "Calling detect_os"
     detect_os
     echo "            - Detected OS: $DETECTED_OS"
 
@@ -428,6 +435,7 @@ main() {
     fi
 
     # Detect if running in a container (sets RUNNING_IN_CONTAINER global variable)
+    print_debug "Calling detect_container"
     detect_container
     if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
         echo "            - Running inside a container environment"
@@ -435,6 +443,7 @@ main() {
     echo ""
 
     # Root privilege check
+    print_debug "Checking privileges"
     if ! check_privileges "system_config"; then
         print_error "Kubernetes setup requires root privileges"
         print_info "Please re-run the script with: sudo $0"
@@ -443,7 +452,9 @@ main() {
     fi
 
     # Show status overview
+    print_debug "Calling show_status_overview"
     show_status_overview
+    print_debug "show_status_overview complete"
 
     # Step 1: Configure kernel modules (must be before networking)
     print_info "Step 1: Kernel Modules"
@@ -460,37 +471,49 @@ main() {
     # Step 2: Configure APT repositories
     print_info "Step 2: APT Repositories"
     print_info "------------------------"
+    print_debug "Sourcing configure-k8s-repos.sh"
     source "${SCRIPT_DIR}/kubernetes-modules/configure-k8s-repos.sh"
+    print_debug "Calling main_configure_k8s_repos"
     if ! main_configure_k8s_repos; then
         print_error "Repository configuration failed. Continuing..."
     fi
+    print_debug "Step 2 complete"
     echo ""
 
     # Step 3: Install Kubernetes packages
     print_info "Step 3: Package Installation"
     print_info "----------------------------"
+    print_debug "Sourcing install-k8s-packages.sh"
     source "${SCRIPT_DIR}/kubernetes-modules/install-k8s-packages.sh"
+    print_debug "Calling main_install_k8s_packages"
     if ! main_install_k8s_packages; then
         print_error "Package installation failed. Continuing..."
     fi
+    print_debug "Step 3 complete"
     echo ""
 
     # Step 4: Configure networking (requires kernel modules from step 1)
     print_info "Step 4: Network Configuration"
     print_info "-----------------------------"
+    print_debug "Sourcing configure-networking.sh"
     source "${SCRIPT_DIR}/kubernetes-modules/configure-networking.sh"
+    print_debug "Calling main_configure_networking"
     if ! main_configure_networking; then
         print_error "Network configuration failed. Continuing..."
     fi
+    print_debug "Step 4 complete"
     echo ""
 
     # Step 5: Configure swap
     print_info "Step 5: Swap Configuration"
     print_info "--------------------------"
+    print_debug "Sourcing configure-swap.sh"
     source "${SCRIPT_DIR}/kubernetes-modules/configure-swap.sh"
+    print_debug "Calling main_configure_swap"
     if ! main_configure_swap; then
         print_error "Swap configuration failed. Continuing..."
     fi
+    print_debug "Step 5 complete"
     echo ""
 
     # Step 6: Configure CRI-O (if installed)

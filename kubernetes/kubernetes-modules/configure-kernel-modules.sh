@@ -95,21 +95,26 @@ persist_modules() {
 # ============================================================================
 
 main_configure_kernel_modules() {
+    print_debug "Entering main_configure_kernel_modules"
     detect_environment
+    print_debug "detect_environment complete"
 
     if ! command -v modprobe &>/dev/null; then
         print_error "modprobe not found; cannot load kernel modules"
         print_info "Install kmod: apt install -y kmod"
         return 1
     fi
+    print_debug "modprobe check passed"
 
     print_info "Configuring required kernel modules..."
 
     local module
     for module in "${REQUIRED_MODULES[@]}"; do
+        print_debug "Loading module: ${module}"
         load_module "$module"
     done
 
+    print_debug "Calling persist_modules"
     persist_modules
 
     print_success "Kernel module configuration complete"
