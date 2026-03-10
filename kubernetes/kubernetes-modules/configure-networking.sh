@@ -7,8 +7,8 @@ if [[ -z "${SCRIPT_DIR:-}" ]]; then
     readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fi
 
-# shellcheck source=../utils.sh
-source "${SCRIPT_DIR}/utils.sh"
+# shellcheck source=../utils-k8s.sh
+source "${SCRIPT_DIR}/utils-k8s.sh"
 
 # ============================================================================
 # Sysctl Settings

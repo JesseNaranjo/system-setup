@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# utils.sh - Common utilities and variables for kubernetes-setup scripts
+# utils-k8s.sh - Common utilities and variables for kubernetes-setup scripts
 # This script provides shared functionality used across all kubernetes-setup modules
 # Forked from system-setup/utils.sh and maintained independently
 

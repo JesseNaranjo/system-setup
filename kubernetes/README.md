@@ -21,7 +21,7 @@ The orchestrator will:
 | Component | Purpose |
 |-----------|---------|
 | `kubernetes-setup.sh` | Orchestrator script |
-| `utils.sh` | Shared utilities (fork of system-setup/utils.sh) |
+| `utils-k8s.sh` | Shared utilities (fork of system-setup/utils.sh) |
 | `kubernetes-modules/` | Feature modules (sourced by orchestrator) |
 | `start-k8s.sh` | Start Kubernetes services (standalone) |
 | `stop-k8s.sh` | Stop Kubernetes services (standalone) |
@@ -48,9 +48,9 @@ Each module can also be run standalone: `sudo ./kubernetes-modules/<module>.sh`
 ## Adding New Modules
 
 1. Create module in `kubernetes-modules/` following existing patterns
-2. Source `utils.sh` for shared functions
+2. Source `utils-k8s.sh` for shared functions
 3. Add `main_<module_name>()` entry point with `detect_environment` call
-4. Add `# shellcheck source=../utils.sh` directive
+4. Add `# shellcheck source=../utils-k8s.sh` directive
 5. Add execution guard: `[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main_<name> "$@"`
 6. Source and call from `kubernetes-setup.sh` main()
 7. Add to `get_script_list()` in `kubernetes-setup.sh`

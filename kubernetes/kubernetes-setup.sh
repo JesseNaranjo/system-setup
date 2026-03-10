@@ -25,8 +25,8 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source utilities
-# shellcheck source=utils.sh
-source "${SCRIPT_DIR}/utils.sh"
+# shellcheck source=utils-k8s.sh
+source "${SCRIPT_DIR}/utils-k8s.sh"
 
 readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes"
 readonly K8S_VERSION="v1.35"
@@ -39,7 +39,7 @@ OBSOLETE_SCRIPTS=(
     "install-update-minikube.sh"
 )
 
-# List of module scripts to download/update (excludes kubernetes-setup.sh and utils.sh)
+# List of module scripts to download/update (excludes kubernetes-setup.sh and utils-k8s.sh)
 get_script_list() {
     echo "kubernetes-modules/configure-k8s-repos.sh"
     echo "kubernetes-modules/install-k8s-packages.sh"
@@ -148,7 +148,7 @@ download_script() {
     return 1
 }
 
-# Check for updates to kubernetes-setup.sh and utils.sh
+# Check for updates to kubernetes-setup.sh and utils-k8s.sh
 # Will restart kubernetes-setup.sh if either file is updated
 self_update() {
     local setup_updated=false
@@ -190,8 +190,8 @@ self_update() {
         echo ""
     fi
 
-    # Check utils.sh
-    local UTILS_FILE="utils.sh"
+    # Check utils-k8s.sh
+    local UTILS_FILE="utils-k8s.sh"
     local LOCAL_UTILS="${SCRIPT_DIR}/${UTILS_FILE}"
     local TEMP_UTILS="$(mktemp)"
 
