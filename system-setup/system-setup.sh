@@ -147,7 +147,7 @@ self_update() {
     # Check system-setup.sh
     local SETUP_FILE="system-setup.sh"
     local LOCAL_SETUP="${SCRIPT_DIR}/${SETUP_FILE}"
-    local TEMP_SETUP="$(mktemp)"
+    local TEMP_SETUP="$(make_temp_file)"
 
     if download_script "${SETUP_FILE}" "${TEMP_SETUP}"; then
         if diff -u "${LOCAL_SETUP}" "${TEMP_SETUP}" > /dev/null 2>&1; then
@@ -182,7 +182,7 @@ self_update() {
     # Check utils.sh
     local UTILS_FILE="utils.sh"
     local LOCAL_UTILS="${SCRIPT_DIR}/${UTILS_FILE}"
-    local TEMP_UTILS="$(mktemp)"
+    local TEMP_UTILS="$(make_temp_file)"
 
     if download_script "${UTILS_FILE}" "${TEMP_UTILS}"; then
         if diff -u "${LOCAL_UTILS}" "${TEMP_UTILS}" > /dev/null 2>&1; then
@@ -246,7 +246,7 @@ update_modules() {
     while IFS= read -r script_path; do
         local SCRIPT_FILE="$script_path"
         local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
-        local TEMP_SCRIPT_FILE="$(mktemp)"
+        local TEMP_SCRIPT_FILE="$(make_temp_file)"
 
         # Ensure the local directory exists
         local script_dir="$(dirname "$LOCAL_SCRIPT")"
@@ -315,6 +315,13 @@ update_modules() {
 # ============================================================================
 
 main() {
+    cleanup() {
+        for f in "${TEMP_FILES[@]+"${TEMP_FILES[@]}"}"; do
+            rm -f "$f" 2>/dev/null
+        done
+    }
+    trap cleanup EXIT
+
     # Argument parsing
     SKIP_UPDATE=false
     while [[ $# -gt 0 ]]; do

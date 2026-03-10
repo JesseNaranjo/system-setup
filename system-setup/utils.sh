@@ -47,6 +47,7 @@ BACKED_UP_FILES=()
 CREATED_BACKUP_FILES=()
 HEADER_ADDED_FILES=()
 CREATED_CONFIG_FILES=()
+TEMP_FILES=()
 
 # Package installation tracking flags
 # Set by: track_special_packages() called from package-management.sh
@@ -638,6 +639,14 @@ check_disk_space() {
         return 1
     fi
     return 0
+}
+
+# Create a tracked temp file that will be cleaned up on exit
+make_temp_file() {
+    local tmp
+    tmp=$(mktemp)
+    TEMP_FILES+=("$tmp")
+    echo "$tmp"
 }
 
 # Backup file if it exists (only once per session)
