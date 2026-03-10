@@ -66,27 +66,22 @@ detect_download_cmd() {
     else
         DOWNLOAD_CMD=""
         # Display large error message if neither curl nor wget is available
-        echo ""
-        echo -e "            ${YELLOW}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║                        ⚠️   UPDATES NOT AVAILABLE  ⚠️                         ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        Neither 'curl' nor 'wget' is installed on this system.               ║${NC}"
-        echo -e "            ${YELLOW}║        Self-updating functionality requires one of these tools.             ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        To enable self-updating, please install one of the following:        ║${NC}"
-        echo -e "            ${YELLOW}║          • curl  (recommended)                                              ║${NC}"
-        echo -e "            ${YELLOW}║          • wget                                                             ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        Installation commands:                                               ║${NC}"
-        echo -e "            ${YELLOW}║          macOS:    brew install curl                                        ║${NC}"
-        echo -e "            ${YELLOW}║          Debian:   apt install curl                                         ║${NC}"
-        echo -e "            ${YELLOW}║          RHEL:     yum install curl                                         ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        Continuing with local version of the scripts...                      ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
-        echo ""
+        print_warning_box \
+            "UPDATES NOT AVAILABLE" \
+            "" \
+            "Neither 'curl' nor 'wget' is installed on this system." \
+            "Self-updating functionality requires one of these tools." \
+            "" \
+            "To enable self-updating, please install one of the following:" \
+            "  - curl  (recommended)" \
+            "  - wget" \
+            "" \
+            "Installation commands:" \
+            "  macOS:    brew install curl" \
+            "  Debian:   apt install curl" \
+            "  RHEL:     yum install curl" \
+            "" \
+            "Continuing with local version of the scripts..."
         return 1
     fi
 }
@@ -320,27 +315,57 @@ update_modules() {
 # ============================================================================
 
 main() {
+    # Argument parsing
+    SKIP_UPDATE=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --help)
+                echo "Usage: $(basename "$0") [OPTIONS]"
+                echo ""
+                echo "Automated system configuration and package management."
+                echo ""
+                echo "Options:"
+                echo "  --help          Show this help message and exit"
+                echo "  --skip-update   Skip self-update and module update checks"
+                echo "  --debug         Enable debug output"
+                echo ""
+                exit 0
+                ;;
+            --skip-update)
+                SKIP_UPDATE=true
+                shift
+                ;;
+            --debug)
+                DEBUG_MODE=true
+                print_debug "- DEBUG MODE ENABLED"
+                shift
+                ;;
+            *)
+                print_error "Unknown option: $1"
+                print_info "Use --help for usage information"
+                exit 1
+                ;;
+        esac
+    done
+
     # Detect download command (curl or wget) for update functionality
-    if detect_download_cmd; then
-        # Only run self-update if not already updated in this session
-        if [[ ${scriptUpdated:-0} -eq 0 ]]; then
-            self_update "$@"
+    if [[ "$SKIP_UPDATE" != true ]]; then
+        if detect_download_cmd; then
+            # Only run self-update if not already updated in this session
+            if [[ ${scriptUpdated:-0} -eq 0 ]]; then
+                self_update "$@"
+            fi
+
+            # Always check for module updates (not skipped by scriptUpdated) if download cmd available
+            update_modules
+
+            # Clean up any obsolete scripts
+            cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
         fi
-
-        # Always check for module updates (not skipped by scriptUpdated) if download cmd available
-        update_modules
-
-        # Clean up any obsolete scripts
-        cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
     fi
 
     print_info "System Setup and Configuration Script (Idempotent Mode)"
     echo "            ======================================================="
-
-    if [[ $# -ne 0 && $1 == "--debug" ]]; then
-        DEBUG_MODE=true
-        print_debug "- DEBUG MODE ENABLED"
-    fi
 
     detect_os
     echo "            - Detected OS: $DETECTED_OS"
@@ -372,14 +397,14 @@ main() {
         echo ""
     fi
 
-    # Step 1: Modernize APT sources (Linux only)
+    # Modernize APT sources (Linux only, conditional - no step number)
     if [[ "$DETECTED_OS" == "linux" ]]; then
         source "${SCRIPT_DIR}/system-modules/modernize-apt-sources.sh"
         main_modernize_apt_sources
         echo ""
     fi
 
-    # Step 2: Package Management
+    # Step 1: Package Management
     print_info "Step 1: Package Management"
     print_info "---------------------------"
     source "${SCRIPT_DIR}/system-modules/package-management.sh"
@@ -388,7 +413,7 @@ main() {
     fi
     echo ""
 
-    # Get user preferences for configuration scope
+    # Step 2: Configuration Scope
     print_info "Step 2: Configuration"
     print_info "---------------------"
     print_info "This script will configure:"
@@ -460,6 +485,8 @@ main() {
     fi
 
     # Step 3: System Configuration (nano, tmux, shell)
+    print_info "Step 3: System Configuration"
+    print_info "-----------------------------"
     source "${SCRIPT_DIR}/system-modules/system-configuration.sh"
     main_configure_system "$scope"
     echo ""
@@ -467,16 +494,22 @@ main() {
     # All further steps are system scope only
     if [[ "$scope" == "system" ]]; then
         # Step 4: Timezone configuration (system scope only)
+        print_info "Step 4: Timezone"
+        print_info "-----------------"
         source "${SCRIPT_DIR}/system-modules/system-configuration-timezone.sh"
         main_configure_timezone
         echo ""
 
         # Step 5: Swap configuration (system scope only, Linux only)
+        print_info "Step 5: Swap"
+        print_info "-------------"
         source "${SCRIPT_DIR}/system-modules/system-configuration-swap.sh"
         main_configure_swap
         echo ""
 
         # Step 6: OpenSSH Server configuration (system scope only, Linux only)
+        print_info "Step 6: OpenSSH Server"
+        print_info "-----------------------"
         if [[ "$OPENSSH_SERVER_INSTALLED" == true ]]; then
             source "${SCRIPT_DIR}/system-modules/system-configuration-openssh-server.sh"
             main_configure_openssh_server
@@ -486,6 +519,8 @@ main() {
         echo ""
 
         # Step 7: /etc/issue configuration (system scope only, Linux only)
+        print_info "Step 7: /etc/issue"
+        print_info "-------------------"
         source "${SCRIPT_DIR}/system-modules/system-configuration-issue.sh"
         main_configure_issue
         echo ""
