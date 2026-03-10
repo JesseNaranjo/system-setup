@@ -643,22 +643,16 @@ backup_file() {
 
         # Preserve ownership (requires appropriate permissions)
         # Get the owner and group of the original file
+        local owner
         if [[ "$DETECTED_OS" == "macos" ]]; then
-            # macOS stat syntax
-            local owner=$(stat -f "%u:%g" "$file")
-            if needs_elevation "$file"; then
-                run_elevated chown "$owner" "$backup" 2>/dev/null
-            else
-                chown "$owner" "$backup" 2>/dev/null || true
-            fi
+            owner=$(stat -f "%u:%g" "$file")
         else
-            # Linux stat syntax
-            local owner=$(stat -c "%u:%g" "$file")
-            if needs_elevation "$file"; then
-                run_elevated chown "$owner" "$backup" 2>/dev/null
-            else
-                chown "$owner" "$backup" 2>/dev/null || true
-            fi
+            owner=$(stat -c "%u:%g" "$file")
+        fi
+        if needs_elevation "$file"; then
+            run_elevated chown "$owner" "$backup" 2>/dev/null
+        else
+            chown "$owner" "$backup" 2>/dev/null || true
         fi
 
         print_backup "- Created backup: $backup"
