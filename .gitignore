@@ -47,6 +47,9 @@ Desktop.ini
 $RECYCLE.BIN/
 *.lnk
 
+# Worktrees
+.worktrees/
+
 # Caches / temps
 .cache/
 .parcel-cache/
