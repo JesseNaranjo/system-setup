@@ -634,7 +634,7 @@ check_disk_space() {
         available_mb=$(df -m "$path" | tail -1 | awk '{print $4}')
     fi
 
-    if [[ -z "$available_mb" || "$available_mb" -lt "$total_needed" ]]; then
+    if [[ -z "$available_mb" || ! "$available_mb" =~ ^[0-9]+$ || "$available_mb" -lt "$total_needed" ]]; then
         print_error "Insufficient disk space on ${path} (${available_mb:-unknown} MB available, need ${required_mb} MB + ${buffer_mb} MB buffer)"
         return 1
     fi

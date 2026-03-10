@@ -322,8 +322,11 @@ main() {
     }
     trap cleanup EXIT
 
+    # Save original args for self_update restart
+    local -a original_args=("$@")
+
     # Argument parsing
-    SKIP_UPDATE=false
+    local SKIP_UPDATE=false
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --help)
@@ -360,7 +363,7 @@ main() {
         if detect_download_cmd; then
             # Only run self-update if not already updated in this session
             if [[ ${scriptUpdated:-0} -eq 0 ]]; then
-                self_update "$@"
+                self_update "${original_args[@]+"${original_args[@]}"}"
             fi
 
             # Always check for module updates (not skipped by scriptUpdated) if download cmd available
