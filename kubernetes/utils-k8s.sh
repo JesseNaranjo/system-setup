@@ -2,7 +2,7 @@
 
 # utils-k8s.sh - Common utilities and variables for kubernetes-setup scripts
 # This script provides shared functionality used across all kubernetes-setup modules
-# Forked from system-setup/utils.sh and maintained independently
+# Forked from system-setup/utils-sys.sh and maintained independently
 
 # Prevent multiple sourcing
 if [[ -n "${K8S_UTILS_SH_LOADED:-}" ]]; then

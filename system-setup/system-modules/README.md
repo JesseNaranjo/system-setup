@@ -32,7 +32,7 @@ cd system-setup
 Each module can be executed directly for targeted configuration:
 
 ```bash
-# Source utils.sh is handled automatically
+# Source utils-sys.sh is handled automatically
 ./system-modules/package-management.sh
 
 # Some modules require root privileges
@@ -48,8 +48,8 @@ sudo ./system-modules/system-configuration-swap.sh
 All modules follow the same structure:
 
 1. **Header**: Script description and purpose
-2. **SCRIPT_DIR detection**: Locate parent directory for utils.sh
-3. **Source utils.sh**: Import shared functions and variables
+2. **SCRIPT_DIR detection**: Locate parent directory for utils-sys.sh
+3. **Source utils-sys.sh**: Import shared functions and variables
 4. **Module functions**: Implementation specific to the module
 5. **Main entry point**: `main_<module_name>()` function
 6. **Execution guard**: Run main only if executed directly
@@ -64,7 +64,7 @@ if [[ -z "${SCRIPT_DIR:-}" ]]; then
     readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fi
 
-source "${SCRIPT_DIR}/utils.sh"
+source "${SCRIPT_DIR}/utils-sys.sh"
 
 # Module-specific functions here...
 
@@ -80,7 +80,7 @@ fi
 
 ## Dependencies
 
-All modules depend on `../utils.sh` for:
+All modules depend on `../utils-sys.sh` for:
 - Color output functions (`print_info`, `print_success`, `print_error`, etc.)
 - OS detection (`detect_os`, `detect_container`)
 - Configuration management (`backup_file`, `add_config_if_needed`, etc.)
@@ -91,6 +91,6 @@ All modules depend on `../utils.sh` for:
 
 1. Create script in this directory following the structure above
 2. Use `main_<descriptive_name>()` for the entry point
-3. Source `utils.sh` for shared functionality
+3. Source `utils-sys.sh` for shared functionality
 4. Add documentation to `../README.md`
 5. Update this README's module table

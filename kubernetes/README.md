@@ -21,7 +21,7 @@ The orchestrator will:
 | Component | Purpose |
 |-----------|---------|
 | `kubernetes-setup.sh` | Orchestrator script |
-| `utils-k8s.sh` | Shared utilities (fork of system-setup/utils.sh) |
+| `utils-k8s.sh` | Shared utilities (fork of system-setup/utils-sys.sh) |
 | `kubernetes-modules/` | Feature modules (sourced by orchestrator) |
 | `start-k8s.sh` | Start Kubernetes services (standalone) |
 | `stop-k8s.sh` | Stop Kubernetes services (standalone) |

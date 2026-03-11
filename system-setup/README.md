@@ -21,7 +21,8 @@ The script will:
 ```
 system-setup/
 ├── system-setup.sh                            # Main orchestrator
-├── utils.sh                                   # Shared utilities and functions
+├── utils-sys.sh                               # Shared utilities and functions
+├── utils.sh -> utils-sys.sh                   # Backward-compat symlink
 └── system-modules/
     ├── configure-container-static-ip.sh       # Static IP for containers
     ├── migrate-to-systemd-networkd.sh         # ifupdown to systemd-networkd migration
@@ -75,7 +76,7 @@ Main orchestrator that coordinates all configuration modules.
 - Validates downloaded files are valid bash scripts
 - Restarts with updated version if main script changed
 
-### utils.sh
+### utils-sys.sh
 
 Shared utility library providing common functionality across all modules.
 
@@ -827,7 +828,7 @@ Run without curl/wget installed, or modify script to comment out update function
 
 ### Custom Package List
 
-Edit `get_package_list()` function in `utils.sh` to add or remove packages.
+Edit `get_package_list()` function in `utils-sys.sh` to add or remove packages.
 
 ---
 
@@ -908,14 +909,14 @@ source ~/.zshrc   # macOS
 
 ### No Circular Dependencies
 
-- `system-setup.sh` → sources `utils.sh`
-- All modules → source `utils.sh`
+- `system-setup.sh` → sources `utils-sys.sh`
+- All modules → source `utils-sys.sh`
 - Modules never source each other
 - Clear dependency hierarchy
 
 ### Global State Management
 
-All global variables managed in `utils.sh`:
+All global variables managed in `utils-sys.sh`:
 - Detection flags: `DETECTED_OS`, `RUNNING_IN_CONTAINER`
 - Package flags: `GIT_INSTALLED`, `NANO_INSTALLED`, `TMUX_INSTALLED`, `OPENSSH_SERVER_INSTALLED`
 - Tracking arrays: `BACKED_UP_FILES[]`, `CREATED_BACKUP_FILES[]`, `HEADER_ADDED_FILES[]`, `CREATED_CONFIG_FILES[]`, `TEMP_FILES[]`
@@ -923,7 +924,7 @@ All global variables managed in `utils.sh`:
 ### Module Independence
 
 Each module can run standalone:
-- Sources `utils.sh` independently
+- Sources `utils-sys.sh` independently
 - Detects OS if not already done
 - Has own `main_*()` function
 - Checks `if [[ "${BASH_SOURCE[0]}" == "${0}" ]]` for direct execution
@@ -1011,7 +1012,7 @@ The main script automatically checks for updates to all scripts in the system-se
 
 ### Shared Utilities
 
-The `utils.sh` file provides common functionality used by all modules:
+The `utils-sys.sh` file provides common functionality used by all modules:
 
 - **Output Functions**: Colored print functions for consistent messaging
 - **OS Detection**: Automatic Linux/macOS detection
@@ -1023,7 +1024,7 @@ The `utils.sh` file provides common functionality used by all modules:
 
 ### DRY Principles
 
-- Common functionality extracted to `utils.sh`
+- Common functionality extracted to `utils-sys.sh`
 - No circular dependencies between modules
 - Each module is self-contained and independently executable
 - Shared global variables managed centrally

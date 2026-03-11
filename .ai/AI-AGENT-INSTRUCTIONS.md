@@ -9,7 +9,7 @@ This document provides comprehensive patterns, styles, and conventions used acro
 > **Note:** You MUST keep the Quick Reference in sync with [CLAUDE.md](../CLAUDE.md) and [.github/copilot-instructions.md](../.github/copilot-instructions.md).
 
 **Last Updated:** January 2026
-**Primary Reference:** system-setup/system-setup.sh + system-setup/utils.sh
+**Primary Reference:** system-setup/system-setup.sh + system-setup/utils-sys.sh
 **Secondary Reference:** `_download-*-scripts.sh` (standalone script pattern)
 **Scope:** All `.sh` scripts in repository (modular, standalone, and lightweight)
 
@@ -158,7 +158,7 @@ Brief description of the suite and its purpose.
 | Component | Purpose |
 |-----------|---------|
 | `main.sh` | Orchestrator script |
-| `utils.sh` | Shared utilities |
+| `utils-sys.sh` | Shared utilities |
 | `modules/` | Feature modules |
 
 ## Running
@@ -179,7 +179,7 @@ Description of what this module configures.
 ## Adding New Modules
 
 1. Create module in `modules/` following existing patterns
-2. Source `utils.sh` for shared functions
+2. Source `utils-sys.sh` for shared functions
 3. Add `main_<module_name>()` entry point
 4. Source and call from main script
 5. Update this README
@@ -396,7 +396,7 @@ Apply the DRY (Don't Repeat Yourself) principle when code duplication creates ma
 | Scenario | Strategy |
 |----------|----------|
 | Same script | Private function (defined before use) |
-| Same directory/suite | Source shared `utils.sh` |
+| Same directory/suite | Source shared `utils-sys.sh` |
 | Cross-repository | Standalone script with inline functions |
 | Configuration | Constants at script top with `readonly` |
 
@@ -412,15 +412,15 @@ This repository uses two distinct script architectures. Choose based on context:
 
 **Structure:**
 - Main orchestrator: `system-setup.sh`
-- Shared utilities: `utils.sh` (colors, prompts, config functions, file operations)
+- Shared utilities: `utils-sys.sh` (colors, prompts, config functions, file operations)
 - Feature modules: `system-modules/*.sh` (each handles one concern)
 - Modules are sourced at runtime, not executed directly
 
 **Key characteristics:**
-- Source `utils.sh` for all shared functions
+- Source `utils-sys.sh` for all shared functions
 - Use `main_*` naming for module entry points (e.g., `main_configure_system`, `main_manage_packages`)
 - Modules can be run standalone for testing but are designed to be sourced
-- Global state shared via variables in `utils.sh`
+- Global state shared via variables in `utils-sys.sh`
 
 ### 2. Standalone Scripts (github/, lxc/, llm/)
 
@@ -443,7 +443,7 @@ This repository uses two distinct script architectures. Choose based on context:
 |----------|-------------|--------|
 | New feature for system-setup | Modular | Add to existing module or create new one |
 | New utility script in lxc/, llm/, etc. | Standalone | Must work when downloaded individually |
-| Shared helper used by multiple modules | Add to utils.sh | Centralized maintenance |
+| Shared helper used by multiple modules | Add to utils-sys.sh | Centralized maintenance |
 | One-off automation script | Standalone | Simpler, no dependencies |
 | Simple system task (start/stop services) | Lightweight | Minimal overhead, quick execution |
 
@@ -545,26 +545,26 @@ fi
 
 ## Modular Script Patterns
 
-### Shared Utilities (utils.sh)
+### Shared Utilities (utils-sys.sh)
 
-The `utils.sh` file provides all shared functionality for the system-setup suite.
+The `utils-sys.sh` file provides all shared functionality for the system-setup suite.
 
 **Multiple-source guard:**
 ```bash
 #!/usr/bin/env bash
 
 # Prevent multiple sourcing
-if [[ -n "${UTILS_SH_LOADED:-}" ]]; then
+if [[ -n "${UTILS_SYS_SH_LOADED:-}" ]]; then
     return 0
 fi
-readonly UTILS_SH_LOADED=true
+readonly UTILS_SYS_SH_LOADED=true
 
 set -euo pipefail
 
 # All shared constants, variables, and functions follow...
 ```
 
-**Global variables provided by utils.sh:**
+**Global variables provided by utils-sys.sh:**
 ```bash
 # State tracking arrays
 BACKED_UP_FILES=()
@@ -610,8 +610,8 @@ if [[ -z "${SCRIPT_DIR:-}" ]]; then
 fi
 
 # Source utilities
-# shellcheck source=utils.sh
-source "${SCRIPT_DIR}/utils.sh"
+# shellcheck source=utils-sys.sh
+source "${SCRIPT_DIR}/utils-sys.sh"
 
 # ============================================================================
 # Module Functions
@@ -654,7 +654,7 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source utilities first
-source "${SCRIPT_DIR}/utils.sh"
+source "${SCRIPT_DIR}/utils-sys.sh"
 
 # Remote repository for self-update
 readonly REMOTE_BASE="https://raw.githubusercontent.com/USER/REPO/refs/heads/main/path"
@@ -1258,7 +1258,7 @@ echo "            • Bullet point"
 
 ### Optional Visual Elements
 
-These functions provide enhanced formatting for specific use cases. Not part of core utils.sh but useful patterns:
+These functions provide enhanced formatting for specific use cases. Not part of core utils-sys.sh but useful patterns:
 
 **print_section** - Bordered section header (for standalone scripts):
 ```bash
