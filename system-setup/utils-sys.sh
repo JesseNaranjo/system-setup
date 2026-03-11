@@ -391,6 +391,7 @@ grep_file() {
 # ============================================================================
 
 # Get package definitions for the given OS
+# NOTE: When modifying this list, also update the "Package Definitions" section in README.md
 get_package_list() {
     if [[ "$DETECTED_OS" == "macos" ]]; then
         # macOS packages (brew)

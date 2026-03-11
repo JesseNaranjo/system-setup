@@ -227,6 +227,8 @@ Checks for and installs required packages.
 
 **Package Definitions:**
 
+> **Source of truth:** These lists mirror `get_package_list()` in `utils-sys.sh`. Update both when adding or removing packages.
+
 **Linux (apt):**
 - 7-zip → `7zip`
 - aptitude → `aptitude`
