@@ -535,7 +535,7 @@ configure_fastfetch() {
     print_info "Configuring fastfetch in $shell_config..."
 
     # Check if fastfetch is already configured (idempotency)
-    if grep -qF "command -v fastfetch" "$shell_config" 2>/dev/null; then
+    if grep_file -qF "command -v fastfetch" "$shell_config" 2>/dev/null; then
         print_success "- Fastfetch already configured in $shell_config"
         return 0
     fi
@@ -581,8 +581,7 @@ configure_editor_system() {
     if ! grep_file -q "Editor configuration" "$shell_config" 2>/dev/null; then
         backup_file "$shell_config"
         add_change_header "$shell_config" "shell"
-        echo "" | run_elevated tee -a "$shell_config" > /dev/null
-        echo "# Editor configuration" | run_elevated tee -a "$shell_config" > /dev/null
+        append_to_file "$shell_config" "" "# Editor configuration"
     fi
 
     # Add editor environment variable exports

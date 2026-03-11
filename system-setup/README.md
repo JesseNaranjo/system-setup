@@ -83,7 +83,7 @@ Shared utility library providing common functionality across all modules.
 **Global Variables:**
 - `DETECTED_OS`: "linux", "macos", or "unknown"
 - `RUNNING_IN_CONTAINER`: Boolean for container detection
-- `GIT_INSTALLED`, `NANO_INSTALLED`, `TMUX_INSTALLED`, `OPENSSH_SERVER_INSTALLED`: Package tracking
+- `CURL_INSTALLED`, `FASTFETCH_INSTALLED`, `GIT_INSTALLED`, `NANO_INSTALLED`, `TMUX_INSTALLED`, `OPENSSH_SERVER_INSTALLED`: Package tracking
 - `BACKED_UP_FILES[]`: List of files backed up in current session
 - `CREATED_BACKUP_FILES[]`: List of backup files created
 - `HEADER_ADDED_FILES[]`: Files that have received change headers
@@ -109,7 +109,8 @@ Shared utility library providing common functionality across all modules.
 - `get_package_list()`: Returns OS-specific package definitions
 - `is_package_installed()`: Checks if package exists (works with apt/Homebrew)
 - `verify_package_manager()`: Ensures apt or Homebrew is available
-- `track_special_packages()`: Sets flags for git, nano, tmux, openssh-server
+- `get_removable_package_list()`: Returns OS-specific packages to remove
+- `track_special_packages()`: Sets flags for curl, fastfetch, git, nano, tmux, openssh-server
 
 **File Management:**
 - `backup_file()`: Creates timestamped backups (once per session per file)
@@ -420,6 +421,13 @@ alias 7z-ultra1='7z(z) a -t7z -m0=lzma2 -mx=9 -md=256m -mfb=273 -mmf=bt4 -ms=on 
 alias 7z-ultra2='7z(z) a -t7z -m0=lzma2 -mx=9 -md=512m -mfb=273 -mmf=bt4 -ms=on -mmt'
 alias 7z-ultra3='7z(z) a -t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt'
 ```
+
+**Editor Environment Variables** (only if nano is installed):
+- `EDITOR=nano` — default editor
+- `KUBE_EDITOR=nano` — kubernetes editor (only if `kubectl` is available)
+- `SUDO_EDITOR=nano` — sudo editor
+- `SYSTEMD_EDITOR=nano` — systemd editor (only if `systemctl` is available)
+- `VISUAL=nano` — visual editor
 
 #### Prompt Configuration (System Scope)
 
