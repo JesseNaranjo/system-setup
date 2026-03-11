@@ -664,11 +664,9 @@ configure_shell() {
             configure_fastfetch
         fi
 
-        # Configure system-wide editor environment variables (only if nano is installed)
-        if [[ "$NANO_INSTALLED" == true ]]; then
-            echo ""
-            configure_editor_system
-        fi
+        # Configure system-wide editor environment variables
+        echo ""
+        configure_editor_system
     fi
 }
 
