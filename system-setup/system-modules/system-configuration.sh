@@ -527,6 +527,11 @@ configure_fastfetch() {
         return 0
     fi
 
+    # Skip if fastfetch is not installed
+    if [[ "$FASTFETCH_INSTALLED" != true ]]; then
+        return 0
+    fi
+
     print_info "Configuring fastfetch in $shell_config..."
 
     # Check if fastfetch is already configured (idempotency)
