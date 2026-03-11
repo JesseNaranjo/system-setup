@@ -1,52 +1,100 @@
 #!/usr/bin/env bash
 
+# start-k8s.sh - Start Kubernetes services
+# Ensures pre-start configuration and starts crio + kubelet
+#
+# Usage: sudo ./start-k8s.sh
 
-echo_internal() {
-    printf "\n$1\n"
+set -euo pipefail
+
+# Get the directory where this script is located
+if [[ -z "${SCRIPT_DIR:-}" ]]; then
+    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+
+# Source utilities
+# shellcheck source=utils-k8s.sh
+source "${SCRIPT_DIR}/utils-k8s.sh"
+
+# ============================================================================
+# Pre-Start Configuration
+# ============================================================================
+
+ensure_swap_off() {
+    if [[ -n "$(swapon --show --noheadings 2>/dev/null)" ]]; then
+        print_info "Disabling swap..."
+        run_elevated swapoff -a
+        print_success "Swap disabled"
+    else
+        print_success "Swap already disabled"
+    fi
 }
 
+ensure_ip_forwarding() {
+    local current
+    current=$(sysctl -n net.ipv4.conf.all.forwarding 2>/dev/null || echo "0")
+    if [[ "$current" != "1" ]]; then
+        print_info "Enabling IP forwarding..."
+        run_elevated sysctl -w net.ipv4.conf.all.forwarding=1
+        print_success "IP forwarding enabled"
+    else
+        print_success "IP forwarding already enabled"
+    fi
+}
 
-# Pre-start config
+# ============================================================================
+# Service Management
+# ============================================================================
 
-echo_internal "Turning off swap..."
-(
-    set -x
-    sudo swapoff -a
-)
+start_services() {
+    print_info "Enabling and starting cri-o and kubelet services..."
+    run_elevated systemctl enable crio.service kubelet.service
+    run_elevated systemctl start crio.service kubelet.service
+    print_success "Services started"
+}
 
-echo_internal "Setting IP forwarding..."
-(
-    set -x
-    sudo sysctl net.ipv4.conf.all.forwarding=1
-)
+show_status() {
+    echo ""
+    print_info "Service status:"
+    run_elevated systemctl status crio.service kubelet.service --no-pager || true
+    echo ""
 
+    print_info "Waiting for cluster to be ready..."
+    sleep 5
 
-# Enable crio + kubelet
+    print_info "Cluster status:"
+    kubectl get all --all-namespaces 2>/dev/null || print_warning "kubectl not available or cluster not ready"
+}
 
-echo_internal "Enabling cri-o and kubelet services..."
-(
-    set -x
-    sudo systemctl enable crio.service kubelet.service
-)
+# ============================================================================
+# Main
+# ============================================================================
 
+main() {
+    detect_environment
 
-# Start cri-o + kubelet
+    if [[ "$DETECTED_OS" != "linux" ]]; then
+        print_error "Kubernetes services are only available on Linux"
+        exit 1
+    fi
 
-echo_internal "Starting cri-o and kubelet services..."
-(
-    set -x
-    sudo systemctl start crio.service kubelet.service
-)
+    if ! check_privileges "system_config"; then
+        print_error "Starting Kubernetes services requires root privileges"
+        print_info "Please re-run with: sudo $0"
+        exit 1
+    fi
 
-echo_internal ""
-SYSCTL_STATUS_OUTPUT=$(
-    sudo systemctl status crio.service kubelet.service
-)
-echo -e "${SYSCTL_STATUS_OUTPUT}"
+    print_info "Starting Kubernetes services..."
+    echo ""
 
-echo_internal ""
-sleep 5s
-(
-    set -x
-    kubectl get all --all-namespaces
-)
+    ensure_swap_off
+    ensure_ip_forwarding
+    start_services
+    show_status
+
+    print_success "Kubernetes services started"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
