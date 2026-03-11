@@ -11,7 +11,9 @@ fi
 source "${SCRIPT_DIR}/utils-k8s.sh"
 
 # Orchestrator sets K8S_VERSION; provide a default for standalone execution
-K8S_VERSION="${K8S_VERSION:-v1.35}"
+if [[ -z "${K8S_VERSION:-}" ]]; then
+    readonly K8S_VERSION="v1.35"
+fi
 
 # ============================================================================
 # Prerequisites
