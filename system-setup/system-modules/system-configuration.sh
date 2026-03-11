@@ -493,6 +493,13 @@ configure_shell_for_user() {
             append_to_file "$shell_config" "" "# Editor configuration"
         fi
         add_export_if_needed "$shell_config" "EDITOR" "nano" "default editor"
+        if command -v kubectl &>/dev/null; then
+            add_export_if_needed "$shell_config" "KUBE_EDITOR" "nano" "kubernetes editor"
+        fi
+        add_export_if_needed "$shell_config" "SUDO_EDITOR" "nano" "sudo editor"
+        if command -v systemctl &>/dev/null; then
+            add_export_if_needed "$shell_config" "SYSTEMD_EDITOR" "nano" "systemd editor"
+        fi
         add_export_if_needed "$shell_config" "VISUAL" "nano" "visual editor"
     fi
 
@@ -541,7 +548,7 @@ configure_fastfetch() {
     print_success "✓ Fastfetch configured to run on shell startup in $shell_config"
 }
 
-# Configure system-wide EDITOR and VISUAL environment variables
+# Configure system-wide editor environment variables
 configure_editor_system() {
     # Determine shell config file based on OS
     local shell_config
@@ -557,7 +564,7 @@ configure_editor_system() {
         return 0
     fi
 
-    print_info "Configuring EDITOR and VISUAL in $shell_config..."
+    print_info "Configuring editor environment variables in $shell_config..."
 
     # Add editor configuration section if not present
     if ! grep_file -q "Editor configuration" "$shell_config" 2>/dev/null; then
@@ -567,11 +574,18 @@ configure_editor_system() {
         echo "# Editor configuration" | run_elevated tee -a "$shell_config" > /dev/null
     fi
 
-    # Add EDITOR and VISUAL exports
+    # Add editor environment variable exports
     add_export_if_needed "$shell_config" "EDITOR" "nano" "default editor"
+    if command -v kubectl &>/dev/null; then
+        add_export_if_needed "$shell_config" "KUBE_EDITOR" "nano" "kubernetes editor"
+    fi
+    add_export_if_needed "$shell_config" "SUDO_EDITOR" "nano" "sudo editor"
+    if command -v systemctl &>/dev/null; then
+        add_export_if_needed "$shell_config" "SYSTEMD_EDITOR" "nano" "systemd editor"
+    fi
     add_export_if_needed "$shell_config" "VISUAL" "nano" "visual editor"
 
-    print_success "✓ EDITOR and VISUAL configured in $shell_config"
+    print_success "✓ Editor environment variables configured in $shell_config"
 }
 
 # Configure shell
