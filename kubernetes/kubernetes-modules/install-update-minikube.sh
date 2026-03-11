@@ -90,7 +90,7 @@ check_minikube_version() {
 
 main_install_update_minikube() {
     detect_environment
-    check_prerequisites
+    check_prerequisites || return 1
 
     # Check if already up-to-date
     if ! check_minikube_version; then

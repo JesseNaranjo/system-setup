@@ -22,7 +22,7 @@ check_prerequisites() {
 main_install_update_helm() {
     detect_environment
 
-    check_prerequisites
+    check_prerequisites || return 1
 
     if command -v helm &>/dev/null; then
         local current_version

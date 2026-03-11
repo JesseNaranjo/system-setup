@@ -149,7 +149,7 @@ main_configure_k8s_repos() {
 
     print_info "Configuring Kubernetes APT repositories..."
 
-    check_prerequisites
+    check_prerequisites || return 1
     cleanup_deprecated_files
     setup_kubernetes_repo
     setup_crio_repo
