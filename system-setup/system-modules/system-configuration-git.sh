@@ -14,8 +14,8 @@ if [[ -z "${SCRIPT_DIR:-}" ]]; then
 fi
 
 # Source utilities
-# shellcheck source=../utils.sh
-source "${SCRIPT_DIR}/utils.sh"
+# shellcheck source=../utils-sys.sh
+source "${SCRIPT_DIR}/utils-sys.sh"
 
 # ============================================================================
 # Git Configuration

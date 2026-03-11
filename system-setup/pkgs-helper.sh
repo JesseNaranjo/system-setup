@@ -23,8 +23,8 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source utilities
-# shellcheck source=utils.sh
-source "${SCRIPT_DIR}/utils.sh"
+# shellcheck source=utils-sys.sh
+source "${SCRIPT_DIR}/utils-sys.sh"
 
 # ============================================================================
 # Feature Support Detection
