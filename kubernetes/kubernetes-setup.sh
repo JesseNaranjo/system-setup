@@ -28,6 +28,14 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=utils-k8s.sh
 source "${SCRIPT_DIR}/utils-k8s.sh"
 
+# Clean up any tracked temp files on exit
+cleanup_temp_files() {
+    for tmp in "${TEMP_FILES[@]+"${TEMP_FILES[@]}"}"; do
+        rm -f "$tmp"
+    done
+}
+trap cleanup_temp_files EXIT
+
 readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes"
 readonly K8S_VERSION="v1.35"
 
@@ -39,6 +47,15 @@ OBSOLETE_SCRIPTS=(
     "install-update-minikube.sh"
     "utils.sh"
 )
+
+# Step result tracking for cross-module dependency validation
+# When a step fails, dependent steps are skipped with a clear message
+STEP_KERNEL_MODULES_OK=false
+STEP_REPOS_OK=false
+STEP_PACKAGES_OK=false
+STEP_NETWORKING_OK=false
+STEP_SWAP_OK=false
+STEP_CRIO_OK=false
 
 # List of module scripts to download/update (excludes kubernetes-setup.sh and utils-k8s.sh)
 get_script_list() {
@@ -73,27 +90,21 @@ detect_download_cmd() {
         return 0
     else
         DOWNLOAD_CMD=""
-        # Display large error message if neither curl nor wget is available
-        echo ""
-        echo -e "            ${YELLOW}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║                        ⚠️   UPDATES NOT AVAILABLE  ⚠️                         ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        Neither 'curl' nor 'wget' is installed on this system.               ║${NC}"
-        echo -e "            ${YELLOW}║        Self-updating functionality requires one of these tools.             ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        To enable self-updating, please install one of the following:        ║${NC}"
-        echo -e "            ${YELLOW}║          • curl  (recommended)                                              ║${NC}"
-        echo -e "            ${YELLOW}║          • wget                                                             ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        Installation commands:                                               ║${NC}"
-        echo -e "            ${YELLOW}║          Debian:   apt install curl                                         ║${NC}"
-        echo -e "            ${YELLOW}║          RHEL:     yum install curl                                         ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        Continuing with local version of the scripts...                      ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
-        echo ""
+        print_warning_box \
+            "            UPDATES NOT AVAILABLE" \
+            "" \
+            "Neither 'curl' nor 'wget' is installed on this system." \
+            "Self-updating functionality requires one of these tools." \
+            "" \
+            "To enable self-updating, please install one of the following:" \
+            "  • curl  (recommended)" \
+            "  • wget" \
+            "" \
+            "Installation commands:" \
+            "  Debian:   apt install curl" \
+            "  RHEL:     yum install curl" \
+            "" \
+            "Continuing with local version of the scripts..."
         return 1
     fi
 }
@@ -392,6 +403,28 @@ show_status_overview() {
 # Main Orchestration
 # ============================================================================
 
+# Check if prerequisite steps succeeded before running a dependent step
+# Usage: check_step_prerequisites "Step Name" "STEP_VAR1" "STEP_VAR2" ...
+# Returns: 0 if all prerequisites passed, 1 if any failed (prints skip message)
+check_step_prerequisites() {
+    local step_name="$1"
+    shift
+    local failed_deps=()
+
+    for dep_var in "$@"; do
+        local dep_value="${!dep_var}"
+        if [[ "$dep_value" != "true" ]]; then
+            failed_deps+=("$dep_var")
+        fi
+    done
+
+    if [[ ${#failed_deps[@]} -gt 0 ]]; then
+        print_warning "Skipping ${step_name}: prerequisite(s) not met (${failed_deps[*]})"
+        return 1
+    fi
+    return 0
+}
+
 main() {
     # Detect download command (curl or wget) for update functionality
     if detect_download_cmd; then
@@ -446,7 +479,9 @@ main() {
     print_info "Step 1: Kernel Modules"
     print_info "----------------------"
     source "${SCRIPT_DIR}/kubernetes-modules/configure-kernel-modules.sh"
-    if ! main_configure_kernel_modules; then
+    if main_configure_kernel_modules; then
+        STEP_KERNEL_MODULES_OK=true
+    else
         print_error "Kernel module configuration failed. Continuing..."
     fi
     echo ""
@@ -455,7 +490,9 @@ main() {
     print_info "Step 2: APT Repositories"
     print_info "------------------------"
     source "${SCRIPT_DIR}/kubernetes-modules/configure-k8s-repos.sh"
-    if ! main_configure_k8s_repos; then
+    if main_configure_k8s_repos; then
+        STEP_REPOS_OK=true
+    else
         print_error "Repository configuration failed. Continuing..."
     fi
     echo ""
@@ -463,18 +500,26 @@ main() {
     # Step 3: Install Kubernetes packages
     print_info "Step 3: Package Installation"
     print_info "----------------------------"
-    source "${SCRIPT_DIR}/kubernetes-modules/install-k8s-packages.sh"
-    if ! main_install_k8s_packages; then
-        print_error "Package installation failed. Continuing..."
+    if check_step_prerequisites "Package Installation" "STEP_REPOS_OK"; then
+        source "${SCRIPT_DIR}/kubernetes-modules/install-k8s-packages.sh"
+        if main_install_k8s_packages; then
+            STEP_PACKAGES_OK=true
+        else
+            print_error "Package installation failed. Continuing..."
+        fi
     fi
     echo ""
 
     # Step 4: Configure networking (requires kernel modules from step 1)
     print_info "Step 4: Network Configuration"
     print_info "-----------------------------"
-    source "${SCRIPT_DIR}/kubernetes-modules/configure-networking.sh"
-    if ! main_configure_networking; then
-        print_error "Network configuration failed. Continuing..."
+    if check_step_prerequisites "Network Configuration" "STEP_KERNEL_MODULES_OK"; then
+        source "${SCRIPT_DIR}/kubernetes-modules/configure-networking.sh"
+        if main_configure_networking; then
+            STEP_NETWORKING_OK=true
+        else
+            print_error "Network configuration failed. Continuing..."
+        fi
     fi
     echo ""
 
@@ -482,7 +527,9 @@ main() {
     print_info "Step 5: Swap Configuration"
     print_info "--------------------------"
     source "${SCRIPT_DIR}/kubernetes-modules/configure-swap.sh"
-    if ! main_configure_swap; then
+    if main_configure_swap; then
+        STEP_SWAP_OK=true
+    else
         print_error "Swap configuration failed. Continuing..."
     fi
     echo ""
@@ -491,9 +538,13 @@ main() {
     if [[ "$CRIO_INSTALLED" == true ]]; then
         print_info "Step 6: CRI-O Configuration"
         print_info "---------------------------"
-        source "${SCRIPT_DIR}/kubernetes-modules/configure-crio.sh"
-        if ! main_configure_crio; then
-            print_error "CRI-O configuration failed. Continuing..."
+        if check_step_prerequisites "CRI-O Configuration" "STEP_PACKAGES_OK"; then
+            source "${SCRIPT_DIR}/kubernetes-modules/configure-crio.sh"
+            if main_configure_crio; then
+                STEP_CRIO_OK=true
+            else
+                print_error "CRI-O configuration failed. Continuing..."
+            fi
         fi
         echo ""
     else
@@ -527,9 +578,11 @@ main() {
 
     # Step 9: Cluster initialization (optional)
     if prompt_yes_no "            Would you like to initialize or join a cluster?" "n"; then
-        source "${SCRIPT_DIR}/kubernetes-modules/initialize-cluster.sh"
-        if ! main_initialize_cluster; then
-            print_error "Cluster initialization failed. Continuing..."
+        if check_step_prerequisites "Cluster Initialization" "STEP_PACKAGES_OK" "STEP_NETWORKING_OK" "STEP_SWAP_OK"; then
+            source "${SCRIPT_DIR}/kubernetes-modules/initialize-cluster.sh"
+            if ! main_initialize_cluster; then
+                print_error "Cluster initialization failed. Continuing..."
+            fi
         fi
         echo ""
     else

@@ -507,6 +507,13 @@ ensure_package_cache_populated() {
     fi
 }
 
+# Invalidate the package cache so next is_package_installed() call refreshes
+# Call after installing or removing packages to prevent stale state
+invalidate_package_cache() {
+    PACKAGE_CACHE=()
+    PACKAGE_CACHE_POPULATED=false
+}
+
 # Check if a package is installed (unified for both macOS and Linux)
 # Uses cache for performance optimization
 # Note: Will populate cache on first call if not already populated via ensure_package_cache_populated()
