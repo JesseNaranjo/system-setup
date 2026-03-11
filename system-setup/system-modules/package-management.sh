@@ -117,6 +117,8 @@ check_and_install_packages() {
             # Even if installation fails, we return 0 to allow configuration of already-installed packages
             print_error "Package installation failed or was cancelled. Continuing with configuration for any packages that are already present."
         fi
+        # Invalidate stale package cache so config modules see freshly installed packages
+        PACKAGE_CACHE_POPULATED=false
     else
         if [[ "$can_install" == true ]]; then
             print_info "No new packages to install."
@@ -228,6 +230,8 @@ check_and_remove_packages() {
         if [[ "$can_remove" == true ]] && ! uninstall_packages "${packages_to_remove[@]}"; then
             print_error "Package removal failed or was cancelled."
         fi
+        # Invalidate stale package cache so subsequent checks see actual state
+        PACKAGE_CACHE_POPULATED=false
     else
         if [[ "$can_remove" == true ]] && [[ "$has_removable_packages" == false ]]; then
             print_info "No packages to remove."
