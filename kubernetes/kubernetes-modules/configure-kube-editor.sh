@@ -32,26 +32,6 @@ detect_shell_rc_file() {
 }
 
 # ============================================================================
-# Editor Detection
-# ============================================================================
-
-# Detect the best available editor
-# Checks in order: nano, vim, vi
-# Returns the full path of the first editor found
-detect_editor() {
-    local editors=(nano vim vi)
-
-    for editor in "${editors[@]}"; do
-        if command -v "$editor" &>/dev/null; then
-            command -v "$editor"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
-# ============================================================================
 # Entry Point
 # ============================================================================
 
@@ -68,15 +48,12 @@ main_configure_kube_editor() {
         return 0
     fi
 
-    local editor_path
-    if ! editor_path="$(detect_editor)"; then
-        print_warning "No suitable editor found (checked: nano, vim, vi)"
-        return 1
+    if ! command -v nano &>/dev/null; then
+        print_warning "nano not found, skipping KUBE_EDITOR configuration"
+        return 0
     fi
 
-    print_info "Detected editor: $editor_path"
-
-    add_export_if_needed "$rc_file" "KUBE_EDITOR" "\"${editor_path}\"" "KUBE_EDITOR environment variable"
+    add_export_if_needed "$rc_file" "KUBE_EDITOR" "nano" "KUBE_EDITOR environment variable"
 
     print_success "KUBE_EDITOR configuration complete"
 }

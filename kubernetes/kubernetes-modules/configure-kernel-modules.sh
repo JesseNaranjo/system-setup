@@ -63,7 +63,7 @@ is_persistence_configured() {
 
     local module
     for module in "${REQUIRED_MODULES[@]}"; do
-        if ! grep -q "^${module}$" "$MODULES_CONF"; then
+        if ! grep_file -q "^${module}$" "$MODULES_CONF"; then
             return 1
         fi
     done

@@ -55,7 +55,7 @@ is_repo_configured() {
         return 1
     fi
 
-    if ! grep -q "$expected_uri" "$sources_file"; then
+    if ! grep_file -q "$expected_uri" "$sources_file"; then
         return 1
     fi
 
