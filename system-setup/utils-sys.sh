@@ -408,6 +408,7 @@ get_package_list() {
         echo "Nano Editor:nano"
         echo "Ollama:ollama"
         echo "OrbStack:orbstack"
+        echo "ShellCheck:shellcheck"
         echo "tmux (terminal multiplexer):tmux"
         echo "UTM:utm"
     else
@@ -424,6 +425,7 @@ get_package_list() {
         echo "jq (JSON data processor):jq"
         echo "Nano Editor:nano"
         echo "OpenSSH Server:openssh-server"
+        echo "ShellCheck:shellcheck"
         echo "sudo:sudo"
         echo "tmux (terminal multiplexer):tmux"
         echo "UDisks:udisks2"
