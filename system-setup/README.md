@@ -86,6 +86,8 @@ Shared utility library providing common functionality across all modules.
 - `BACKED_UP_FILES[]`: List of files backed up in current session
 - `CREATED_BACKUP_FILES[]`: List of backup files created
 - `HEADER_ADDED_FILES[]`: Files that have received change headers
+- `CREATED_CONFIG_FILES[]`: Config files created in current session
+- `TEMP_FILES[]`: Tracked temp files for cleanup on exit
 
 **Output Functions:**
 - `print_info()`, `print_success()`, `print_warning()`, `print_error()`
@@ -111,7 +113,9 @@ Shared utility library providing common functionality across all modules.
 **File Management:**
 - `backup_file()`: Creates timestamped backups (once per session per file)
 - `add_change_header()`: Adds managed-by comment block to config files
-- Both functions track modifications to avoid duplicate operations
+- `check_disk_space()`: Pre-flight validation of available disk space
+- `make_temp_file()`: Creates tracked temp files cleaned up on exit
+- Both backup/header functions track modifications to avoid duplicate operations
 
 **Configuration Management:**
 - `config_exists()`: Checks if config line exists in file
@@ -914,7 +918,7 @@ source ~/.zshrc   # macOS
 All global variables managed in `utils.sh`:
 - Detection flags: `DETECTED_OS`, `RUNNING_IN_CONTAINER`
 - Package flags: `GIT_INSTALLED`, `NANO_INSTALLED`, `TMUX_INSTALLED`, `OPENSSH_SERVER_INSTALLED`
-- Tracking arrays: `BACKED_UP_FILES[]`, `CREATED_BACKUP_FILES[]`, `HEADER_ADDED_FILES[]`
+- Tracking arrays: `BACKED_UP_FILES[]`, `CREATED_BACKUP_FILES[]`, `HEADER_ADDED_FILES[]`, `CREATED_CONFIG_FILES[]`, `TEMP_FILES[]`
 
 ### Module Independence
 

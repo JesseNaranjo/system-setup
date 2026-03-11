@@ -460,7 +460,7 @@ main() {
     echo "            2) System-wide (root) - git/nano/tmux system-wide, /etc/issue, shell all users, swap, SSH socket"
     echo "            Ctrl+C to cancel configuration and exit"
     echo ""
-    read -p "            Enter choice (1-2): " -r scope_choice
+    read -p "            Enter choice (1-2): " -r scope_choice </dev/tty
 
     local scope
     case "$scope_choice" in

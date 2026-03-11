@@ -474,7 +474,8 @@ populate_package_cache() {
         installed_packages=$(printf "%s\n%s" "$installed_formulae" "$installed_casks")
     else
         # Get all installed packages from dpkg
-        installed_packages=$(dpkg -l 2>/dev/null | awk '/^ii/ {print $2}' || true)
+        # Strip :arch suffix (e.g., curl:amd64 → curl) for reliable matching on multiarch systems
+        installed_packages=$(dpkg -l 2>/dev/null | awk '/^ii/ {sub(/:.*/, "", $2); print $2}' || true)
     fi
 
     PACKAGE_CACHE=()
@@ -685,7 +686,7 @@ backup_file() {
             owner=$(stat -c "%u:%g" "$file")
         fi
         if needs_elevation "$file"; then
-            run_elevated chown "$owner" "$backup" 2>/dev/null
+            run_elevated chown "$owner" "$backup" 2>/dev/null || true
         else
             chown "$owner" "$backup" 2>/dev/null || true
         fi
