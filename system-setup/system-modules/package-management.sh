@@ -118,7 +118,7 @@ check_and_install_packages() {
             print_error "Package installation failed or was cancelled. Continuing with configuration for any packages that are already present."
         fi
         # Invalidate stale package cache so config modules see freshly installed packages
-        PACKAGE_CACHE_POPULATED=false
+        invalidate_package_cache
     else
         if [[ "$can_install" == true ]]; then
             print_info "No new packages to install."
