@@ -234,20 +234,37 @@ Checks for and installs required packages.
 - aptitude → `aptitude`
 - ca-certificates → `ca-certificates`
 - cURL → `curl`
+- Fastfetch → `fastfetch`
 - Git → `git`
+- Git LFS → `git-lfs`
+- gpm → `gpm`
 - htop → `htop`
+- jq (JSON data processor) → `jq`
 - Nano Editor → `nano`
 - OpenSSH Server → `openssh-server`
+- ShellCheck → `shellcheck`
+- sudo → `sudo`
 - tmux (terminal multiplexer) → `tmux`
+- UDisks → `udisks2`
 
 **macOS (Homebrew):**
 - 7-zip → `sevenzip`
-- ca-certificates → `ca-certificates`
+- AWK → `awk`
+- Apple Containers → `container`
+- Bash → `bash`
+- CA Certificates → `ca-certificates`
+- cURL → `curl`
+- Fastfetch → `fastfetch`
 - Git → `git`
+- Git LFS → `git-lfs`
 - htop → `htop`
+- Monocle → `monocle-app`
 - Nano Editor → `nano`
 - Ollama → `ollama`
+- OrbStack → `orbstack`
+- ShellCheck → `shellcheck`
 - tmux (terminal multiplexer) → `tmux`
+- UTM → `utm`
 
 **Functionality:**
 - Checks each package individually with interactive prompts
