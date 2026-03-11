@@ -71,7 +71,6 @@ check_and_install_packages() {
             if [[ "$can_install" == true ]]; then
                 if prompt_yes_no "            - Would you like to install $display_name?" "n"; then
                     packages_to_install+=("$package_name")
-                    track_special_packages "$package_name"
                 fi
             fi
         fi
@@ -79,9 +78,19 @@ check_and_install_packages() {
 
     # If there are packages to install and we have privileges, call the installer
     if [[ ${#packages_to_install[@]} -gt 0 ]]; then
-        if [[ "$can_install" == true ]] && ! install_packages "${packages_to_install[@]}"; then
-            # Even if installation fails, we return 0 to allow configuration of already-installed packages
-            print_error "Package installation failed or was cancelled. Continuing with configuration for any packages that are already present."
+        if [[ "$can_install" == true ]]; then
+            if install_packages "${packages_to_install[@]}"; then
+                # Track newly installed packages after confirmed successful installation
+                invalidate_package_cache
+                for package_name in "${packages_to_install[@]}"; do
+                    if is_package_installed "$package_name"; then
+                        track_special_packages "$package_name"
+                    fi
+                done
+            else
+                # Even if installation fails, we return 0 to allow configuration of already-installed packages
+                print_error "Package installation failed or was cancelled. Continuing with configuration for any packages that are already present."
+            fi
         fi
     else
         if [[ "$can_install" == true ]]; then

@@ -71,24 +71,29 @@ The orchestrator will prompt to delete these if found.
 
 ## Operational Scripts
 
-`start-k8s.sh` and `stop-k8s.sh` remain independent from the orchestrator module system.
+`start-k8s.sh` and `stop-k8s.sh` are standalone scripts that source `utils-k8s.sh` for shared functions. They require root privileges (`sudo`).
 
 ### start everything
 
 ```
-./start-k8s.sh
+sudo ./start-k8s.sh
 ```
-- Ensures all pre-checks are done (swapoff, IP forwarding, etc.)
+- Sources `utils-k8s.sh` for shared utilities
+- Idempotent pre-checks (swap state, IP forwarding)
 - Enables and starts kubelet and crio services
+- Shows service and cluster status after starting
+- Requires root privileges
 
 ### stop everything
 
 ```
-./stop-k8s.sh
+sudo ./stop-k8s.sh
 ```
+- Sources `utils-k8s.sh` for shared utilities
 - Stops and disables `kubelet.service` and `crio.service`
-- Re-enables swap (`swapon -a`)
-- Disables IP forwarding (`net.ipv4.conf.all.forwarding=0`)
+- Re-enables swap (`swapon -a`) with graceful handling if no swap devices exist
+- Disables IP forwarding (idempotent check)
+- Requires root privileges
 - Use this when you want to temporarily stop Kubernetes without removing the cluster configuration
 
 ## Cluster Setup Reference
