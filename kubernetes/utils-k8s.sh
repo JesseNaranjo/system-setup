@@ -840,7 +840,10 @@ add_export_if_needed() {
 normalize_trailing_newlines() {
     local file="$1"
     local num_lines="${2:-1}"
-    local temp_file=$(mktemp)
+    local original_perms
+    original_perms=$(get_file_permissions "$file")
+    local temp_file
+    temp_file=$(make_temp_file)
 
     # Remove all trailing blank lines (last content line keeps its newline)
     sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$file" > "$temp_file"
@@ -850,10 +853,13 @@ normalize_trailing_newlines() {
         printf '\n' >> "$temp_file"
     done
 
+    # Restore original permissions (mktemp creates files with 0600)
     if needs_elevation "$file"; then
         run_elevated mv "$temp_file" "$file"
+        run_elevated chmod "$original_perms" "$file"
     else
         mv "$temp_file" "$file"
+        chmod "$original_perms" "$file"
     fi
 }
 
@@ -880,7 +886,7 @@ print_session_summary() {
     fi
 
     if [[ ${#BACKED_UP_FILES[@]} -gt 0 ]]; then
-        print_success "${GREEN}Files Updated:${NC}"
+        print_success "Files Updated:"
         for file in "${BACKED_UP_FILES[@]+"${BACKED_UP_FILES[@]}"}"; do
             echo "            - $file"
         done

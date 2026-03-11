@@ -22,7 +22,8 @@ source "${SCRIPT_DIR}/utils-k8s.sh"
 
 stop_services() {
     print_info "Stopping and disabling kubelet and cri-o services..."
-    run_elevated systemctl disable kubelet.service crio.service --now
+    # || true: systemctl returns non-zero if services are already stopped or not loaded
+    run_elevated systemctl disable kubelet.service crio.service --now || true
     print_success "Services stopped and disabled"
 }
 

@@ -55,7 +55,6 @@ STEP_REPOS_OK=false
 STEP_PACKAGES_OK=false
 STEP_NETWORKING_OK=false
 STEP_SWAP_OK=false
-STEP_CRIO_OK=false
 
 # List of module scripts to download/update (excludes kubernetes-setup.sh and utils-k8s.sh)
 get_script_list() {
@@ -170,7 +169,7 @@ self_update() {
     # Check kubernetes-setup.sh
     local SETUP_FILE="kubernetes-setup.sh"
     local LOCAL_SETUP="${SCRIPT_DIR}/${SETUP_FILE}"
-    local TEMP_SETUP="$(mktemp)"
+    local TEMP_SETUP="$(make_temp_file)"
 
     if download_script "${SETUP_FILE}" "${TEMP_SETUP}"; then
         if diff -u "${LOCAL_SETUP}" "${TEMP_SETUP}" > /dev/null 2>&1; then
@@ -205,7 +204,7 @@ self_update() {
     # Check utils-k8s.sh
     local UTILS_FILE="utils-k8s.sh"
     local LOCAL_UTILS="${SCRIPT_DIR}/${UTILS_FILE}"
-    local TEMP_UTILS="$(mktemp)"
+    local TEMP_UTILS="$(make_temp_file)"
 
     if download_script "${UTILS_FILE}" "${TEMP_UTILS}"; then
         if diff -u "${LOCAL_UTILS}" "${TEMP_UTILS}" > /dev/null 2>&1; then
@@ -269,7 +268,7 @@ update_modules() {
     while IFS= read -r script_path; do
         local SCRIPT_FILE="$script_path"
         local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
-        local TEMP_SCRIPT_FILE="$(mktemp)"
+        local TEMP_SCRIPT_FILE="$(make_temp_file)"
 
         # Ensure the local directory exists
         local script_dir="$(dirname "$LOCAL_SCRIPT")"
@@ -414,7 +413,12 @@ check_step_prerequisites() {
     for dep_var in "$@"; do
         local dep_value="${!dep_var}"
         if [[ "$dep_value" != "true" ]]; then
-            failed_deps+=("$dep_var")
+            # Convert STEP_FOO_BAR_OK -> "foo bar" for readable output
+            local readable="${dep_var#STEP_}"
+            readable="${readable%_OK}"
+            readable="${readable,,}"
+            readable="${readable//_/ }"
+            failed_deps+=("$readable")
         fi
     done
 
@@ -503,7 +507,12 @@ main() {
     if check_step_prerequisites "Package Installation" "STEP_REPOS_OK"; then
         source "${SCRIPT_DIR}/kubernetes-modules/install-k8s-packages.sh"
         if main_install_k8s_packages; then
-            STEP_PACKAGES_OK=true
+            # Verify packages are actually available (check_and_install_packages always returns 0)
+            if [[ "$KUBEADM_INSTALLED" == true || "$KUBELET_INSTALLED" == true ]]; then
+                STEP_PACKAGES_OK=true
+            else
+                print_warning "No core Kubernetes packages available. Dependent steps will be skipped."
+            fi
         else
             print_error "Package installation failed. Continuing..."
         fi
@@ -540,9 +549,7 @@ main() {
         print_info "---------------------------"
         if check_step_prerequisites "CRI-O Configuration" "STEP_PACKAGES_OK"; then
             source "${SCRIPT_DIR}/kubernetes-modules/configure-crio.sh"
-            if main_configure_crio; then
-                STEP_CRIO_OK=true
-            else
+            if ! main_configure_crio; then
                 print_error "CRI-O configuration failed. Continuing..."
             fi
         fi
