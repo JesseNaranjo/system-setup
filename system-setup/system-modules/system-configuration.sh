@@ -663,11 +663,9 @@ configure_shell() {
         # Configure system-wide prompt colors
         configure_shell_prompt_colors_system
 
-        # Configure fastfetch if installed
-        if [[ "$FASTFETCH_INSTALLED" == true ]]; then
-            echo ""
-            configure_fastfetch
-        fi
+        # Configure fastfetch
+        echo ""
+        configure_fastfetch
 
         # Configure system-wide editor environment variables
         echo ""
