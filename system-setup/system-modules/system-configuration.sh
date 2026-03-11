@@ -564,6 +564,12 @@ configure_editor_system() {
         return 0
     fi
 
+    # Skip if nano is not installed (all editor vars reference nano)
+    if [[ "$NANO_INSTALLED" != true ]]; then
+        print_info "Nano not installed, skipping editor configuration"
+        return 0
+    fi
+
     print_info "Configuring editor environment variables in $shell_config..."
 
     # Add editor configuration section if not present
