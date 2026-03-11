@@ -445,42 +445,31 @@ This repository uses two distinct script architectures. Choose based on context:
 | New utility script in lxc/, llm/, etc. | Standalone | Must work when downloaded individually |
 | Shared helper used by multiple modules | Add to utils-sys.sh | Centralized maintenance |
 | One-off automation script | Standalone | Simpler, no dependencies |
-| Simple system task (start/stop services) | Lightweight | Minimal overhead, quick execution |
+| Simple system task (start/stop services) | Standalone | Source utils for shared functions, run independently |
 
 ### 3. Lightweight Scripts (utils/)
 
-**When to use:** Simple automation tasks that don't need user interaction or complex output.
+**When to use:** Simple automation tasks that don't need user interaction, complex output, or shared utilities.
 
 **Structure:**
 - Minimal or no error handling (`set -euo pipefail` optional)
-- Basic `echo` output or simple `echo_internal()` helper
-- Commands grouped in subshells with `set -x` for visibility
+- Basic `echo` output only
+- No external dependencies (no sourcing of utils-*.sh)
 
 **Key characteristics:**
 - No color output or structured logging
 - No user prompts - runs non-interactively
-- Often uses subshells `( set -x; command )` to show what's executing
 - Quick, single-purpose scripts
 
 **Example:**
 ```bash
 #!/usr/bin/env bash
 
-echo_internal() {
-    printf "\n$1\n"
-}
-
-echo_internal "Turning off swap..."
-(
-    set -x
-    sudo swapoff -a
-)
-
-echo_internal "Starting services..."
-(
-    set -x
-    sudo systemctl start myservice.service
-)
+while (true); do
+    date +' %k:%M'
+    upower -i /org/freedesktop/UPower/devices/battery_BAT1 | grep 'percentage'
+    sleep 60s
+done
 ```
 
 ---
