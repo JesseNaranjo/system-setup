@@ -47,6 +47,8 @@ DETECTED_PKG_MANAGER=""
 BACKED_UP_FILES=()
 CREATED_BACKUP_FILES=()
 HEADER_ADDED_FILES=()
+CREATED_CONFIG_FILES=()
+TEMP_FILES=()
 
 # Package installation tracking flags
 # Set by: track_special_packages() called from install-k8s-packages.sh
@@ -55,6 +57,13 @@ KUBECTL_INSTALLED=false
 KUBEADM_INSTALLED=false
 KUBELET_INSTALLED=false
 CRIO_INSTALLED=false
+
+declare -A SPECIAL_PACKAGE_FLAGS=(
+    [kubectl]=KUBECTL_INSTALLED
+    [kubeadm]=KUBEADM_INSTALLED
+    [kubelet]=KUBELET_INSTALLED
+    [cri-o]=CRIO_INSTALLED
+)
 
 # Environment detection flags
 # Set by: detect_container() called from detect_environment()
@@ -245,19 +254,18 @@ detect_environment() {
 
 # Detect the system's package manager
 # Sets DETECTED_PKG_MANAGER to: "apt", "brew", "dnf", "zypper", or "unknown"
-# Extensible: Add new package managers by adding elif blocks
+# Extensible: Add new package managers by adding to the array
 detect_package_manager() {
-    if command -v apt &>/dev/null; then
-        DETECTED_PKG_MANAGER="apt"
-    elif command -v brew &>/dev/null; then
-        DETECTED_PKG_MANAGER="brew"
-    elif command -v dnf &>/dev/null; then
-        DETECTED_PKG_MANAGER="dnf"
-    elif command -v zypper &>/dev/null; then
-        DETECTED_PKG_MANAGER="zypper"
-    else
-        DETECTED_PKG_MANAGER="unknown"
-    fi
+    local -a pkg_managers=("apt" "brew" "dnf" "zypper")
+
+    for mgr in "${pkg_managers[@]}"; do
+        if command -v "$mgr" &>/dev/null; then
+            DETECTED_PKG_MANAGER="$mgr"
+            return 0
+        fi
+    done
+
+    DETECTED_PKG_MANAGER="unknown"
 }
 
 # ============================================================================
@@ -408,7 +416,8 @@ populate_package_cache() {
 
     local installed_packages
     # Get all installed packages from dpkg (Linux only for k8s)
-    installed_packages=$(dpkg -l 2>/dev/null | awk '/^ii/ {print $2}' || true)
+    # Strip :arch suffix (e.g., curl:amd64 -> curl) for reliable matching on multiarch systems
+    installed_packages=$(dpkg -l 2>/dev/null | awk '/^ii/ {sub(/:.*/, "", $2); print $2}' || true)
 
     PACKAGE_CACHE=()
     # Check each package from our list against installed packages
@@ -437,6 +446,13 @@ ensure_package_cache_populated() {
     if [[ "$PACKAGE_CACHE_POPULATED" != "true" ]]; then
         populate_package_cache
     fi
+}
+
+# Invalidate the package cache so next is_package_installed() call refreshes
+# Call after installing or removing packages to prevent stale state
+invalidate_package_cache() {
+    PACKAGE_CACHE=()
+    PACKAGE_CACHE_POPULATED=false
 }
 
 # Check if a package is installed (Linux/apt only for k8s)
@@ -471,12 +487,10 @@ verify_package_manager() {
 # Track if specific packages are installed for later configuration
 track_special_packages() {
     local package="$1"
-    case "$package" in
-        kubeadm)  KUBEADM_INSTALLED=true ;;
-        kubectl)  KUBECTL_INSTALLED=true ;;
-        kubelet)  KUBELET_INSTALLED=true ;;
-        cri-o)    CRIO_INSTALLED=true ;;
-    esac
+    local flag_name="${SPECIAL_PACKAGE_FLAGS[$package]:-}"
+    if [[ -n "$flag_name" ]]; then
+        printf -v "$flag_name" '%s' 'true'
+    fi
 }
 
 # ============================================================================
@@ -495,6 +509,38 @@ get_file_permissions() {
         # Linux stat syntax
         stat -c "%a" "$file"
     fi
+}
+
+# Create a tracked temp file that will be cleaned up on exit
+make_temp_file() {
+    local tmp
+    tmp=$(mktemp)
+    TEMP_FILES+=("$tmp")
+    echo "$tmp"
+}
+
+# Check if a filesystem has enough free space
+# Usage: check_disk_space "/var" 4096  (checks /var has 4096 MB free)
+# Returns: 0 if enough space, 1 if not (prints error)
+check_disk_space() {
+    local path="$1"
+    local required_mb="$2"
+    local buffer_mb="${3:-512}"
+    local total_needed=$((required_mb + buffer_mb))
+
+    local available_mb
+    available_mb=$(df -BM "$path" --output=avail 2>/dev/null | tail -1 | tr -d ' M')
+
+    # Fallback for macOS (no --output flag)
+    if [[ -z "$available_mb" ]]; then
+        available_mb=$(df -m "$path" | tail -1 | awk '{print $4}')
+    fi
+
+    if [[ -z "$available_mb" || ! "$available_mb" =~ ^[0-9]+$ || "$available_mb" -lt "$total_needed" ]]; then
+        print_error "Insufficient disk space on ${path} (${available_mb:-unknown} MB available, need ${required_mb} MB + ${buffer_mb} MB buffer)"
+        return 1
+    fi
+    return 0
 }
 
 # Create a config file with specified permissions
@@ -537,6 +583,7 @@ create_config_file() {
         fi
         chmod "$perms" "$file"
     fi
+    CREATED_CONFIG_FILES+=("$file")
 }
 
 # Backup file if it exists (only once per session)
@@ -568,22 +615,16 @@ backup_file() {
 
         # Preserve ownership (requires appropriate permissions)
         # Get the owner and group of the original file
+        local owner
         if [[ "$DETECTED_OS" == "macos" ]]; then
-            # macOS stat syntax
-            local owner=$(stat -f "%u:%g" "$file")
-            if needs_elevation "$file"; then
-                run_elevated chown "$owner" "$backup" 2>/dev/null
-            else
-                chown "$owner" "$backup" 2>/dev/null || true
-            fi
+            owner=$(stat -f "%u:%g" "$file")
         else
-            # Linux stat syntax
-            local owner=$(stat -c "%u:%g" "$file")
-            if needs_elevation "$file"; then
-                run_elevated chown "$owner" "$backup" 2>/dev/null
-            else
-                chown "$owner" "$backup" 2>/dev/null || true
-            fi
+            owner=$(stat -c "%u:%g" "$file")
+        fi
+        if needs_elevation "$file"; then
+            run_elevated chown "$owner" "$backup" 2>/dev/null || true
+        else
+            chown "$owner" "$backup" 2>/dev/null || true
         fi
 
         print_backup "- Created backup: $backup"
@@ -794,19 +835,49 @@ add_export_if_needed() {
     update_config_line "shell" "$file" "$setting_pattern" "$full_export" "$description"
 }
 
+# Ensure a file ends with exactly N blank lines (default: 1)
+# Usage: normalize_trailing_newlines <file> [num_lines]
+normalize_trailing_newlines() {
+    local file="$1"
+    local num_lines="${2:-1}"
+    local temp_file=$(mktemp)
+
+    # Remove all trailing blank lines (last content line keeps its newline)
+    sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$file" > "$temp_file"
+
+    # Add (N-1) more newlines since the last line already ends with one
+    for ((i=1; i<num_lines; i++)); do
+        printf '\n' >> "$temp_file"
+    done
+
+    if needs_elevation "$file"; then
+        run_elevated mv "$temp_file" "$file"
+    else
+        mv "$temp_file" "$file"
+    fi
+}
+
 # ============================================================================
 # Summary Functions
 # ============================================================================
 
 # Print a summary of all changes made
 print_session_summary() {
-    if [[ ${#BACKED_UP_FILES[@]} -eq 0 && ${#CREATED_BACKUP_FILES[@]} -eq 0 ]]; then
+    if [[ ${#BACKED_UP_FILES[@]} -eq 0 && ${#CREATED_BACKUP_FILES[@]} -eq 0 && ${#CREATED_CONFIG_FILES[@]} -eq 0 ]]; then
         echo -e "            ${GRAY}No files were modified during this session.${NC}"
         return
     fi
 
     print_summary "─── Session ─────────────────────────────────────────────────────────"
     echo ""
+
+    if [[ ${#CREATED_CONFIG_FILES[@]} -gt 0 ]]; then
+        print_info "Files Created:"
+        for file in "${CREATED_CONFIG_FILES[@]+"${CREATED_CONFIG_FILES[@]}"}"; do
+            echo "            - $file"
+        done
+        echo ""
+    fi
 
     if [[ ${#BACKED_UP_FILES[@]} -gt 0 ]]; then
         print_success "${GREEN}Files Updated:${NC}"
