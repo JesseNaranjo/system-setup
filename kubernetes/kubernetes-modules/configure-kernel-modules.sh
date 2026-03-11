@@ -3,19 +3,29 @@
 # Ensures br_netfilter and overlay modules are loaded and configured to load at boot
 set -euo pipefail
 
+echo "DEBUG [configure-kernel-modules.sh] entered" >&2
+
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
     readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fi
 
+echo "DEBUG [configure-kernel-modules.sh] SCRIPT_DIR=${SCRIPT_DIR}" >&2
+echo "DEBUG [configure-kernel-modules.sh] about to source utils-k8s.sh" >&2
+
 # shellcheck source=../utils-k8s.sh
 source "${SCRIPT_DIR}/utils-k8s.sh"
+
+echo "DEBUG [configure-kernel-modules.sh] utils-k8s.sh sourced" >&2
 
 # ============================================================================
 # Configuration
 # ============================================================================
 
-readonly REQUIRED_MODULES=("br_netfilter" "overlay")
-readonly MODULES_CONF="/etc/modules-load.d/k8s.conf"
+echo "DEBUG [configure-kernel-modules.sh] about to declare readonly vars" >&2
+readonly REQUIRED_MODULES=("br_netfilter" "overlay") || echo "DEBUG [configure-kernel-modules.sh] REQUIRED_MODULES readonly failed" >&2
+echo "DEBUG [configure-kernel-modules.sh] REQUIRED_MODULES set" >&2
+readonly MODULES_CONF="/etc/modules-load.d/k8s.conf" || echo "DEBUG [configure-kernel-modules.sh] MODULES_CONF readonly failed" >&2
+echo "DEBUG [configure-kernel-modules.sh] MODULES_CONF set" >&2
 
 # ============================================================================
 # Module Loading
