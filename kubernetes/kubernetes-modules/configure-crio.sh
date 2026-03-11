@@ -125,4 +125,6 @@ main_configure_crio() {
     print_success "CRI-O container runtime configuration complete"
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main_configure_crio "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main_configure_crio "$@"
+fi

@@ -169,4 +169,6 @@ main_initialize_cluster() {
     fi
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main_initialize_cluster "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main_initialize_cluster "$@"
+fi

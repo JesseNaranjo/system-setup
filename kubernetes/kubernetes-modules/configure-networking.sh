@@ -117,4 +117,6 @@ main_configure_networking() {
     print_success "Kubernetes networking configuration complete"
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main_configure_networking "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main_configure_networking "$@"
+fi

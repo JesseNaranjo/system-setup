@@ -93,4 +93,6 @@ main_configure_swap() {
     print_success "Swap configuration complete"
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main_configure_swap "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main_configure_swap "$@"
+fi

@@ -147,4 +147,6 @@ main_install_update_minikube() {
     fi
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main_install_update_minikube "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main_install_update_minikube "$@"
+fi

@@ -130,4 +130,6 @@ main_validate_cluster() {
     return 0
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main_validate_cluster "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main_validate_cluster "$@"
+fi

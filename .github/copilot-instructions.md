@@ -35,7 +35,9 @@ main() {
     print_success "Complete"
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
 ```
 
 ### Most Common Operations

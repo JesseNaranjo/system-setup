@@ -3,29 +3,19 @@
 # Ensures br_netfilter and overlay modules are loaded and configured to load at boot
 set -euo pipefail
 
-echo "DEBUG [configure-kernel-modules.sh] entered" >&2
-
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
     readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fi
 
-echo "DEBUG [configure-kernel-modules.sh] SCRIPT_DIR=${SCRIPT_DIR}" >&2
-echo "DEBUG [configure-kernel-modules.sh] about to source utils-k8s.sh" >&2
-
 # shellcheck source=../utils-k8s.sh
 source "${SCRIPT_DIR}/utils-k8s.sh"
-
-echo "DEBUG [configure-kernel-modules.sh] utils-k8s.sh sourced" >&2
 
 # ============================================================================
 # Configuration
 # ============================================================================
 
-echo "DEBUG [configure-kernel-modules.sh] about to declare readonly vars" >&2
-readonly REQUIRED_MODULES=("br_netfilter" "overlay") || echo "DEBUG [configure-kernel-modules.sh] REQUIRED_MODULES readonly failed" >&2
-echo "DEBUG [configure-kernel-modules.sh] REQUIRED_MODULES set" >&2
-readonly MODULES_CONF="/etc/modules-load.d/k8s.conf" || echo "DEBUG [configure-kernel-modules.sh] MODULES_CONF readonly failed" >&2
-echo "DEBUG [configure-kernel-modules.sh] MODULES_CONF set" >&2
+readonly REQUIRED_MODULES=("br_netfilter" "overlay")
+readonly MODULES_CONF="/etc/modules-load.d/k8s.conf"
 
 # ============================================================================
 # Module Loading
@@ -105,29 +95,26 @@ persist_modules() {
 # ============================================================================
 
 main_configure_kernel_modules() {
-    print_debug "Entering main_configure_kernel_modules"
     detect_environment
-    print_debug "detect_environment complete"
 
     if ! command -v modprobe &>/dev/null; then
         print_error "modprobe not found; cannot load kernel modules"
         print_info "Install kmod: apt install -y kmod"
         return 1
     fi
-    print_debug "modprobe check passed"
 
     print_info "Configuring required kernel modules..."
 
     local module
     for module in "${REQUIRED_MODULES[@]}"; do
-        print_debug "Loading module: ${module}"
         load_module "$module"
     done
 
-    print_debug "Calling persist_modules"
     persist_modules
 
     print_success "Kernel module configuration complete"
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main_configure_kernel_modules "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main_configure_kernel_modules "$@"
+fi

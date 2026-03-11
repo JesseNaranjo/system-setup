@@ -158,4 +158,6 @@ main_configure_k8s_repos() {
     print_success "Repository configuration complete"
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main_configure_k8s_repos "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main_configure_k8s_repos "$@"
+fi

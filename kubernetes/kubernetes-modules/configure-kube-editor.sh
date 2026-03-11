@@ -81,4 +81,6 @@ main_configure_kube_editor() {
     print_success "KUBE_EDITOR configuration complete"
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main_configure_kube_editor "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main_configure_kube_editor "$@"
+fi

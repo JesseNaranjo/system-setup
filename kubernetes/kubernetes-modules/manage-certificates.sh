@@ -113,4 +113,6 @@ main_manage_certificates() {
     print_success "Certificate management complete"
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main_manage_certificates "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main_manage_certificates "$@"
+fi
