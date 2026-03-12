@@ -1,322 +1,66 @@
 # AI Agent Instructions
 
-## Document Purpose
+<!-- DRIFT GUARD — Do not remove the audience line below. -->
+> **Audience: AI coding agents only.** This file is written for LLM-based coding assistants (Claude Code, GitHub Copilot, etc.), not human developers. You MUST follow these guidelines. It assumes you already know general programming principles (SOLID, DRY, YAGNI, etc.) and focuses on project-specific conventions.
 
-This document provides comprehensive patterns, styles, and conventions used across all bash scripts in this repository. Optimized for LLM consumption to enable rapid, accurate code generation and modification without requiring full source file analysis.
+> **Sync note:** [CLAUDE.md](../CLAUDE.md) and [.github/copilot-instructions.md](../.github/copilot-instructions.md) are minimal pointer files that reference this document. They must stay in sync with each other.
 
-**This is the detailed reference document for this repository.**
-
-> **Note:** You MUST keep the Quick Reference in sync with [CLAUDE.md](../CLAUDE.md) and [.github/copilot-instructions.md](../.github/copilot-instructions.md).
-
-**Last Updated:** January 2026
-**Primary Reference:** system-setup/system-setup.sh + system-setup/utils-sys.sh
-**Secondary Reference:** `_download-*-scripts.sh` (standalone script pattern)
-**Scope:** All `.sh` scripts in repository (modular, standalone, and lightweight)
+Personal system configuration repository with bash scripts for setting up Linux and macOS systems. Modular architecture with package management, system configuration, LXC containers, Kubernetes setup, and utilities.
 
 ## Table of Contents
 
-1. [Folder Documentation](#folder-documentation)
-2. [README Content Standards](#readme-content-standards)
-3. [Quick Reference for LLMs](#quick-reference-for-llms)
-4. [DRY Principle](#dry-principle)
-5. [Core Principles](#core-principles)
-6. [Script Architecture](#script-architecture)
-7. [Script Structure](#script-structure)
-8. [Modular Script Patterns](#modular-script-patterns)
-9. [Bash Standards](#bash-standards)
-10. [Function Patterns](#function-patterns)
-11. [User Interaction](#user-interaction)
-12. [Configuration Management](#configuration-management)
-13. [Output & Logging](#output--logging)
-14. [Cross-Platform Support](#cross-platform-support)
-15. [Error Handling](#error-handling)
-16. [File Modification](#file-modification)
-17. [Security & Safety](#security--safety)
-18. [Download & Self-Update Patterns](#download--self-update-patterns)
-19. [Common Patterns](#common-patterns)
-20. [Anti-Patterns](#anti-patterns)
-21. [Documentation Standards](#documentation-standards)
-22. [LLM Optimization Guidelines](#llm-optimization-guidelines)
-23. [Repository-Specific Patterns](#repository-specific-patterns)
-24. [Complete Function Templates](#complete-function-templates)
+**Understanding the system**
+- [Design Principles](#design-principles)
+- [Key Patterns & Conventions](#key-patterns--conventions)
+- [Script Architecture](#script-architecture)
+- [Important Implementation Notes](#important-implementation-notes)
+
+**Development lifecycle**
+- [Script Structure](#script-structure)
+- [Modular Script Patterns](#modular-script-patterns)
+- [Adding a New Module Script](#adding-a-new-module-script)
+- [Quick Reference for LLMs](#quick-reference-for-llms)
+- [Complete Function Templates](#complete-function-templates)
+
+**Subsystem references**
+- [Configuration Management](#configuration-management)
+- [User Interaction](#user-interaction)
+- [Output & Logging](#output--logging)
+- [Cross-Platform Support](#cross-platform-support)
+- [Error Handling](#error-handling)
+- [File Modification](#file-modification)
+- [Security & Safety](#security--safety)
+- [Download & Self-Update Patterns](#download--self-update-patterns)
+
+**Documentation**
+- [Folder Documentation](#folder-documentation)
+- [README Content Standards](#readme-content-standards)
+
+**Operational**
+- [Git Worktrees](#git-worktrees)
+- [Running the Scripts](#running-the-scripts)
+- [LLM Optimization Guidelines](#llm-optimization-guidelines)
 
 ---
 
-## Folder Documentation
+## Design Principles
 
-Each significant folder contains a `README.md` that documents its contents, patterns, and usage. **These READMEs are the source of truth for understanding each component.**
+These principles guide all code changes. You know the general definitions — below are the project-specific applications only.
 
-### Required Workflow
+- **Idempotency**: Check state before changes, skip if already correct. Project pattern: `config_exists` + `get_config_value` before any modification.
+- **Safety**: Backup files before modification, comment old configs (NEVER delete). `set -euo pipefail` at every script top.
+- **Clarity**: Prefer explicit, well-named functions over aliases or abbreviations. Function names MUST describe what they do. Variable names MUST be descriptive.
+- **Consistency**: Match existing patterns exactly. Same output functions, same guard patterns, same naming conventions. Avoid maintaining multiple ways to accomplish the same task.
+- **KISS**: No one-time abstractions. Three similar lines beats a premature abstraction. Minimum complexity for the current task.
+- **DRY**: Single source of truth over duplicated expressions — even for small things like threshold values or format strings.
+- **Platform Independence**: Detect OS (macOS/Linux) and adapt. Handle both brew and apt. Detect container environments (Docker, LXC).
+- **YAGNI**: Do NOT add speculative features or defensive code for impossible scenarios. Placeholder features are removed rather than maintained.
 
-1. **Read Before Modifying** - Before making changes to any folder, read its README.md first
-2. **Update After Changes** - When adding, removing, or significantly modifying files in a folder, update its README.md
-3. **Current State Only** - READMEs document the current codebase, not historical or removed code. Remove documentation for deleted features.
+### DRY: When to Extract
 
-### README Locations
+Apply the DRY principle when code duplication creates maintenance risk. Extract shared code when:
 
-✅ = exists, ❌ = needs creation
-
-#### Script Directories
-
-| Path | Documents | Status |
-|------|-----------|--------|
-| `README.md` | Repository overview | ✅ |
-| `github/README.md` | GitHub CLI automation scripts | ✅ |
-| `kubernetes/README.md` | Kubernetes cluster scripts | ✅ |
-| `llm/README.md` | Ollama/LLM management scripts | ✅ |
-| `lxc/README.md` | LXC container management scripts | ✅ |
-| `system-setup/README.md` | Main system setup suite | ✅ |
-| `system-setup/system-modules/README.md` | Module scripts documentation | ✅ |
-| `git/README.md` | Git-related scripts | ❌ |
-| `raspberry-pi/README.md` | Raspberry Pi setup scripts | ❌ |
-| `utils/README.md` | Cross-platform utilities | ❌ |
-
-#### Documentation Folders
-
-| Path | Documents | Status |
-|------|-----------|--------|
-| `.ai/AI-AGENT-INSTRUCTIONS.md` | LLM coding standards (this document) | ✅ |
-| `configs/README.md` | Configuration documentation files | ❌ |
-| `walkthroughs/README.md` | Step-by-step guides | ❌ |
-
-### README Maintenance Rules
-
-When modifying code:
-
-- **Adding a file**: Add an entry describing the file's purpose to the folder's README
-- **Removing a file**: Remove the file's documentation from the README
-- **Renaming a file**: Update the README to reflect the new name
-- **Changing behavior**: Update the README to describe current behavior
-- **Adding a folder**: Create a README.md in the new folder documenting its purpose
-
-**Never document:**
-- Removed or deprecated code
-- Planned but unimplemented features
-- Historical context (use git history for that)
-
----
-
-## README Content Standards
-
-Each folder type requires different documentation. Use these templates when creating or updating READMEs.
-
-### Standard Section Order
-
-All READMEs should follow this section order (omit sections that don't apply):
-
-1. Title (H1)
-2. Purpose/Overview (paragraph under title)
-3. Features (if service root)
-4. Structure (table of sub-folders/files)
-5. Files (detailed file descriptions)
-6. Key Concepts (if complex patterns)
-7. Configuration (if applicable)
-8. Usage (code examples)
-9. Adding New [Items] (extension guide)
-
-### Template: Script Directory
-
-Use for: `lxc/`, `github/`, `llm/`, `utils/` - directories containing standalone scripts.
-
-```markdown
-# Directory Name
-
-Brief description of what these scripts do.
-
-## Scripts
-
-| Script | Purpose |
-|--------|---------|
-| `script-a.sh` | What script-a does |
-| `script-b.sh` | What script-b does |
-| `_download-*.sh` | Auto-updater for this directory |
-
-## Usage
-
-\`\`\`bash
-./script-a.sh [options]
-\`\`\`
-
-## Adding New Scripts
-
-1. Create script following repository conventions (see AI-AGENT-INSTRUCTIONS.md)
-2. Add to `get_script_list()` in the download script
-3. Update this README
-```
-
-### Template: Module Suite
-
-Use for: `system-setup/` - directories containing a main script with sourced modules.
-
-```markdown
-# Suite Name
-
-Brief description of the suite and its purpose.
-
-## Structure
-
-| Component | Purpose |
-|-----------|---------|
-| `main.sh` | Orchestrator script |
-| `utils-sys.sh` | Shared utilities |
-| `modules/` | Feature modules |
-
-## Running
-
-\`\`\`bash
-./main.sh           # Interactive mode
-./main.sh --debug   # Debug mode
-\`\`\`
-
-## Modules
-
-### module-a.sh
-Description of what this module configures.
-
-### module-b.sh
-Description of what this module configures.
-
-## Adding New Modules
-
-1. Create module in `modules/` following existing patterns
-2. Source `utils-sys.sh` for shared functions
-3. Add `main_<module_name>()` entry point
-4. Source and call from main script
-5. Update this README
-```
-
-### Template: Documentation Folder
-
-Use for: `configs/`, `walkthroughs/` - directories containing markdown documentation.
-
-```markdown
-# Folder Name
-
-Brief description of what documentation this folder contains.
-
-## Contents
-
-| File | Topic |
-|------|-------|
-| `topic-a.md` | What topic-a covers |
-| `topic-b.md` | What topic-b covers |
-
-## Adding Documentation
-
-1. Create markdown file with descriptive name
-2. Follow existing format conventions
-3. Update this README
-```
-
----
-
-## Quick Reference for LLMs
-
-### Minimal Script Template
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-readonly BLUE='\033[0;34m'
-readonly GREEN='\033[0;32m'
-readonly RED='\033[0;31m'
-readonly YELLOW='\033[1;33m'
-readonly NC='\033[0m'
-
-print_info() { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
-print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
-print_error() { echo -e "${RED}[ ERROR   ]${NC} $1"; }
-
-main() {
-    print_info "Starting..."
-    # Logic here
-    print_success "Complete"
-}
-
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
-fi
-```
-
-### Most Common Operations
-
-**Idempotent Config:**
-```bash
-config_exists "$file" "$setting" && [[ "$(get_config_value "$file" "$setting")" == "$val" ]] && return 0
-backup_file "$file"
-add_change_header "$file" "type"
-echo "$setting $val" >> "$file"
-```
-
-**User Prompt:**
-```bash
-prompt_yes_no "Action?" "n" && execute || { print_info "Skipped"; return 0; }
-```
-
-**Platform Branch:**
-```bash
-[[ "$os" == "macos" ]] && macos_cmd || linux_cmd
-```
-
-**Loop with Check:**
-```bash
-for item in "${array[@]}"; do
-    [[ condition ]] && continue
-    process "$item"
-done
-```
-
----
-
-## Table of Contents
-1. [Core Principles](#core-principles)
-2. [Script Architecture](#script-architecture)
-3. [Script Structure](#script-structure)
-4. [Modular Script Patterns](#modular-script-patterns)
-5. [Bash Standards](#bash-standards)
-6. [Function Patterns](#function-patterns)
-7. [User Interaction](#user-interaction)
-8. [Configuration Management](#configuration-management)
-9. [Output & Logging](#output--logging)
-10. [Cross-Platform Support](#cross-platform-support)
-11. [Error Handling](#error-handling)
-12. [File Modification](#file-modification)
-13. [Security & Safety](#security--safety)
-14. [Download & Self-Update Patterns](#download--self-update-patterns)
-
----
-
-## Core Principles
-
-### Critical Rules (Always Apply)
-1. **Idempotency**: Check state before changes, skip if already correct
-2. **Safety**: Backup files before modification, comment (never delete) old configs
-3. **Quote Everything**: All variable expansions must be quoted: `"$var"`
-4. **set -euo pipefail**: Always at script top
-5. **Return Codes**: 0 = success, 1 = error
-
-### User Experience
-- Default to "n" for destructive ops, "y" for safe ops
-- Provide clear feedback before and after actions
-- Continue script if non-critical components fail
-- Use color-coded output functions
-
-### Platform Independence
-- Detect OS (macOS/Linux) and adapt
-- Handle both brew and apt package managers
-- Support user and system-wide configurations
-- Detect container environments (Docker, LXC)
-
-### Folder Documentation
-See [Folder Documentation](#folder-documentation) section for detailed README requirements and templates.
-
----
-
-## DRY Principle
-
-Apply the DRY (Don't Repeat Yourself) principle when code duplication creates maintenance risk. Extract shared code when:
-
-### When to Extract
+#### When to Extract
 
 1. **Sensitive Logic** - Code that is delicate, complex, or where bugs would have serious consequences
    ```bash
@@ -385,13 +129,13 @@ Apply the DRY (Don't Repeat Yourself) principle when code duplication creates ma
    print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1"; }
    ```
 
-### When NOT to Extract
+#### When NOT to Extract
 
 - **Coincidentally Similar Code** - Code that looks the same but serves different purposes and may evolve independently
 - **Simple One-Liners** - Trivial operations where extraction adds indirection without value
 - **Single Use** - Code used in only one place (wait for the second use case)
 
-### Extraction Strategies
+#### Extraction Strategies
 
 | Scenario | Strategy |
 |----------|----------|
@@ -400,9 +144,267 @@ Apply the DRY (Don't Repeat Yourself) principle when code duplication creates ma
 | Cross-repository | Standalone script with inline functions |
 | Configuration | Constants at script top with `readonly` |
 
+### No Dead Code or Backwards-Compatibility Shims
+
+- **Remove, don't comment out.** Dead code, unused functions, and unreferenced variables MUST be deleted. Git history preserves anything that needs to be recovered.
+- **Breaking changes over compatibility layers.** NEVER add backwards-compatibility code or legacy fallbacks unless the user explicitly requests it.
+- **Exception: Config file modifications.** The comment-then-add pattern (commenting out old values with `# Replaced` annotation) is the intended convention for system config files, not dead code. This preserves a rollback path for system configuration changes that could break the user's environment.
+
+### No Simple Wrapper Functions
+
+A "simple wrapper" is a function whose only job is to call one other function/command — it renames, re-exports, or forwards arguments without adding logic.
+
+- **Do NOT create them.** Call the underlying command directly at each call site.
+- **Inline existing ones when found.**
+
+**Not simple wrappers** (justified):
+- Functions that add error handling, guards, or availability checks (e.g., `command -v` before use)
+- Functions that add cross-platform branching (macOS vs Linux)
+- Functions that enforce idempotency (check-before-modify pattern)
+- Functions that add user interaction (prompts, confirmations)
+
+### Architecture Decisions
+
+Intentional patterns that may appear redundant but serve specific purposes:
+
+1. **Per-Session Tracking Arrays** (`BACKED_UP_FILES`, `CREATED_BACKUP_FILES`): Track which files have been backed up/modified during the current session to prevent duplicate backups and headers. Do NOT simplify to boolean flags — the arrays are used for the session summary report.
+2. **Comment-Then-Add Pattern**: Old config values are commented out rather than overwritten. This is deliberate safety — users can see what changed and manually revert if a configuration breaks their system.
+3. **utils-sys.sh Multiple-Source Guard**: The `UTILS_SYS_SH_LOADED` readonly flag prevents double-sourcing when multiple modules source utils-sys.sh. This is NOT redundant — without it, readonly variable re-declarations would cause fatal errors.
+
+---
+
+## Key Patterns & Conventions
+
+Ordered from most universally applicable to most specialized.
+
+### Critical Syntax Rules
+
+```bash
+# MUST quote ALL variables (security + correctness)
+"$var" "${array[@]}"  # ✓ Correct
+$var ${array[@]}      # ✖ NEVER
+
+# MUST use arrays (not space-separated strings)
+arr=() arr+=("item")  # ✓ Correct
+str="" str="$str item" # ✖ NEVER
+
+# MUST use [[ ]] not [ ]
+[[ -f "$file" ]]      # ✓ Correct
+[ -f "$file" ]        # ✖ NEVER
+
+# MUST use $() not backticks
+result=$(cmd)         # ✓ Correct
+result=`cmd`          # ✖ NEVER
+
+# MUST use set -euo pipefail
+#!/usr/bin/env bash
+set -euo pipefail     # ALWAYS at script top
+```
+
+#### Common Conditionals
+
+```bash
+# Files
+[[ -f "$file" ]]      # exists
+[[ -d "$dir" ]]       # directory
+[[ -w "$file" ]]      # writable
+[[ ! -f "$file" ]]    # doesn't exist
+
+# Strings
+[[ -z "$var" ]]       # empty
+[[ -n "$var" ]]       # non-empty
+[[ "$a" == "$b" ]]    # equals
+[[ "$var" =~ ^regex$ ]] # regex
+[[ "$var" == glob* ]] # glob
+
+# Numbers
+[[ $n -eq 5 ]]        # equal
+[[ $n -gt 5 ]]        # greater
+[[ $n -lt 5 ]]        # less
+```
+
+#### Anti-Patterns
+
+| ❌ NEVER | ✓ ALWAYS |
+|---------|----------|
+| `sed -i "/old/d" "$file"` | `sed -i "s/^old/# old  # Replaced/" "$file"` |
+| `cp $file $backup` | `cp "$file" "$backup"` |
+| `curl -O "$url"` | `command -v curl &>/dev/null && curl -O "$url"` |
+| `config="/home/user/.rc"` | `config="$HOME/.rc"` |
+| `echo "x=y" >> "$file"` | `config_exists "$file" "x" \|\| echo "x=y" >> "$file"` |
+| `[ -f "$file" ]` | `[[ -f "$file" ]]` |
+| `` result=`cmd` `` | `result=$(cmd)` |
+| `str="$str item"` | `arr+=("item")` |
+
+### Naming Conventions
+
+#### Variables
+
+```bash
+readonly CONSTANT="value"  # Global constant
+GLOBAL_VAR="value"         # Global variable
+local local_var="value"    # Function local
+local param1="$1"          # Function parameter
+```
+
+#### Variable Declaration with Assignment
+
+```bash
+# ALWAYS combine local declaration with initial assignment
+local variable="initial_value"    # ✓ Correct
+local config_file="/etc/myapp.conf"
+local count=0
+
+# Do NOT split declaration and assignment
+local variable                    # ✖ NEVER
+variable="initial_value"
+```
+
+#### Environment Variable Configuration
+
+```bash
+# Document env vars in header comments
+# Usage:
+#   SRC_ORG="OldOrg" DST_ORG="NewOrg" ./script.sh
+
+# Optional with default
+readonly VAR="${VAR:-default_value}"
+
+# Required - validate early
+readonly REQUIRED_VAR="${REQUIRED_VAR:-}"
+[[ -z "$REQUIRED_VAR" ]] && print_error "REQUIRED_VAR is required" && exit 1
+```
+
+#### Script Naming
+
+- **Main scripts**: `action-noun.sh` (e.g., `system-setup.sh`, `ollama-screen.sh`)
+- **Download helpers**: `_download-*-scripts.sh` (underscore prefix for utilities)
+- **Action scripts**: `verb-noun.sh` (e.g., `start-k8s.sh`, `stop-lxc.sh`, `config-lxc-ssh.sh`)
+
+#### Exit Codes
+
+```bash
+# Functions: return 0 (success) or 1 (error)
+# Standalone scripts: use sysexits.h for better error reporting
+exit 0   # EX_OK - Success
+exit 1   # General error
+exit 64  # EX_USAGE - Command line usage error
+exit 65  # EX_DATAERR - Data format error
+exit 66  # EX_NOINPUT - Cannot open input
+exit 69  # EX_UNAVAILABLE - Service unavailable
+exit 70  # EX_SOFTWARE - Internal software error
+exit 73  # EX_CANTCREAT - Can't create output file
+exit 74  # EX_IOERR - Input/output error
+exit 77  # EX_NOPERM - Permission denied
+```
+
+### Function Conventions
+
+#### Standard Function Template
+
+```bash
+# Brief description
+# Usage: function_name "param1" ["param2"]
+# Returns: 0 on success, 1 on error
+function_name() {
+    local param1="$1"
+    local param2="${2:-default}"
+
+    if [[ -z "$param1" ]]; then
+        print_error "param1 required"
+        return 1
+    fi
+
+    # Logic here
+    return 0
+}
+```
+
+#### Function Call Patterns
+
+```bash
+# Capture return value
+if function_name "arg"; then
+    # Success
+else
+    # Error
+fi
+
+# Capture output
+local result=$(function_name "arg")
+
+# Both
+if result=$(function_name "arg"); then
+    echo "Got: $result"
+fi
+```
+
+#### Array Iteration
+
+```bash
+for item in "${array[@]}"; do
+    echo "$item"
+done
+
+# Check if already in array
+local found=false
+for item in "${array[@]}"; do
+    if [[ "$item" == "$target" ]]; then
+        found=true
+        break
+    fi
+done
+```
+
+### Common Workflows
+
+#### Idempotent Configuration Flow
+
+1. Detect current state
+2. Compare with desired state
+3. Skip if matches (print success)
+4. Backup if updating
+5. Add header if first change
+6. Comment old + add new
+7. Report result
+
+#### User Interaction Flow
+
+1. Check current state
+2. Explain action
+3. Prompt (contextual default)
+4. Execute
+5. Confirm result
+
+#### Scope-Based Configuration
+
+1. Determine scope (user/system)
+2. Set config file path
+3. Check write permissions
+4. Create file if missing
+5. Apply settings
+6. Preserve ownership
+
 ---
 
 ## Script Architecture
+
+### Repository Overview
+
+Personal system configuration repository containing bash scripts and documentation for setting up Linux and macOS systems. The scripts handle package management, system configuration, LXC container management, Kubernetes setup, and various utilities.
+
+### Key Directories
+
+| Directory | Type | Description |
+|-----------|------|-------------|
+| `system-setup/` | Modular | Main system configuration suite (the core of the repository) |
+| `lxc/` | Standalone | LXC container management scripts |
+| `kubernetes/` | Modular | Kubernetes cluster setup and configuration suite |
+| `github/` | Standalone | GitHub CLI automation scripts |
+| `llm/` | Standalone | Ollama/LLM management scripts |
+| `utils/` | Standalone | Cross-platform utility scripts |
+| `configs/` | Documentation | Configuration documentation (markdown) |
+| `walkthroughs/` | Documentation | Step-by-step guides (markdown) |
 
 This repository uses two distinct script architectures. Choose based on context:
 
@@ -424,7 +426,7 @@ This repository uses two distinct script architectures. Choose based on context:
 
 ### 2. Standalone Scripts (github/, lxc/, llm/)
 
-**When to use:** Self-contained scripts that must work when downloaded individually.
+**When to use:** Self-contained scripts that MUST work when downloaded individually.
 
 **Structure:**
 - Each script is fully self-contained
@@ -436,16 +438,6 @@ This repository uses two distinct script architectures. Choose based on context:
 - Include full color definitions and output functions
 - Include `prompt_yes_no` if user interaction needed
 - Can be copied/downloaded and run immediately
-
-### Decision Guide
-
-| Scenario | Architecture | Reason |
-|----------|-------------|--------|
-| New feature for system-setup | Modular | Add to existing module or create new one |
-| New utility script in lxc/, llm/, etc. | Standalone | Must work when downloaded individually |
-| Shared helper used by multiple modules | Add to utils-sys.sh | Centralized maintenance |
-| One-off automation script | Standalone | Simpler, no dependencies |
-| Simple system task (start/stop services) | Standalone | Source utils for shared functions, run independently |
 
 ### 3. Lightweight Scripts (utils/)
 
@@ -471,6 +463,30 @@ while (true); do
     sleep 60s
 done
 ```
+
+### Decision Guide
+
+| Scenario | Architecture | Reason |
+|----------|-------------|--------|
+| New feature for system-setup | Modular | Add to existing module or create new one |
+| New utility script in lxc/, llm/, etc. | Standalone | Must work when downloaded individually |
+| Shared helper used by multiple modules | Add to utils-sys.sh | Centralized maintenance |
+| One-off automation script | Standalone | Simpler, no dependencies |
+| Simple system task (start/stop services) | Standalone | Source utils for shared functions, run independently |
+
+---
+
+## Important Implementation Notes
+
+1. **Source Guard Required**: All scripts MUST use the `[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"` execution guard.
+2. **utils-sys.sh Multiple-Source Guard**: Library uses `UTILS_SYS_SH_LOADED` to prevent double-sourcing. Do NOT remove this pattern.
+3. **SCRIPT_DIR Pattern**: Module scripts MUST use the `SCRIPT_DIR` / `source` pattern to locate and load utils-sys.sh.
+4. **Quote Everything**: All variable expansions MUST be quoted: `"$var"`, `"${array[@]}"`.
+5. **Return Codes Only**: Functions return 0 (success) or 1 (error). No complex exit codes except sysexits.h for standalone scripts.
+6. **Backup Before Modify**: The `backup_file` function tracks per-session to avoid duplicates. ALWAYS call before modifying a file.
+7. **Comment, Don't Delete**: Old config values are commented out with `# Replaced` annotation, NEVER removed from config files.
+8. **Platform Detection**: ALWAYS use `detect_os` / `detect_container` — NEVER hardcode paths or package managers.
+9. **User Experience Defaults**: Default to "n" for destructive operations, "y" for safe operations. Continue script if non-critical components fail.
 
 ---
 
@@ -581,7 +597,7 @@ DEBUG_MODE=false
 
 ### Module Script Template
 
-Modules in `system-modules/` follow this pattern:
+Modules in `system-modules/` MUST follow this pattern:
 
 ```bash
 #!/usr/bin/env bash
@@ -703,209 +719,152 @@ detect_environment() {
 
 ---
 
-## Bash Standards
+## Quick Reference for LLMs
 
-### Critical Syntax Rules
+### Minimal Script Template
 ```bash
-# Quote ALL variables (security + correctness)
-"$var" "${array[@]}"  # ✓ Correct
-$var ${array[@]}      # ✖ Wrong
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Arrays (not space-separated strings)
-arr=() arr+=("item")  # ✓ Correct
-str="" str="$str item" # ✖ Avoid
+readonly BLUE='\033[0;34m'
+readonly GREEN='\033[0;32m'
+readonly RED='\033[0;31m'
+readonly YELLOW='\033[1;33m'
+readonly NC='\033[0m'
 
-# Conditionals - use [[ ]] not [ ]
-[[ -f "$file" ]]      # ✓ Correct
-[ -f "$file" ]        # ✖ Avoid
+print_info() { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
+print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
+print_error() { echo -e "${RED}[ ERROR   ]${NC} $1"; }
 
-# Command substitution
-result=$(cmd)         # ✓ Correct
-result=`cmd`          # ✖ Avoid
-```
-
-### Common Conditionals
-```bash
-# Files
-[[ -f "$file" ]]      # exists
-[[ -d "$dir" ]]       # directory
-[[ -w "$file" ]]      # writable
-[[ ! -f "$file" ]]    # doesn't exist
-
-# Strings
-[[ -z "$var" ]]       # empty
-[[ -n "$var" ]]       # non-empty
-[[ "$a" == "$b" ]]    # equals
-[[ "$var" =~ ^regex$ ]] # regex
-[[ "$var" == glob* ]] # glob
-
-# Numbers
-[[ $n -eq 5 ]]        # equal
-[[ $n -gt 5 ]]        # greater
-[[ $n -lt 5 ]]        # less
-```
-
-### Variable Naming
-```bash
-readonly CONSTANT="value"  # Global constant
-GLOBAL_VAR="value"         # Global variable
-local local_var="value"    # Function local
-local param1="$1"          # Function parameter
-```
-
-### Variable Declaration with Assignment
-```bash
-# Combine local declaration with initial assignment (inline)
-local variable="initial_value"    # ✓ Correct
-local config_file="/etc/myapp.conf"
-local count=0
-
-# Do NOT split declaration and assignment
-local variable                    # ✖ Avoid
-variable="initial_value"
-```
-
-### Environment Variable Configuration
-```bash
-# Document env vars in header comments
-# Usage:
-#   SRC_ORG="OldOrg" DST_ORG="NewOrg" ./script.sh
-
-# Optional with default
-readonly VAR="${VAR:-default_value}"
-
-# Required - validate early
-readonly REQUIRED_VAR="${REQUIRED_VAR:-}"
-[[ -z "$REQUIRED_VAR" ]] && print_error "REQUIRED_VAR is required" && exit 1
-```
-
-### Exit Codes (sysexits.h)
-```bash
-# Standard exit codes for better error reporting
-exit 0   # EX_OK - Success
-exit 1   # General error
-exit 64  # EX_USAGE - Command line usage error
-exit 65  # EX_DATAERR - Data format error
-exit 66  # EX_NOINPUT - Cannot open input
-exit 69  # EX_UNAVAILABLE - Service unavailable
-exit 70  # EX_SOFTWARE - Internal software error
-exit 73  # EX_CANTCREAT - Can't create output file
-exit 74  # EX_IOERR - Input/output error
-exit 77  # EX_NOPERM - Permission denied
-```
-
-### Array Iteration
-```bash
-for item in "${array[@]}"; do
-    echo "$item"
-done
-
-# Check if already in array
-local found=false
-for item in "${array[@]}"; do
-    if [[ "$item" == "$target" ]]; then
-        found=true
-        break
-    fi
-done
-```
-
----
-
-## Function Patterns
-
-### Function Template
-```bash
-# Brief description
-# Usage: function_name "param1" ["param2"]
-# Returns: 0 on success, 1 on error
-function_name() {
-    local param1="$1"
-    local param2="${2:-default}"
-
-    if [[ -z "$param1" ]]; then
-        print_error "param1 required"
-        return 1
-    fi
-
+main() {
+    print_info "Starting..."
     # Logic here
-    return 0
+    print_success "Complete"
 }
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
 ```
 
-### Function Call Patterns
+### Most Common Operations
+
+**Idempotent Config:**
 ```bash
-# Capture return value
-if function_name "arg"; then
-    # Success
-else
-    # Error
-fi
+config_exists "$file" "$setting" && [[ "$(get_config_value "$file" "$setting")" == "$val" ]] && return 0
+backup_file "$file"
+add_change_header "$file" "type"
+echo "$setting $val" >> "$file"
+```
 
-# Capture output
-local result=$(function_name "arg")
+**User Prompt:**
+```bash
+prompt_yes_no "Action?" "n" && execute || { print_info "Skipped"; return 0; }
+```
 
-# Both
-if result=$(function_name "arg"); then
-    echo "Got: $result"
-fi
+**Platform Branch:**
+```bash
+[[ "$os" == "macos" ]] && macos_cmd || linux_cmd
+```
+
+**Loop with Check:**
+```bash
+for item in "${array[@]}"; do
+    [[ condition ]] && continue
+    process "$item"
+done
 ```
 
 ---
 
-## User Interaction
+## Complete Function Templates
 
-### prompt_yes_no Implementation
+### Configuration Function
 ```bash
-# Standard prompt - use /dev/tty for pipe compatibility
-prompt_yes_no() {
-    local prompt_message="$1"
-    local default="${2:-n}"
-    local user_reply
+configure_component() {
+    local os="$1"
+    local scope="$2"  # "user" or "system"
 
-    if [[ "${default,,}" == "y" ]]; then
-        local prompt_suffix="(Y/n)"
+    print_info "Configuring component..."
+
+    local config_file
+    if [[ "$scope" == "system" ]]; then
+        config_file="/etc/component.conf"
+        [[ ! -w "/etc" ]] && print_error "Requires root" && return 1
     else
-        local prompt_suffix="(y/N)"
+        config_file="$HOME/.componentrc"
     fi
 
-    read -p "$prompt_message $prompt_suffix: " -r user_reply </dev/tty
+    [[ ! -f "$config_file" ]] && touch "$config_file"
 
-    if [[ -z "$user_reply" ]]; then
-        [[ "${default,,}" == "y" ]]
-    else
-        [[ $user_reply =~ ^[Yy]$ ]]
-    fi
+    add_config_if_needed "component" "$config_file" "setting1" "value1" "Setting 1"
+    add_config_if_needed "component" "$config_file" "setting2" "value2" "Setting 2"
+
+    print_success "Component configured"
 }
 ```
 
-### Prompt Usage
+### Detection Function
 ```bash
-# Destructive - default NO
-if prompt_yes_no "Delete file?" "n"; then
-    rm "$file"
-fi
-
-# Safe - default YES
-if prompt_yes_no "Configure?" "y"; then
-    configure
-fi
-
-# Context-aware defaults
-local default="y"
-[[ "$RUNNING_IN_CONTAINER" == true ]] && default="n"
-if prompt_yes_no "Install package?" "$default"; then
-    install_package
-fi
+detect_feature() {
+    [[ -f /path/to/indicator ]] && return 0
+    command -v feature_cmd &>/dev/null && return 0
+    return 1
+}
 ```
 
-### Input Validation
+### Session Summary Function
 ```bash
-while true; do
-    read -p "Enter value: " -r input </dev/tty
-    [[ "$input" =~ ^valid$ ]] && break
-    print_error "Invalid input"
-done
+# Print a summary of all changes made during the session
+print_session_summary() {
+    if [[ ${#BACKED_UP_FILES[@]} -eq 0 && ${#CREATED_BACKUP_FILES[@]} -eq 0 ]]; then
+        echo -e "            ${GRAY}No files were modified during this session.${NC}"
+        return
+    fi
+
+    print_summary "─── Session ─────────────────────────────────────────────────────────────"
+    echo ""
+
+    if [[ ${#BACKED_UP_FILES[@]} -gt 0 ]]; then
+        print_success "${GREEN}Files Updated:${NC}"
+        for file in "${BACKED_UP_FILES[@]+"${BACKED_UP_FILES[@]}"}" ; do
+            echo "            - $file"
+        done
+        echo ""
+    fi
+
+    if [[ ${#CREATED_BACKUP_FILES[@]} -gt 0 ]]; then
+        print_backup "Backup Files:"
+        for file in "${CREATED_BACKUP_FILES[@]+"${CREATED_BACKUP_FILES[@]}"}" ; do
+            echo "            - $file"
+        done
+        echo ""
+    fi
+    print_summary "─────────────────────────────────────────────────────────────────────"
+}
+```
+
+### Package Management
+```bash
+install_packages() {
+    local os=$(detect_os)
+    verify_package_manager "$os" || return 1
+
+    local packages=("nano" "tmux" "htop")
+    for pkg in "${packages[@]}"; do
+        if is_package_installed "$os" "$pkg"; then
+            print_success "- $pkg already installed"
+        else
+            if prompt_yes_no "Install $pkg?" "y"; then
+                if [[ "$os" == "macos" ]]; then
+                    brew install "$pkg"
+                else
+                    sudo apt install "$pkg"
+                fi
+            fi
+        fi
+    done
+}
 ```
 
 ---
@@ -957,7 +916,7 @@ escape_regex() {
 # Grep a file with proper elevation handling
 # Usage: grep_file [grep_options] <pattern> <file>
 # Returns: grep exit status (0 if match found, 1 if no match)
-# Note: The file must be the LAST argument, pattern second to last
+# Note: The file MUST be the LAST argument, pattern second to last
 grep_file() {
     local args=()
     local file=""
@@ -1169,6 +1128,63 @@ track_special_packages() {
         OPENSSH_SERVER_INSTALLED=true
     fi
 }
+```
+
+---
+
+## User Interaction
+
+### prompt_yes_no Implementation
+```bash
+# Standard prompt - use /dev/tty for pipe compatibility
+prompt_yes_no() {
+    local prompt_message="$1"
+    local default="${2:-n}"
+    local user_reply
+
+    if [[ "${default,,}" == "y" ]]; then
+        local prompt_suffix="(Y/n)"
+    else
+        local prompt_suffix="(y/N)"
+    fi
+
+    read -p "$prompt_message $prompt_suffix: " -r user_reply </dev/tty
+
+    if [[ -z "$user_reply" ]]; then
+        [[ "${default,,}" == "y" ]]
+    else
+        [[ $user_reply =~ ^[Yy]$ ]]
+    fi
+}
+```
+
+### Prompt Usage
+```bash
+# Destructive - default NO
+if prompt_yes_no "Delete file?" "n"; then
+    rm "$file"
+fi
+
+# Safe - default YES
+if prompt_yes_no "Configure?" "y"; then
+    configure
+fi
+
+# Context-aware defaults
+local default="y"
+[[ "$RUNNING_IN_CONTAINER" == true ]] && default="n"
+if prompt_yes_no "Install package?" "$default"; then
+    install_package
+fi
+```
+
+### Input Validation
+```bash
+while true; do
+    read -p "Enter value: " -r input </dev/tty
+    [[ "$input" =~ ^valid$ ]] && break
+    print_error "Invalid input"
+done
 ```
 
 ---
@@ -1616,7 +1632,7 @@ add_change_header() {
 
 ### Safe Edit Patterns
 ```bash
-# Comment old, don't delete (macOS/Linux compatible)
+# Comment old, NEVER delete (macOS/Linux compatible)
 sed -i.bak "s/^\([[:space:]]*\)\(${pattern}\)/\1# \2  # Replaced $(date +%Y-%m-%d)/" "$file" && rm -f "${file}.bak"
 
 # Prefer awk for complex replacements
@@ -1669,10 +1685,6 @@ trap 'rm -f "${temp_file}"' EXIT  # Auto-cleanup
 echo "content" > "$temp_file"
 # Use temp_file...
 ```
-
----
-
-
 
 ---
 
@@ -1989,63 +2001,57 @@ fi
 
 ---
 
-## Common Patterns
+## Folder Documentation
 
-### Idempotent Configuration Flow
-```
-1. Detect current state
-2. Compare with desired state
-3. Skip if matches (print success)
-4. Backup if updating
-5. Add header if first change
-6. Comment old + add new
-7. Report result
-```
+Each significant folder contains a `README.md` that documents its contents, patterns, and usage. **These READMEs are the source of truth for understanding each component.**
 
-### User Interaction Flow
-```
-1. Check current state
-2. Explain action
-3. Prompt (contextual default)
-4. Execute
-5. Confirm result
-```
+### Required Workflow
 
-### Scope-Based Configuration
-```
-1. Determine scope (user/system)
-2. Set config file path
-3. Check write permissions
-4. Create file if missing
-5. Apply settings
-6. Preserve ownership
-```
+1. **Read Before Modifying** - Before making changes to any folder, read its README.md first
+2. **Update After Changes** - When adding, removing, or significantly modifying files in a folder, update its README.md
+3. **Current State Only** - READMEs document the current codebase, not historical or removed code. Remove documentation for deleted features.
 
----
+### README Locations
 
-## Anti-Patterns - Never Do This
+✅ = exists, ❌ = needs creation
 
-| ❌ Wrong | ✓ Correct |
-|---------|----------|
-| `sed -i "/old/d" "$file"` | `sed -i "s/^old/# old  # Replaced/" "$file"` |
-| `cp $file $backup` | `cp "$file" "$backup"` |
-| `curl -O "$url"` | `command -v curl &>/dev/null && curl -O "$url"` |
-| `config="/home/user/.rc"` | `config="$HOME/.rc"` |
-| `echo "x=y" >> "$file"` | `config_exists "$file" "x" \|\| echo "x=y" >> "$file"` |
-| `[ -f "$file" ]` | `[[ -f "$file" ]]` |
-| `result=\`cmd\`` | `result=$(cmd)` |
-| `str="$str item"` | `arr+=("item")` |
+#### Script Directories
 
----
+| Path | Documents | Status |
+|------|-----------|--------|
+| `README.md` | Repository overview | ✅ |
+| `github/README.md` | GitHub CLI automation scripts | ✅ |
+| `kubernetes/README.md` | Kubernetes cluster scripts | ✅ |
+| `llm/README.md` | Ollama/LLM management scripts | ✅ |
+| `lxc/README.md` | LXC container management scripts | ✅ |
+| `system-setup/README.md` | Main system setup suite | ✅ |
+| `system-setup/system-modules/README.md` | Module scripts documentation | ✅ |
+| `git/README.md` | Git-related scripts | ❌ |
+| `raspberry-pi/README.md` | Raspberry Pi setup scripts | ❌ |
+| `utils/README.md` | Cross-platform utilities | ❌ |
 
-## Documentation Standards
+#### Documentation Folders
 
-### Folder READMEs
+| Path | Documents | Status |
+|------|-----------|--------|
+| `.ai/AI-AGENT-INSTRUCTIONS.md` | LLM coding standards (this document) | ✅ |
+| `configs/README.md` | Configuration documentation files | ❌ |
+| `walkthroughs/README.md` | Step-by-step guides | ❌ |
 
-- Every significant folder has a README.md
-- READMEs describe current contents only
-- Update READMEs when modifying folder contents
-- Read READMEs before making changes
+### README Maintenance Rules
+
+When modifying code:
+
+- **Adding a file**: Add an entry describing the file's purpose to the folder's README
+- **Removing a file**: Remove the file's documentation from the README
+- **Renaming a file**: Update the README to reflect the new name
+- **Changing behavior**: Update the README to describe current behavior
+- **Adding a folder**: Create a README.md in the new folder documenting its purpose
+
+**NEVER document:**
+- Removed or deprecated code
+- Planned but unimplemented features
+- Historical context (use git history for that)
 
 ### Code Comments
 
@@ -2054,54 +2060,157 @@ fi
 
 ---
 
-## LLM Optimization Guidelines
+## README Content Standards
 
-### When Generating New Code
-1. **Start with structure**: Headers, globals, utility functions first
-2. **Use templates**: Adapt from Quick Reference section
-3. **Batch similar operations**: Group config additions, use loops
-4. **Minimize redundancy**: Extract repeated logic to functions
-5. **Test assumptions**: Check file existence, tool availability, permissions
+Each folder type requires different documentation. Use these templates when creating or updating READMEs.
 
-### When Modifying Existing Code
-1. **Read minimal context**: Use grep_search for function locations
-2. **Preserve patterns**: Match existing style exactly
-3. **Update in batches**: Use multi_replace when possible
-4. **Verify idempotency**: Ensure changes don't break re-runs
-5. **Test return codes**: Ensure success/failure paths work
+### Standard Section Order
 
-### Code Review Checklist
-- [ ] Variables quoted: `"$var"`
-- [ ] Arrays used (not strings): `arr+=()`
-- [ ] Idempotency: Check before modify
-- [ ] Backups: Before file changes
-- [ ] Error handling: Return codes set
-- [ ] Cross-platform: OS detection used
-- [ ] Prompts: Contextual defaults
-- [ ] Comments: Updated with code
+All READMEs MUST follow this section order (omit sections that don't apply):
+
+1. Title (H1)
+2. Purpose/Overview (paragraph under title)
+3. Features (if service root)
+4. Structure (table of sub-folders/files)
+5. Files (detailed file descriptions)
+6. Key Concepts (if complex patterns)
+7. Configuration (if applicable)
+8. Usage (code examples)
+9. Adding New [Items] (extension guide)
+
+### Template: Script Directory
+
+Use for: `lxc/`, `github/`, `llm/`, `utils/` - directories containing standalone scripts.
+
+```markdown
+# Directory Name
+
+Brief description of what these scripts do.
+
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `script-a.sh` | What script-a does |
+| `script-b.sh` | What script-b does |
+| `_download-*.sh` | Auto-updater for this directory |
+
+## Usage
+
+\`\`\`bash
+./script-a.sh [options]
+\`\`\`
+
+## Adding New Scripts
+
+1. Create script following repository conventions (see AI-AGENT-INSTRUCTIONS.md)
+2. Add to `get_script_list()` in the download script
+3. Update this README
+```
+
+### Template: Module Suite
+
+Use for: `system-setup/` - directories containing a main script with sourced modules.
+
+```markdown
+# Suite Name
+
+Brief description of the suite and its purpose.
+
+## Structure
+
+| Component | Purpose |
+|-----------|---------|
+| `main.sh` | Orchestrator script |
+| `utils-sys.sh` | Shared utilities |
+| `modules/` | Feature modules |
+
+## Running
+
+\`\`\`bash
+./main.sh           # Interactive mode
+./main.sh --debug   # Debug mode
+\`\`\`
+
+## Modules
+
+### module-a.sh
+Description of what this module configures.
+
+### module-b.sh
+Description of what this module configures.
+
+## Adding New Modules
+
+1. Create module in `modules/` following existing patterns
+2. Source `utils-sys.sh` for shared functions
+3. Add `main_<module_name>()` entry point
+4. Source and call from main script
+5. Update this README
+```
+
+### Template: Documentation Folder
+
+Use for: `configs/`, `walkthroughs/` - directories containing markdown documentation.
+
+```markdown
+# Folder Name
+
+Brief description of what documentation this folder contains.
+
+## Contents
+
+| File | Topic |
+|------|-------|
+| `topic-a.md` | What topic-a covers |
+| `topic-b.md` | What topic-b covers |
+
+## Adding Documentation
+
+1. Create markdown file with descriptive name
+2. Follow existing format conventions
+3. Update this README
+```
 
 ---
 
-## Repository-Specific Patterns
+## Git Worktrees
 
-### Repository Overview
+### Worktree Directory
 
-This is a personal system configuration repository containing bash scripts and documentation for setting up Linux and macOS systems. The scripts handle package management, system configuration, LXC container management, Kubernetes setup, and various utilities.
+Create worktrees in `.worktrees/<branch-name>/` relative to the repository root. This directory is gitignored.
 
-### Key Directories
+### Required Files to Copy
 
-| Directory | Type | Description |
-|-----------|------|-------------|
-| `system-setup/` | Modular | Main system configuration suite (the core of the repository) |
-| `lxc/` | Standalone | LXC container management scripts |
-| `kubernetes/` | Modular | Kubernetes cluster setup and configuration suite |
-| `github/` | Standalone | GitHub CLI automation scripts |
-| `llm/` | Standalone | Ollama/LLM management scripts |
-| `utils/` | Standalone | Cross-platform utility scripts |
-| `configs/` | Documentation | Configuration documentation (markdown) |
-| `walkthroughs/` | Documentation | Step-by-step guides (markdown) |
+| File/Folder | Purpose |
+|-------------|---------|
+| `.claude/` | Claude Code settings and session data |
 
-### Running the Scripts
+### Quick Setup
+
+```bash
+cp -r .claude <worktree-path>/
+```
+
+### Files NOT to Copy
+
+No generated/cached directories need copying — this project has no build step or dependency installation. If any temporary directories exist (`logs/`, `.cache/`, `tmp/`), they are created automatically when needed.
+
+### Worktree Cleanup
+
+ALWAYS delete the worktree **before** the branch:
+```bash
+git worktree remove --force .worktrees/<branch-name>
+git branch -d <branch-name>
+```
+
+### Verification
+
+Scripts are standalone bash — no install step needed. Verify with: `ls .worktrees/<branch-name>/system-setup/system-setup.sh`
+
+---
+
+## Running the Scripts
 
 **Main system setup:**
 ```bash
@@ -2140,98 +2249,33 @@ sudo ./kubernetes-setup.sh  # Full orchestrated setup
 
 ---
 
-## Complete Function Templates
+## LLM Optimization Guidelines
 
-### Configuration Function
-```bash
-configure_component() {
-    local os="$1"
-    local scope="$2"  # "user" or "system"
+### When Generating New Code
+1. **Start with structure**: Headers, globals, utility functions first
+2. **Use templates**: Adapt from Quick Reference section
+3. **Batch similar operations**: Group config additions, use loops
+4. **Minimize redundancy**: Extract repeated logic to functions
+5. **Test assumptions**: Check file existence, tool availability, permissions
 
-    print_info "Configuring component..."
+### When Modifying Existing Code
+1. **Read minimal context**: Use grep_search for function locations
+2. **Preserve patterns**: Match existing style exactly
+3. **Update in batches**: Use multi_replace when possible
+4. **Verify idempotency**: Ensure changes don't break re-runs
+5. **Test return codes**: Ensure success/failure paths work
 
-    local config_file
-    if [[ "$scope" == "system" ]]; then
-        config_file="/etc/component.conf"
-        [[ ! -w "/etc" ]] && print_error "Requires root" && return 1
-    else
-        config_file="$HOME/.componentrc"
-    fi
-
-    [[ ! -f "$config_file" ]] && touch "$config_file"
-
-    add_config_if_needed "component" "$config_file" "setting1" "value1" "Setting 1"
-    add_config_if_needed "component" "$config_file" "setting2" "value2" "Setting 2"
-
-    print_success "Component configured"
-}
-```
-
-### Detection Function
-```bash
-detect_feature() {
-    [[ -f /path/to/indicator ]] && return 0
-    command -v feature_cmd &>/dev/null && return 0
-    return 1
-}
-```
-
-### Session Summary Function
-```bash
-# Print a summary of all changes made during the session
-print_session_summary() {
-    if [[ ${#BACKED_UP_FILES[@]} -eq 0 && ${#CREATED_BACKUP_FILES[@]} -eq 0 ]]; then
-        echo -e "            ${GRAY}No files were modified during this session.${NC}"
-        return
-    fi
-
-    print_summary "─── Session ─────────────────────────────────────────────────────────────"
-    echo ""
-
-    if [[ ${#BACKED_UP_FILES[@]} -gt 0 ]]; then
-        print_success "${GREEN}Files Updated:${NC}"
-        for file in "${BACKED_UP_FILES[@]+"${BACKED_UP_FILES[@]}"}" ; do
-            echo "            - $file"
-        done
-        echo ""
-    fi
-
-    if [[ ${#CREATED_BACKUP_FILES[@]} -gt 0 ]]; then
-        print_backup "Backup Files:"
-        for file in "${CREATED_BACKUP_FILES[@]+"${CREATED_BACKUP_FILES[@]}"}" ; do
-            echo "            - $file"
-        done
-        echo ""
-    fi
-    print_summary "─────────────────────────────────────────────────────────────────────"
-}
-```
-
-### Package Management
-```bash
-install_packages() {
-    local os=$(detect_os)
-    verify_package_manager "$os" || return 1
-
-    local packages=("nano" "tmux" "htop")
-    for pkg in "${packages[@]}"; do
-        if is_package_installed "$os" "$pkg"; then
-            print_success "- $pkg already installed"
-        else
-            if prompt_yes_no "Install $pkg?" "y"; then
-                if [[ "$os" == "macos" ]]; then
-                    brew install "$pkg"
-                else
-                    sudo apt install "$pkg"
-                fi
-            fi
-        fi
-    done
-}
-```
+### Code Review Checklist
+- [ ] Variables quoted: `"$var"`
+- [ ] Arrays used (not strings): `arr+=()`
+- [ ] Idempotency: Check before modify
+- [ ] Backups: Before file changes
+- [ ] Error handling: Return codes set
+- [ ] Cross-platform: OS detection used
+- [ ] Prompts: Contextual defaults
+- [ ] Comments: Updated with code
 
 ---
 
-**End of AI Agent Instructions**
-
-*Optimized for LLM consumption. For human-readable documentation, see repository README and individual script comments.*
+<!-- DRIFT GUARD — Do not remove this closing reminder. It reinforces the audience declaration at the top of this file. -->
+> **Reminder:** This entire document is for AI coding agents, not human developers. If you are an AI agent editing this file, preserve the audience declaration and drift guard comments.
