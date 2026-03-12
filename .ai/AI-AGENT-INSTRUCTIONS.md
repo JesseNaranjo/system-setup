@@ -571,18 +571,31 @@ set -euo pipefail
 
 **Global variables provided by utils-sys.sh:**
 ```bash
+# Detection results (set by detect_* functions)
+DETECTED_OS=""
+DETECTED_PKG_MANAGER=""
+RUNNING_IN_CONTAINER=false
+
 # State tracking arrays
 BACKED_UP_FILES=()
 CREATED_BACKUP_FILES=()
+CREATED_CONFIG_FILES=()
 HEADER_ADDED_FILES=()
+TEMP_FILES=()
 
-# Detection results (set by detect_* functions)
-DETECTED_OS=""
-RUNNING_IN_CONTAINER=false
-
-# Package tracking
+# Package tracking via associative array
+declare -A SPECIAL_PACKAGE_FLAGS=(
+    [curl]=CURL_INSTALLED
+    [fastfetch]=FASTFETCH_INSTALLED
+    [git]=GIT_INSTALLED
+    [nano]=NANO_INSTALLED
+    [tmux]=TMUX_INSTALLED
+    [openssh-server]=OPENSSH_SERVER_INSTALLED
+)
+# Individual flags (set dynamically by track_special_packages)
 CURL_INSTALLED=false
 FASTFETCH_INSTALLED=false
+GIT_INSTALLED=false
 NANO_INSTALLED=false
 TMUX_INSTALLED=false
 OPENSSH_SERVER_INSTALLED=false
@@ -817,7 +830,7 @@ detect_feature() {
 ```bash
 # Print a summary of all changes made during the session
 print_session_summary() {
-    if [[ ${#BACKED_UP_FILES[@]} -eq 0 && ${#CREATED_BACKUP_FILES[@]} -eq 0 ]]; then
+    if [[ ${#BACKED_UP_FILES[@]} -eq 0 && ${#CREATED_BACKUP_FILES[@]} -eq 0 && ${#CREATED_CONFIG_FILES[@]} -eq 0 ]]; then
         echo -e "            ${GRAY}No files were modified during this session.${NC}"
         return
     fi
@@ -825,9 +838,17 @@ print_session_summary() {
     print_summary "─── Session ─────────────────────────────────────────────────────────────"
     echo ""
 
+    if [[ ${#CREATED_CONFIG_FILES[@]} -gt 0 ]]; then
+        print_info "Files Created:"
+        for file in "${CREATED_CONFIG_FILES[@]+"${CREATED_CONFIG_FILES[@]}"}"; do
+            echo "            - $file"
+        done
+        echo ""
+    fi
+
     if [[ ${#BACKED_UP_FILES[@]} -gt 0 ]]; then
         print_success "${GREEN}Files Updated:${NC}"
-        for file in "${BACKED_UP_FILES[@]+"${BACKED_UP_FILES[@]}"}" ; do
+        for file in "${BACKED_UP_FILES[@]+"${BACKED_UP_FILES[@]}"}"; do
             echo "            - $file"
         done
         echo ""
@@ -835,7 +856,7 @@ print_session_summary() {
 
     if [[ ${#CREATED_BACKUP_FILES[@]} -gt 0 ]]; then
         print_backup "Backup Files:"
-        for file in "${CREATED_BACKUP_FILES[@]+"${CREATED_BACKUP_FILES[@]}"}" ; do
+        for file in "${CREATED_BACKUP_FILES[@]+"${CREATED_BACKUP_FILES[@]}"}"; do
             echo "            - $file"
         done
         echo ""
@@ -852,7 +873,7 @@ install_packages() {
 
     local packages=("nano" "tmux" "htop")
     for pkg in "${packages[@]}"; do
-        if is_package_installed "$os" "$pkg"; then
+        if is_package_installed "$pkg"; then
             print_success "- $pkg already installed"
         else
             if prompt_yes_no "Install $pkg?" "y"; then
@@ -907,7 +928,7 @@ configure_component() {
 **escape_regex** - Escape special regex characters:
 ```bash
 escape_regex() {
-    printf '%s' "$1" | sed 's/[.[\(*^$+?{|\\]/\\&/g'
+    printf '%s' "$1" | sed 's/[].[^$*+?{}|()\\[]/\\&/g'
 }
 ```
 
@@ -969,22 +990,33 @@ update_config_line() {
     local description="$5"
 
     if config_exists "$file" "$setting_pattern"; then
-        if grep -qE "^[[:space:]]*${full_line}[[:space:]]*$" "$file"; then
-            print_success "- $description already configured"
+        # Check if already set to desired value (escape for literal matching)
+        local escaped_full_line=$(escape_regex "$full_line")
+        if grep_file -qE "^[[:space:]]*${escaped_full_line}[[:space:]]*$" "$file"; then
+            print_success "- $description already configured correctly"
             return 0
         fi
         backup_file "$file"
         add_change_header "$file" "$config_type"
-        # Comment old, append new
-        awk -v pat="$setting_pattern" -v new="$full_line" '
-            $0 ~ pat { print "# " $0 " # Replaced " strftime("%Y-%m-%d"); next }
+
+        local temp_file=$(mktemp)
+        local original_perms=$(get_file_permissions "$file")
+
+        # Comment old line, append new at end of file
+        awk -v pattern="^[[:space:]]*${setting_pattern}" -v new_line="${full_line}" '
+            $0 ~ pattern {
+                "date +%Y-%m-%d" | getline datestr;
+                print "# " $0 " # Replaced by system-setup.sh on " datestr;
+                next;
+            }
             { print }
-            END { print new }
-        ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+            END { print new_line }
+        ' "$file" > "$temp_file" && mv "$temp_file" "$file"
+        chmod "$original_perms" "$file"
     else
         backup_file "$file"
         add_change_header "$file" "$config_type"
-        echo "$full_line" >> "$file"
+        append_to_file "$file" "$full_line"
     fi
 }
 ```
@@ -1000,9 +1032,27 @@ add_config_if_needed() {
     local value="$4"
     local description="$5"
 
-    local full_setting="${setting}${value:+ $value}"
-    local pattern="^[[:space:]]*${setting}"
-    update_config_line "$config_type" "$file" "$pattern" "$full_setting" "$description"
+    local full_setting
+    if [[ -n "$value" ]]; then
+        full_setting="${setting} ${value}"
+    else
+        full_setting="${setting}"
+    fi
+
+    # Escape regex special characters in the setting for pattern matching
+    local escaped_setting=$(escape_regex "$setting")
+
+    # Handle shell "set" prefix separately for proper matching
+    local setting_pattern
+    if [[ $setting =~ ^[[:space:]]*set[[:space:]]+ ]]; then
+        local setting_key=${setting#set }
+        local escaped_key=$(escape_regex "$setting_key")
+        setting_pattern="set[[:space:]]+${escaped_key}"
+    else
+        setting_pattern="${escaped_setting}"
+    fi
+
+    update_config_line "$config_type" "$file" "$setting_pattern" "$full_setting" "$description"
 }
 ```
 
@@ -1031,6 +1081,46 @@ add_export_if_needed() {
     local full_export="export ${var_name}=${var_value}"
     local pattern="export[[:space:]]+${var_name}="
     update_config_line "shell" "$file" "$pattern" "$full_export" "$description"
+}
+```
+
+**add_git_config_if_needed** - Git config settings (uses `git config` directly, not file editing):
+```bash
+# Uses git config commands directly (handles INI format correctly)
+# Usage: add_git_config_if_needed "scope" "key" "value" "description"
+#   scope: "user" (--global) or "system" (--system)
+add_git_config_if_needed() {
+    local scope="$1"
+    local key="$2"
+    local value="$3"
+    local description="$4"
+
+    local git_scope_flag
+    if [[ "$scope" == "system" ]]; then
+        git_scope_flag="--system"
+    else
+        git_scope_flag="--global"
+    fi
+
+    local current_value
+    current_value=$(git config "$git_scope_flag" --get "$key" 2>/dev/null || echo "")
+
+    if [[ "$current_value" == "$value" ]]; then
+        print_success "- $description already configured correctly"
+        return 0
+    fi
+
+    if [[ -n "$current_value" ]]; then
+        print_info "+ Updating $description ($current_value → $value)"
+    else
+        print_info "+ Setting $description"
+    fi
+
+    if [[ "$scope" == "system" ]]; then
+        run_elevated git config --system "$key" "$value"
+    else
+        git config --global "$key" "$value"
+    fi
 }
 ```
 
@@ -1095,7 +1185,10 @@ create_config_file() {
 normalize_trailing_newlines() {
     local file="$1"
     local num_lines="${2:-1}"
-    local temp_file=$(mktemp)
+    local original_perms
+    original_perms=$(get_file_permissions "$file")
+    local temp_file
+    temp_file=$(make_temp_file)
 
     # Remove all trailing blank lines (last content line keeps its newline)
     sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$file" > "$temp_file"
@@ -1105,7 +1198,14 @@ normalize_trailing_newlines() {
         printf '\n' >> "$temp_file"
     done
 
-    run_elevated mv "$temp_file" "$file"
+    # Restore original permissions (mktemp creates files with 0600)
+    if needs_elevation "$file"; then
+        run_elevated mv "$temp_file" "$file"
+        run_elevated chmod "$original_perms" "$file"
+    else
+        mv "$temp_file" "$file"
+        chmod "$original_perms" "$file"
+    fi
 }
 ```
 
@@ -1113,19 +1213,21 @@ normalize_trailing_newlines() {
 
 **track_special_packages** - Track installed packages for later configuration:
 ```bash
+# Associative array mapping package names to their tracking flag variables
+declare -A SPECIAL_PACKAGE_FLAGS=(
+    [curl]=CURL_INSTALLED
+    [fastfetch]=FASTFETCH_INSTALLED
+    [git]=GIT_INSTALLED
+    [nano]=NANO_INSTALLED
+    [openssh-server]=OPENSSH_SERVER_INSTALLED
+    [tmux]=TMUX_INSTALLED
+)
+
 track_special_packages() {
     local package="$1"
-
-    if [[ "$package" == "curl" ]]; then
-        CURL_INSTALLED=true
-    elif [[ "$package" == "fastfetch" ]]; then
-        FASTFETCH_INSTALLED=true
-    elif [[ "$package" == "nano" ]]; then
-        NANO_INSTALLED=true
-    elif [[ "$package" == "tmux" ]]; then
-        TMUX_INSTALLED=true
-    elif [[ "$package" == "openssh-server" ]]; then
-        OPENSSH_SERVER_INSTALLED=true
+    local flag_name="${SPECIAL_PACKAGE_FLAGS[$package]:-}"
+    if [[ -n "$flag_name" ]]; then
+        printf -v "$flag_name" '%s' 'true'
     fi
 }
 ```
@@ -1364,6 +1466,21 @@ detect_container() {
 }
 ```
 
+### Package Manager Detection (Sets Global)
+```bash
+# Sets DETECTED_PKG_MANAGER to: "apt", "brew", "dnf", "zypper", or "unknown"
+detect_package_manager() {
+    local -a pkg_managers=("apt" "brew" "dnf" "zypper")
+    for mgr in "${pkg_managers[@]}"; do
+        if command -v "$mgr" &>/dev/null; then
+            DETECTED_PKG_MANAGER="$mgr"
+            return 0
+        fi
+    done
+    DETECTED_PKG_MANAGER="unknown"
+}
+```
+
 ### Privilege Management
 ```bash
 # Check if we have necessary privileges for the operation
@@ -1439,11 +1556,20 @@ populate_package_cache() {
         package_list+=("${line##*:}")
     done < <(get_package_list)
 
+    # Also include removable packages in cache
+    while read -r line; do
+        package_list+=("${line##*:}")
+    done < <(get_removable_package_list)
+
     local installed_packages
     if [[ "$DETECTED_OS" == "macos" ]]; then
-        installed_packages=$(brew list --formula -1 2>/dev/null || true)
+        # Check both formulae and casks on macOS
+        local installed_formulae=$(brew list --formula -1 2>/dev/null || true)
+        local installed_casks=$(brew list --cask -1 2>/dev/null || true)
+        installed_packages=$(printf "%s\n%s" "$installed_formulae" "$installed_casks")
     else
-        installed_packages=$(dpkg -l 2>/dev/null | awk '/^ii/ {print $2}' || true)
+        # Strip :arch suffix (e.g., curl:amd64 → curl) for reliable matching
+        installed_packages=$(dpkg -l 2>/dev/null | awk '/^ii/ {sub(/:.*/, "", $2); print $2}' || true)
     fi
 
     PACKAGE_CACHE=()
@@ -1458,14 +1584,28 @@ populate_package_cache() {
     PACKAGE_CACHE_POPULATED=true
 }
 
-# Check if a package is installed (uses cache)
-is_package_installed() {
-    local package="$1"
-
-    # Populate cache if not yet populated
+# Ensure the package cache is populated (explicit initialization)
+# Call early in orchestration to avoid hidden side effects in is_package_installed
+ensure_package_cache_populated() {
     if [[ "$PACKAGE_CACHE_POPULATED" != "true" ]]; then
         populate_package_cache
     fi
+}
+
+# Invalidate the package cache so next check refreshes
+# Call after installing or removing packages to prevent stale state
+invalidate_package_cache() {
+    PACKAGE_CACHE=()
+    PACKAGE_CACHE_POPULATED=false
+}
+
+# Check if a package is installed (uses cache, single argument)
+# Requires: DETECTED_OS MUST be set (call detect_os or detect_environment first)
+is_package_installed() {
+    local package="$1"
+
+    # Lazy cache initialization
+    ensure_package_cache_populated
 
     # Check cache first
     if [[ -n "${PACKAGE_CACHE[$package]:-}" ]]; then
@@ -1475,9 +1615,28 @@ is_package_installed() {
 
     # Fallback to direct check if not in cache
     if [[ "$DETECTED_OS" == "macos" ]]; then
-        brew list "$package" &>/dev/null
+        brew list --formula "$package" &>/dev/null || brew list --cask "$package" &>/dev/null
     else
         dpkg -l "$package" 2>/dev/null | grep -q "^ii"
+    fi
+}
+```
+
+### verify_package_manager - Prerequisite Check
+```bash
+# Verify package manager is available before attempting installs
+# Call at the top of any function that installs packages
+verify_package_manager() {
+    if [[ "$DETECTED_OS" == "macos" ]]; then
+        if ! command -v brew &>/dev/null; then
+            print_error "Homebrew is not installed. Please install it from https://brew.sh"
+            return 1
+        fi
+    else
+        if ! command -v apt &>/dev/null; then
+            print_error "apt package manager not found. This script requires apt (Debian/Ubuntu-based systems)"
+            return 1
+        fi
     fi
 }
 ```
@@ -1509,18 +1668,6 @@ get_package_list() {
 }
 ```
 
-### Package Installation Check
-```bash
-is_package_installed() {
-    local os="$1"
-    local package="$2"
-    if [[ "$os" == "macos" ]]; then
-        brew list "$package" &>/dev/null
-    else
-        dpkg -l "$package" 2>/dev/null | grep -q "^ii"
-    fi
-}
-```
 
 ---
 
@@ -1581,22 +1728,40 @@ backup_file() {
     local file="$1"
     local already_backed_up=false
 
-    for backed_up_file in "${BACKED_UP_FILES[@]}"; do
-        [[ "$backed_up_file" == "$file" ]] && already_backed_up=true && break
+    # Safe expansion handles empty array
+    for backed_up_file in "${BACKED_UP_FILES[@]+"${BACKED_UP_FILES[@]}"}"; do
+        if [[ "$backed_up_file" == "$file" ]]; then
+            already_backed_up=true
+            break
+        fi
     done
-    [[ "$already_backed_up" == true ]] && return 0
+
+    if [[ "$already_backed_up" == true ]]; then
+        return 0
+    fi
 
     if [[ -f "$file" ]]; then
         local backup="${file}.backup.$(date +%Y%m%d_%H%M%S).bak"
-        cp -p "$file" "$backup"
+
+        # Copy with preserved permissions, using elevation if needed
+        if needs_elevation "$file"; then
+            run_elevated cp -p "$file" "$backup"
+        else
+            cp -p "$file" "$backup"
+        fi
 
         # Preserve ownership (platform-specific)
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            local owner=$(stat -f "%u:%g" "$file")
+        local owner
+        if [[ "$DETECTED_OS" == "macos" ]]; then
+            owner=$(stat -f "%u:%g" "$file")
         else
-            local owner=$(stat -c "%u:%g" "$file")
+            owner=$(stat -c "%u:%g" "$file")
         fi
-        chown "$owner" "$backup" 2>/dev/null || true
+        if needs_elevation "$file"; then
+            run_elevated chown "$owner" "$backup" 2>/dev/null || true
+        else
+            chown "$owner" "$backup" 2>/dev/null || true
+        fi
 
         print_backup "- Created backup: $backup"
         BACKED_UP_FILES+=("$file")
@@ -1612,21 +1777,83 @@ add_change_header() {
     local config_type="$2"  # "nano", "tmux", "shell"
     local already_added=false
 
-    for added_file in "${HEADER_ADDED_FILES[@]}"; do
-        [[ "$added_file" == "$file" ]] && already_added=true && break
+    # Safe expansion handles empty array
+    for added_file in "${HEADER_ADDED_FILES[@]+"${HEADER_ADDED_FILES[@]}"}"; do
+        if [[ "$added_file" == "$file" ]]; then
+            already_added=true
+            break
+        fi
     done
-    [[ "$already_added" == true ]] && return 0
 
-    echo "" >> "$file"
+    if [[ "$already_added" == true ]]; then
+        return 0
+    fi
+
+    local header_line=""
     case "$config_type" in
-        nano)   echo "# nano configuration - managed by script" >> "$file" ;;
-        tmux)   echo "# tmux configuration - managed by system-setup.sh" >> "$file" ;;
-        shell)  echo "# Shell configuration - managed by script" >> "$file" ;;
+        nano)   header_line="# nano configuration - managed by system-setup.sh" ;;
+        tmux)   header_line="# tmux configuration - managed by system-setup.sh" ;;
+        shell)  header_line="# Shell configuration - managed by system-setup.sh" ;;
     esac
-    echo "# Updated: $(date)" >> "$file"
-    echo "" >> "$file"
+
+    # Uses append_to_file for proper elevation handling
+    append_to_file "$file" "" "$header_line" "# Updated: $(date)"
 
     HEADER_ADDED_FILES+=("$file")
+}
+```
+
+### append_to_file - Elevation-Aware File Appending
+```bash
+# Append lines to a file, using elevation (sudo) when needed
+# Each argument after the file path is written as a separate line
+# Empty string arguments create blank lines
+append_to_file() {
+    local file="$1"
+    shift
+    if needs_elevation "$file"; then
+        printf '%s\n' "$@" | run_elevated tee -a "$file" > /dev/null
+    else
+        printf '%s\n' "$@" >> "$file"
+    fi
+}
+```
+
+### make_temp_file - Tracked Temporary Files
+```bash
+# Create a tracked temp file that will be cleaned up on exit
+# Returns the temp file path. TEMP_FILES array tracks all created files.
+make_temp_file() {
+    local tmp
+    tmp=$(mktemp)
+    TEMP_FILES+=("$tmp")
+    echo "$tmp"
+}
+```
+
+### check_disk_space - Pre-Operation Space Verification
+```bash
+# Verify sufficient disk space before large operations
+# Usage: check_disk_space "/var" 4096  (checks /var has 4096 MB free)
+# Returns: 0 if enough space, 1 if not (prints error)
+check_disk_space() {
+    local path="$1"
+    local required_mb="$2"
+    local buffer_mb="${3:-512}"
+    local total_needed=$((required_mb + buffer_mb))
+
+    local available_mb
+    available_mb=$(df -BM "$path" --output=avail 2>/dev/null | tail -1 | tr -d ' M')
+
+    # Fallback for macOS (no --output flag)
+    if [[ -z "$available_mb" ]]; then
+        available_mb=$(df -m "$path" | tail -1 | awk '{print $4}')
+    fi
+
+    if [[ "$available_mb" -lt "$total_needed" ]]; then
+        print_error "Insufficient disk space at $path: ${available_mb}MB available, ${total_needed}MB needed"
+        return 1
+    fi
 }
 ```
 
@@ -1679,9 +1906,11 @@ done
 ```
 
 ### Temp File Cleanup
+
+ALWAYS use `make_temp_file` (see [File Modification](#file-modification)) instead of raw `mktemp`. It tracks files in the `TEMP_FILES` array for automatic cleanup.
+
 ```bash
-temp_file=$(mktemp)
-trap 'rm -f "${temp_file}"' EXIT  # Auto-cleanup
+temp_file=$(make_temp_file)  # Tracked and cleaned up automatically
 echo "content" > "$temp_file"
 # Use temp_file...
 ```
