@@ -45,7 +45,8 @@ disable_ip_forwarding() {
     current=$(sysctl -n net.ipv4.conf.all.forwarding 2>/dev/null || echo "0")
     if [[ "$current" != "0" ]]; then
         print_info "Disabling IP forwarding..."
-        run_elevated sysctl -w net.ipv4.conf.all.forwarding=0
+        run_elevated sysctl -w net.ipv4.conf.all.forwarding=0 \
+            || { print_error "Failed to disable IP forwarding"; return 1; }
         print_success "IP forwarding disabled"
     else
         print_success "IP forwarding already disabled"
@@ -63,7 +64,7 @@ show_status() {
 # ============================================================================
 
 main() {
-    detect_environment
+    detect_environment || { print_error "Failed to detect environment"; return 1; }
 
     if [[ "$DETECTED_OS" != "linux" ]]; then
         print_error "Kubernetes services are only available on Linux"
@@ -81,7 +82,7 @@ main() {
 
     stop_services
     restore_swap
-    disable_ip_forwarding
+    disable_ip_forwarding || return 1
     show_status
 
     print_success "Kubernetes services stopped"

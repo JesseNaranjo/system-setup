@@ -23,7 +23,8 @@ source "${SCRIPT_DIR}/utils-k8s.sh"
 ensure_swap_off() {
     if [[ -n "$(swapon --show --noheadings 2>/dev/null)" ]]; then
         print_info "Disabling swap..."
-        run_elevated swapoff -a
+        run_elevated swapoff -a \
+            || { print_error "Failed to disable swap"; return 1; }
         print_success "Swap disabled"
     else
         print_success "Swap already disabled"
@@ -35,7 +36,8 @@ ensure_ip_forwarding() {
     current=$(sysctl -n net.ipv4.conf.all.forwarding 2>/dev/null || echo "0")
     if [[ "$current" != "1" ]]; then
         print_info "Enabling IP forwarding..."
-        run_elevated sysctl -w net.ipv4.conf.all.forwarding=1
+        run_elevated sysctl -w net.ipv4.conf.all.forwarding=1 \
+            || { print_error "Failed to enable IP forwarding"; return 1; }
         print_success "IP forwarding enabled"
     else
         print_success "IP forwarding already enabled"
@@ -48,8 +50,10 @@ ensure_ip_forwarding() {
 
 start_services() {
     print_info "Enabling and starting cri-o and kubelet services..."
-    run_elevated systemctl enable crio.service kubelet.service
-    run_elevated systemctl start crio.service kubelet.service
+    run_elevated systemctl enable crio.service kubelet.service \
+        || { print_error "Failed to enable services"; return 1; }
+    run_elevated systemctl start crio.service kubelet.service \
+        || { print_error "Failed to start services"; return 1; }
     print_success "Services started"
 }
 
@@ -71,7 +75,7 @@ show_status() {
 # ============================================================================
 
 main() {
-    detect_environment
+    detect_environment || { print_error "Failed to detect environment"; return 1; }
 
     if [[ "$DETECTED_OS" != "linux" ]]; then
         print_error "Kubernetes services are only available on Linux"
@@ -87,9 +91,9 @@ main() {
     print_info "Starting Kubernetes services..."
     echo ""
 
-    ensure_swap_off
-    ensure_ip_forwarding
-    start_services
+    ensure_swap_off || return 1
+    ensure_ip_forwarding || return 1
+    start_services || return 1
     show_status
 
     print_success "Kubernetes services started"
