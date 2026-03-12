@@ -732,6 +732,116 @@ detect_environment() {
 
 ---
 
+## Adding a New Module Script
+
+Step-by-step recipe for adding a new module to the system-setup suite.
+
+### 1. Create the Module File
+
+Create `system-setup/system-modules/<module-name>.sh` using the [Module Script Template](#modular-script-patterns):
+
+- Follow naming convention: `<verb-noun>.sh` or `<noun>.sh`
+- Include SCRIPT_DIR pattern and `source utils-sys.sh`
+- Name main function `main_<module_name>` (underscores, not hyphens)
+- Add execution guard for standalone testing
+
+### 2. Add Module Functions
+
+```bash
+main_configure_example() {
+    local scope="${1:-user}"
+
+    detect_environment
+
+    local os="$DETECTED_OS"
+    local config_file
+    if [[ "$scope" == "system" ]]; then
+        config_file="/etc/example.conf"
+    else
+        config_file="$HOME/.examplerc"
+    fi
+
+    # Check if already configured (idempotent)
+    if config_exists "$config_file" "setting_name"; then
+        local current_value
+        current_value=$(get_config_value "$config_file" "setting_name")
+        if [[ "$current_value" == "desired_value" ]]; then
+            print_success "- Example already configured correctly"
+            return 0
+        fi
+    fi
+
+    # Prompt user
+    if ! prompt_yes_no "Configure example?" "y"; then
+        print_info "Skipped example configuration"
+        return 0
+    fi
+
+    # Install package if needed
+    if ! is_package_installed "example-pkg"; then
+        print_info "+ Installing example-pkg..."
+        if [[ "$os" == "macos" ]]; then
+            brew install example-pkg
+        else
+            sudo apt install -y example-pkg
+        fi
+        invalidate_package_cache
+    fi
+
+    # Apply configuration
+    backup_file "$config_file"
+    add_change_header "$config_file" "example"
+    add_config_if_needed "example" "$config_file" "setting_name" "desired_value" "Example setting"
+
+    print_success "Example configured"
+}
+```
+
+Key patterns used:
+- `detect_environment` at the top
+- `config_exists` + `get_config_value` for idempotency
+- `prompt_yes_no` before changes
+- `is_package_installed` (single argument) before installing
+- `invalidate_package_cache` after installing
+- `backup_file` + `add_change_header` before file modifications
+
+### 3. Register in Orchestrator
+
+In `system-setup/system-setup.sh`:
+
+```bash
+# Source the module (with conditional modules, add an if block)
+source "${SCRIPT_DIR}/system-modules/configure-example.sh"
+
+# Call the module's main function
+main_configure_example "$scope"
+```
+
+Add the script path to `get_script_list()` for auto-update:
+
+```bash
+get_script_list() {
+    # ... existing entries ...
+    echo "system-modules/configure-example.sh"
+}
+```
+
+### 4. Update Folder README
+
+Add an entry to `system-setup/system-modules/README.md` with a description of what the module does.
+
+### 5. Test Standalone
+
+```bash
+# Run the module directly
+./system-setup/system-modules/configure-example.sh
+
+# Verify idempotency: run twice, second run MUST skip all changes
+./system-setup/system-modules/configure-example.sh
+```
+
+---
+
 ## Quick Reference for LLMs
 
 ### Minimal Script Template
