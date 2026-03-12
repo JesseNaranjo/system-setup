@@ -86,58 +86,54 @@ cleanup_deprecated_files() {
 # Repository Setup
 # ============================================================================
 
-setup_kubernetes_repo() {
-    local keyring_path="/etc/apt/keyrings/kubernetes-apt-keyring.gpg"
-    local sources_path="/etc/apt/sources.list.d/kubernetes.sources"
-    local repo_url="https://pkgs.k8s.io/core:/stable:/${K8S_VERSION}/deb/"
+# Configure an APT repository with GPG key and DEB822-format sources file
+# Args: name, keyring_path, sources_path, repo_url
+setup_apt_repo() {
+    local name="$1"
+    local keyring_path="$2"
+    local sources_path="$3"
+    local repo_url="$4"
 
-    if is_repo_configured "Kubernetes" "$sources_path" "$keyring_path" "$repo_url"; then
-        print_success "Kubernetes ${K8S_VERSION} repo already configured"
+    if is_repo_configured "$name" "$sources_path" "$keyring_path" "$repo_url"; then
+        print_success "${name} ${K8S_VERSION} repo already configured"
         return 0
     fi
 
-    mkdir -p /etc/apt/keyrings
+    mkdir -p /etc/apt/keyrings \
+        || { print_error "Failed to create /etc/apt/keyrings"; return 1; }
 
-    print_info "Downloading Kubernetes GPG key..."
-    curl -fsSL "${repo_url}Release.key" | gpg --dearmor --yes -o "$keyring_path"
-    print_success "Kubernetes GPG key installed: $keyring_path"
+    print_info "Downloading ${name} GPG key..."
+    curl -fsSL "${repo_url}Release.key" | gpg --dearmor --yes -o "$keyring_path" \
+        || { print_error "Failed to download/import ${name} GPG key"; return 1; }
+    print_success "${name} GPG key installed: $keyring_path"
 
-    print_info "Creating Kubernetes apt sources file..."
-    tee "$sources_path" > /dev/null << EOF
+    print_info "Creating ${name} apt sources file..."
+    if ! tee "$sources_path" > /dev/null << EOF
 Types: deb
 URIs: ${repo_url}
 Suites: /
 Components:
 Signed-By: ${keyring_path}
 EOF
-    print_success "Kubernetes sources file created: $sources_path"
+    then
+        print_error "Failed to write $sources_path"
+        return 1
+    fi
+    print_success "${name} sources file created: $sources_path"
+}
+
+setup_kubernetes_repo() {
+    setup_apt_repo "Kubernetes" \
+        "/etc/apt/keyrings/kubernetes-apt-keyring.gpg" \
+        "/etc/apt/sources.list.d/kubernetes.sources" \
+        "https://pkgs.k8s.io/core:/stable:/${K8S_VERSION}/deb/"
 }
 
 setup_crio_repo() {
-    local keyring_path="/etc/apt/keyrings/cri-o-apt-keyring.gpg"
-    local sources_path="/etc/apt/sources.list.d/cri-o.sources"
-    local repo_url="https://download.opensuse.org/repositories/isv:/cri-o:/stable:/${K8S_VERSION}/deb/"
-
-    if is_repo_configured "CRI-O" "$sources_path" "$keyring_path" "$repo_url"; then
-        print_success "CRI-O ${K8S_VERSION} repo already configured"
-        return 0
-    fi
-
-    mkdir -p /etc/apt/keyrings
-
-    print_info "Downloading CRI-O GPG key..."
-    curl -fsSL "${repo_url}Release.key" | gpg --dearmor --yes -o "$keyring_path"
-    print_success "CRI-O GPG key installed: $keyring_path"
-
-    print_info "Creating CRI-O apt sources file..."
-    tee "$sources_path" > /dev/null << EOF
-Types: deb
-URIs: ${repo_url}
-Suites: /
-Components:
-Signed-By: ${keyring_path}
-EOF
-    print_success "CRI-O sources file created: $sources_path"
+    setup_apt_repo "CRI-O" \
+        "/etc/apt/keyrings/cri-o-apt-keyring.gpg" \
+        "/etc/apt/sources.list.d/cri-o.sources" \
+        "https://download.opensuse.org/repositories/isv:/cri-o:/stable:/${K8S_VERSION}/deb/"
 }
 
 # ============================================================================
@@ -145,17 +141,17 @@ EOF
 # ============================================================================
 
 main_configure_k8s_repos() {
-    detect_environment
+    detect_environment || { print_error "Failed to detect environment"; return 1; }
 
     print_info "Configuring Kubernetes APT repositories..."
 
     check_prerequisites || return 1
-    cleanup_deprecated_files
-    setup_kubernetes_repo
-    setup_crio_repo
+    cleanup_deprecated_files || print_warning "Deprecated file cleanup failed, continuing"
+    setup_kubernetes_repo || return 1
+    setup_crio_repo || return 1
 
     print_info "Refreshing package lists..."
-    apt update
+    apt update || { print_error "Failed to refresh package lists"; return 1; }
 
     print_success "Repository configuration complete"
 }

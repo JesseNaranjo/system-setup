@@ -41,7 +41,8 @@ apply_sysctl_setting() {
     fi
 
     print_info "Setting $description ($key = $value)..."
-    sysctl -w "${key}=${value}" >/dev/null
+    sysctl -w "${key}=${value}" >/dev/null \
+        || { print_error "Failed to set ${key}=${value}"; return 1; }
     print_success "- $description applied ($key = $value)"
 }
 
@@ -61,7 +62,7 @@ build_sysctl_conf_content() {
 }
 
 # Ensure sysctl settings are persisted to disk
-# Returns: 0 if file already correct, 1 if file was created/updated
+# Sets SYSCTL_FILE_CHANGED=true if file was created/updated
 persist_sysctl_settings() {
     local expected_content
     expected_content="$(build_sysctl_conf_content)"
@@ -79,9 +80,11 @@ persist_sysctl_settings() {
         print_info "Creating persistence file $SYSCTL_CONF..."
     fi
 
-    echo "$expected_content" > "$SYSCTL_CONF"
+    echo "$expected_content" > "$SYSCTL_CONF" \
+        || { print_error "Failed to write $SYSCTL_CONF"; return 1; }
     print_success "- Persistence file $SYSCTL_CONF written"
-    return 1
+    SYSCTL_FILE_CHANGED=true
+    return 0
 }
 
 # ============================================================================
@@ -89,7 +92,7 @@ persist_sysctl_settings() {
 # ============================================================================
 
 main_configure_networking() {
-    detect_environment
+    detect_environment || { print_error "Failed to detect environment"; return 1; }
 
     print_info "Configuring Kubernetes networking..."
 
@@ -104,13 +107,16 @@ main_configure_networking() {
         local remainder="${entry#*|}"
         local value="${remainder%%|*}"
         local description="${remainder#*|}"
-        apply_sysctl_setting "$key" "$value" "$description"
+        apply_sysctl_setting "$key" "$value" "$description" || return 1
     done
 
     # Persist settings and reload if file was created/updated
-    if ! persist_sysctl_settings; then
+    local SYSCTL_FILE_CHANGED=false
+    persist_sysctl_settings || return 1
+    if [[ "$SYSCTL_FILE_CHANGED" == true ]]; then
         print_info "Reloading sysctl configuration..."
-        sysctl --system >/dev/null 2>&1
+        sysctl --system >/dev/null 2>&1 \
+            || { print_error "Failed to reload sysctl configuration"; return 1; }
         print_success "- Sysctl configuration reloaded"
     fi
 

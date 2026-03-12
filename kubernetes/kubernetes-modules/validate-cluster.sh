@@ -107,7 +107,7 @@ check_crio_service() {
 # ============================================================================
 
 main_validate_cluster() {
-    detect_environment
+    detect_environment || { print_error "Failed to detect environment"; return 1; }
 
     print_info "Validating cluster health..."
 
@@ -127,7 +127,7 @@ main_validate_cluster() {
 
     print_info "${passed}/${total} checks passed"
 
-    return 0
+    [[ "$passed" -eq "$total" ]] && return 0 || return 1
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
