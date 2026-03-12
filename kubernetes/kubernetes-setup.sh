@@ -583,8 +583,11 @@ main() {
         echo ""
     fi
 
-    # Step 9: Cluster initialization (optional)
-    if prompt_yes_no "            Would you like to initialize or join a cluster?" "n"; then
+    # Step 9: Cluster initialization (optional, requires kubeadm)
+    if ! command -v kubeadm &>/dev/null; then
+        print_info "Step 9: Skipping cluster initialization (kubeadm not installed)"
+        echo ""
+    elif prompt_yes_no "            Would you like to initialize or join a cluster?" "n"; then
         if check_step_prerequisites "Cluster Initialization" "STEP_PACKAGES_OK" "STEP_NETWORKING_OK" "STEP_SWAP_OK"; then
             source "${SCRIPT_DIR}/kubernetes-modules/initialize-cluster.sh"
             if ! main_initialize_cluster; then
