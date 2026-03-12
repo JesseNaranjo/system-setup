@@ -20,9 +20,20 @@ fi
 # ============================================================================
 
 check_prerequisites() {
-    local missing=()
+    # gpg can be installed interactively; apt and curl are hard requirements
+    if ! command -v gpg &>/dev/null; then
+        print_warning "gpg not found; required for APT repository key management"
+        if prompt_yes_no "Install gpg?" "y"; then
+            apt install -y gpg || { print_error "Failed to install gpg"; return 1; }
+            print_success "gpg installed"
+        else
+            print_info "Skipped gpg installation"
+            return 1
+        fi
+    fi
 
-    for cmd in apt curl gpg; do
+    local missing=()
+    for cmd in apt curl; do
         if ! command -v "$cmd" &>/dev/null; then
             missing+=("$cmd")
         fi

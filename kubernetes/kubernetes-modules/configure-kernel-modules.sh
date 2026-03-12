@@ -98,9 +98,14 @@ main_configure_kernel_modules() {
     detect_environment || { print_error "Failed to detect environment"; return 1; }
 
     if ! command -v modprobe &>/dev/null; then
-        print_error "modprobe not found; cannot load kernel modules"
-        print_info "Install kmod: apt install -y kmod"
-        return 1
+        print_warning "modprobe not found; cannot load kernel modules"
+        if prompt_yes_no "Install kmod (provides modprobe/lsmod)?" "y"; then
+            apt install -y kmod || { print_error "Failed to install kmod"; return 1; }
+            print_success "kmod installed"
+        else
+            print_info "Skipped kmod installation"
+            return 1
+        fi
     fi
 
     print_info "Configuring required kernel modules..."
