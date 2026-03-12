@@ -29,7 +29,7 @@ is_cluster_initialized() {
 # WARNING: This is destructive and removes all cluster state
 reset_cluster() {
     print_warning "This will destroy the existing cluster on this node."
-    kubeadm reset --force
+    kubeadm reset --force || { print_error "Failed to reset cluster"; return 1; }
 
     # Clean up kubeconfig for the actual user (not root when using sudo)
     local user_home="$HOME"
@@ -52,7 +52,8 @@ initialize_control_plane() {
     pod_cidr="${pod_cidr:-192.168.0.0/16}"
 
     print_info "Initializing control-plane with pod network CIDR: ${pod_cidr}..."
-    kubeadm init --pod-network-cidr="${pod_cidr}"
+    kubeadm init --pod-network-cidr="${pod_cidr}" \
+        || { print_error "Failed to initialize control plane"; return 1; }
 
     # When running under sudo, configure kubectl for the invoking user, not root
     local user_home="$HOME"
@@ -64,14 +65,18 @@ initialize_control_plane() {
     fi
 
     print_info "Configuring kubectl access for ${SUDO_USER:-$(whoami)}..."
-    mkdir -p "${user_home}/.kube"
-    cp /etc/kubernetes/admin.conf "${user_home}/.kube/config"
-    chown "${user_id}" "${user_home}/.kube/config"
+    mkdir -p "${user_home}/.kube" \
+        || { print_error "Failed to create .kube directory"; return 1; }
+    cp /etc/kubernetes/admin.conf "${user_home}/.kube/config" \
+        || { print_error "Failed to copy kubeconfig"; return 1; }
+    chown "${user_id}" "${user_home}/.kube/config" \
+        || { print_error "Failed to set kubeconfig ownership"; return 1; }
     print_success "kubectl configured at ${user_home}/.kube/config"
 
     echo ""
     print_info "Join command for worker nodes:"
-    kubeadm token create --print-join-command
+    kubeadm token create --print-join-command \
+        || { print_error "Failed to generate join command"; return 1; }
     echo ""
 
     print_warning "Next steps: install a CNI plugin (e.g., Calico, Flannel, Cilium)"
@@ -100,7 +105,7 @@ join_as_worker() {
     print_info "Joining cluster as worker node..."
     # Word-splitting is intentional here - kubeadm join arguments are simple tokens
     # shellcheck disable=SC2086
-    $join_cmd
+    $join_cmd || { print_error "Failed to join cluster"; return 1; }
     print_success "Successfully joined the cluster"
 }
 
@@ -114,11 +119,12 @@ handle_existing_cluster() {
     kubectl cluster-info
 
     if prompt_yes_no "Print join command for worker nodes?" "n"; then
-        kubeadm token create --print-join-command
+        kubeadm token create --print-join-command \
+            || print_warning "Failed to generate join command"
     fi
 
     if prompt_yes_no "Reset and reinitialize cluster?" "n"; then
-        reset_cluster
+        reset_cluster || return 1
         initialize_control_plane
     fi
 }
@@ -158,14 +164,14 @@ handle_new_cluster() {
 # ============================================================================
 
 main_initialize_cluster() {
-    detect_environment
+    detect_environment || { print_error "Failed to detect environment"; return 1; }
 
     print_info "Cluster initialization..."
 
     if is_cluster_initialized; then
-        handle_existing_cluster
+        handle_existing_cluster || return 1
     else
-        handle_new_cluster
+        handle_new_cluster || return 1
     fi
 }
 

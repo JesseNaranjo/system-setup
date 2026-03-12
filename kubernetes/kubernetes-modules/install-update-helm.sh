@@ -20,7 +20,7 @@ check_prerequisites() {
 }
 
 main_install_update_helm() {
-    detect_environment
+    detect_environment || { print_error "Failed to detect environment"; return 1; }
 
     check_prerequisites || return 1
 
@@ -33,7 +33,7 @@ main_install_update_helm() {
     fi
 
     local install_script_path
-    install_script_path="$(mktemp)"
+    install_script_path="$(mktemp)" || { print_error "Failed to create temp file"; return 1; }
 
     print_info "Downloading Helm install script to ${install_script_path}..."
     if ! curl -fsSL -o "${install_script_path}" "${HELM_INSTALL_URL}"; then
@@ -43,7 +43,8 @@ main_install_update_helm() {
     fi
 
     print_info "Executing Helm install script..."
-    chmod 755 "${install_script_path}"
+    chmod 755 "${install_script_path}" \
+        || { rm -f "${install_script_path}"; print_error "Failed to make install script executable"; return 1; }
     if "${install_script_path}"; then
         rm -f "${install_script_path}"
         print_success "Helm installed/updated successfully"

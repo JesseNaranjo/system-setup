@@ -59,12 +59,14 @@ create_crio_dropin() {
 
     # Ensure the drop-in directory exists
     if [[ ! -d "$CRIO_CONF_DIR" ]]; then
-        mkdir -p "$CRIO_CONF_DIR"
+        mkdir -p "$CRIO_CONF_DIR" \
+            || { print_error "Failed to create $CRIO_CONF_DIR"; return 1; }
     fi
 
     local content
     content="$(build_crio_conf_content)"
-    echo "$content" > "$CRIO_K8S_CONF"
+    echo "$content" > "$CRIO_K8S_CONF" \
+        || { print_error "Failed to write $CRIO_K8S_CONF"; return 1; }
 
     print_success "- CRI-O drop-in configuration created at ${CRIO_K8S_CONF}"
 }
@@ -84,7 +86,8 @@ ensure_crio_service() {
     fi
 
     print_info "Enabling and starting crio.service..."
-    systemctl enable --now crio
+    systemctl enable --now crio \
+        || { print_error "Failed to enable/start crio.service"; return 1; }
     print_success "- crio.service enabled and started"
 }
 
@@ -107,7 +110,7 @@ validate_crio() {
 # ============================================================================
 
 main_configure_crio() {
-    detect_environment
+    detect_environment || { print_error "Failed to detect environment"; return 1; }
 
     print_info "Configuring CRI-O container runtime..."
 
@@ -117,10 +120,10 @@ main_configure_crio() {
         return 0
     fi
 
-    create_crio_dropin
+    create_crio_dropin || return 1
     check_crio_socket
-    ensure_crio_service
-    validate_crio
+    ensure_crio_service || return 1
+    validate_crio || print_warning "CRI-O validation failed, continuing"
 
     print_success "CRI-O container runtime configuration complete"
 }

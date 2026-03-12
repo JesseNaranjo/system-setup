@@ -46,7 +46,7 @@ load_module() {
     fi
 
     print_info "Loading kernel module: ${module}..."
-    modprobe "$module"
+    modprobe "$module" || { print_error "Failed to load kernel module: ${module}"; return 1; }
     print_success "- ${module} loaded"
 }
 
@@ -95,7 +95,7 @@ persist_modules() {
 # ============================================================================
 
 main_configure_kernel_modules() {
-    detect_environment
+    detect_environment || { print_error "Failed to detect environment"; return 1; }
 
     if ! command -v modprobe &>/dev/null; then
         print_error "modprobe not found; cannot load kernel modules"
@@ -107,10 +107,10 @@ main_configure_kernel_modules() {
 
     local module
     for module in "${REQUIRED_MODULES[@]}"; do
-        load_module "$module"
+        load_module "$module" || return 1
     done
 
-    persist_modules
+    persist_modules || return 1
 
     print_success "Kernel module configuration complete"
 }

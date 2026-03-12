@@ -36,7 +36,7 @@ detect_shell_rc_file() {
 # ============================================================================
 
 main_configure_kube_editor() {
-    detect_environment
+    detect_environment || { print_error "Failed to detect environment"; return 1; }
 
     print_info "Configuring KUBE_EDITOR..."
 
@@ -53,7 +53,8 @@ main_configure_kube_editor() {
         return 0
     fi
 
-    add_export_if_needed "$rc_file" "KUBE_EDITOR" "nano" "KUBE_EDITOR environment variable"
+    add_export_if_needed "$rc_file" "KUBE_EDITOR" "nano" "KUBE_EDITOR environment variable" \
+        || { print_error "Failed to configure KUBE_EDITOR"; return 1; }
 
     print_success "KUBE_EDITOR configuration complete"
 }

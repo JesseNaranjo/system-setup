@@ -89,7 +89,7 @@ check_minikube_version() {
 # ============================================================================
 
 main_install_update_minikube() {
-    detect_environment
+    detect_environment || { print_error "Failed to detect environment"; return 1; }
     check_prerequisites || return 1
 
     # Check if already up-to-date
@@ -97,7 +97,7 @@ main_install_update_minikube() {
         return 0
     fi
 
-    detect_package_manager
+    detect_package_manager || { print_error "Failed to detect package manager"; return 1; }
 
     local arch pkg_ext pkg_url install_cmd
 
@@ -126,7 +126,7 @@ main_install_update_minikube() {
     fi
 
     local pkg_path
-    pkg_path=$(mktemp --suffix=".${pkg_ext}")
+    pkg_path=$(mktemp --suffix=".${pkg_ext}") || { print_error "Failed to create temp file"; return 1; }
 
     print_info "Detected package manager: ${DETECTED_PKG_MANAGER}"
     print_info "Downloading minikube for ${arch} to ${pkg_path}..."

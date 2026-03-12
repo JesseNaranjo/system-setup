@@ -19,7 +19,7 @@ source "${SCRIPT_DIR}/utils-k8s.sh"
 disable_active_swap() {
     if [[ -n "$(swapon --show --noheadings)" ]]; then
         print_info "Active swap detected, disabling..."
-        swapoff -a
+        swapoff -a || { print_error "Failed to disable swap"; return 1; }
         print_success "Active swap disabled"
     else
         print_success "Swap is already off"
@@ -44,7 +44,8 @@ clean_fstab_swap() {
         print_warning "Found active swap entries in $fstab"
         if prompt_yes_no "Comment out swap entries in $fstab?" "n"; then
             backup_file "$fstab"
-            sed -i '/swap/ s/^/#/' "$fstab"
+            sed -i '/swap/ s/^/#/' "$fstab" \
+                || { print_error "Failed to comment out swap in $fstab"; return 1; }
             print_success "Swap entries in $fstab commented out"
         else
             print_info "Skipped commenting out swap entries in $fstab"
@@ -70,7 +71,8 @@ mask_swap_target() {
 
     print_warning "swap.target is not masked (current state: ${swap_state:-unknown})"
     if prompt_yes_no "Mask swap.target via systemctl?" "n"; then
-        systemctl mask swap.target
+        systemctl mask swap.target \
+            || { print_error "Failed to mask swap.target"; return 1; }
         print_success "swap.target masked"
     else
         print_info "Skipped masking swap.target"
@@ -82,13 +84,13 @@ mask_swap_target() {
 # ============================================================================
 
 main_configure_swap() {
-    detect_environment
+    detect_environment || { print_error "Failed to detect environment"; return 1; }
 
     print_info "Configuring swap..."
 
-    disable_active_swap
-    clean_fstab_swap
-    mask_swap_target
+    disable_active_swap || return 1
+    clean_fstab_swap || return 1
+    mask_swap_target || return 1
 
     print_success "Swap configuration complete"
 }

@@ -107,9 +107,9 @@ check_and_install_packages() {
 # ============================================================================
 
 main_install_k8s_packages() {
-    detect_environment
+    detect_environment || { print_error "Failed to detect environment"; return 1; }
 
-    check_and_install_packages
+    check_and_install_packages || return 1
 }
 
 # Run main function if script is executed directly
