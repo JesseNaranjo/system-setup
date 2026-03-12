@@ -86,6 +86,12 @@ mask_swap_target() {
 main_configure_swap() {
     detect_environment || { print_error "Failed to detect environment"; return 1; }
 
+    # Check if running inside a container
+    if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
+        print_info "Detected container environment: Swap configuration is not recommended inside containers"
+        return 0
+    fi
+
     print_info "Configuring swap..."
 
     disable_active_swap || return 1
