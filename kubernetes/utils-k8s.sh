@@ -767,7 +767,7 @@ update_config_line() {
             backup_file "$file"
             add_change_header "$file" "$config_type"
 
-            local temp_file=$(mktemp)
+            local temp_file=$(make_temp_file)
             local original_perms=$(get_file_permissions "$file")
 
             # Use awk to find the line, comment it, and append the new line at the end of the file
