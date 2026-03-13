@@ -21,20 +21,6 @@ readonly MODULES_CONF="/etc/modules-load.d/k8s.conf"
 # Module Loading
 # ============================================================================
 
-# Check if a kernel module is currently loaded
-# Args: module_name
-# Returns: 0 if loaded, 1 otherwise
-is_module_loaded() {
-    local module="$1"
-    if command -v lsmod &>/dev/null; then
-        lsmod | grep -q "^${module}"
-    elif [[ -r /proc/modules ]]; then
-        grep -q "^${module} " /proc/modules
-    else
-        return 1
-    fi
-}
-
 # Load a kernel module if not already loaded
 # Args: module_name
 load_module() {
@@ -42,6 +28,12 @@ load_module() {
 
     if is_module_loaded "$module"; then
         print_success "- ${module} already loaded"
+        return 0
+    fi
+
+    # Check if built into kernel (not a loadable module)
+    if [[ -d "/sys/module/${module}" ]]; then
+        print_success "- ${module} built into kernel"
         return 0
     fi
 
@@ -96,6 +88,27 @@ persist_modules() {
 
 main_configure_kernel_modules() {
     detect_environment || { print_error "Failed to detect environment"; return 1; }
+
+    # Container environment: cannot load kernel modules, verify availability from host
+    if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
+        print_info "Container environment detected — verifying kernel module availability from host..."
+        local module
+        local all_available=true
+        for module in "${REQUIRED_MODULES[@]}"; do
+            if is_module_available "$module"; then
+                print_success "- ${module} available"
+            else
+                print_warning "- ${module} not available — host may need to load this module"
+                all_available=false
+            fi
+        done
+        if [[ "$all_available" == false ]]; then
+            print_warning "Some kernel modules are not available. Kubernetes networking may not work correctly"
+        fi
+        persist_modules || return 1
+        print_success "Kernel module configuration complete (container mode)"
+        return 0
+    fi
 
     if ! command -v modprobe &>/dev/null; then
         print_warning "modprobe not found; cannot load kernel modules"
