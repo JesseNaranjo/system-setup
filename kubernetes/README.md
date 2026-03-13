@@ -227,6 +227,7 @@ sudo crictl info
   sudo modprobe br_netfilter
   sudo modprobe overlay
   ```
+- In container environments (LXC, Docker), modules must be loaded on the **host**. The orchestrator will detect this and skip `modprobe` automatically.
 - For persistent loading, run the orchestrator or see [persistent configuration](#persistent-configuration-reference)
 
 **"token is invalid" or "token has expired"**
