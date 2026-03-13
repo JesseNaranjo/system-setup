@@ -341,11 +341,11 @@ show_status_overview() {
     print_info "Kubernetes Component Status"
     echo "            ======================================================="
 
-    # Check kernel modules
-    if command -v lsmod &>/dev/null && lsmod | grep -q "^br_netfilter" && lsmod | grep -q "^overlay"; then
-        print_success "Kernel modules (br_netfilter, overlay) loaded"
+    # Check kernel modules (loaded or built into kernel)
+    if is_module_available "br_netfilter" && is_module_available "overlay"; then
+        print_success "Kernel modules (br_netfilter, overlay) available"
     else
-        print_warning "Kernel modules not fully loaded"
+        print_warning "Kernel modules not fully available"
     fi
 
     # Check packages
