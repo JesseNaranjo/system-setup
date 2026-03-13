@@ -269,6 +269,37 @@ detect_package_manager() {
 }
 
 # ============================================================================
+# Kernel Module Utilities
+# ============================================================================
+
+# Check if a kernel module is currently loaded (dynamically)
+# Args: module_name
+# Returns: 0 if loaded, 1 otherwise
+is_module_loaded() {
+    local module="$1"
+    if command -v lsmod &>/dev/null; then
+        lsmod | grep -q "^${module}[[:space:]]"
+    elif [[ -r /proc/modules ]]; then
+        grep -q "^${module} " /proc/modules
+    else
+        return 1
+    fi
+}
+
+# Check if a kernel module is available (loaded or built into kernel)
+# Args: module_name
+# Returns: 0 if available, 1 otherwise
+is_module_available() {
+    local module="$1"
+    # Check if dynamically loaded
+    is_module_loaded "$module" && return 0
+    # /sys/module/ exists for both loaded and built-in modules;
+    # since is_module_loaded already checked, presence here means built-in
+    [[ -d "/sys/module/${module}" ]] && return 0
+    return 1
+}
+
+# ============================================================================
 # Privilege Management
 # ============================================================================
 
