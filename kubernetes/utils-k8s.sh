@@ -58,6 +58,12 @@ KUBEADM_INSTALLED=false
 KUBELET_INSTALLED=false
 CRIO_INSTALLED=false
 
+# Repository configuration tracking flags
+# Set by: configure-k8s-repos.sh during repo setup
+# Read by: install-k8s-packages.sh to gate install prompts
+K8S_REPO_CONFIGURED=false
+CRIO_REPO_CONFIGURED=false
+
 declare -A SPECIAL_PACKAGE_FLAGS=(
     [kubectl]=KUBECTL_INSTALLED
     [kubeadm]=KUBEADM_INSTALLED
@@ -504,6 +510,35 @@ is_package_installed() {
 
     # Fallback to direct check if not in cache (shouldn't happen normally)
     dpkg -l "$package" 2>/dev/null | grep -q "^ii"
+}
+
+# Check if a package update is available via apt-cache policy.
+# Prints "installed_version → candidate_version" if update available, empty otherwise.
+# Requires: repo configured and apt update run.
+check_package_update() {
+    local package="$1"
+    local installed candidate
+
+    installed=$(dpkg -l "$package" 2>/dev/null | awk '/^ii/ {print $3}')
+    candidate=$(apt-cache policy "$package" 2>/dev/null | awk '/Candidate:/ {print $2}')
+
+    if [[ -z "$installed" || -z "$candidate" || "$candidate" == "(none)" ]]; then
+        return 0
+    fi
+
+    if [[ "$installed" != "$candidate" ]]; then
+        echo "${installed} → ${candidate}"
+    fi
+}
+
+# Check if the repository for a given package is configured.
+# Returns 0 if the package's repo is available, 1 otherwise.
+is_repo_available_for_package() {
+    case "$1" in
+        kubeadm|kubectl|kubelet) [[ "$K8S_REPO_CONFIGURED" == true ]] ;;
+        cri-o) [[ "$CRIO_REPO_CONFIGURED" == true ]] ;;
+        *) return 1 ;;
+    esac
 }
 
 # Verify package manager is available
