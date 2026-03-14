@@ -24,7 +24,7 @@ check_prerequisites() {
     if ! command -v gpg &>/dev/null; then
         print_warning "gpg not found; required for APT repository key management"
         if prompt_yes_no "Install gpg?" "y"; then
-            apt install -y gpg || { print_error "Failed to install gpg"; return 1; }
+            apt install gpg || { print_error "Failed to install gpg"; return 1; }
             print_success "gpg installed"
         else
             print_info "Skipped gpg installation"

@@ -31,7 +31,7 @@ install_packages() {
         return 0
     fi
 
-    if apt install -y "${packages[@]}"; then
+    if apt install "${packages[@]}"; then
         print_success "All packages installed successfully"
         return 0
     fi

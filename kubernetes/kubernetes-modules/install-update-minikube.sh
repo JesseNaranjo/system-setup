@@ -106,7 +106,7 @@ main_install_update_minikube() {
             arch=$(get_deb_arch)
             pkg_ext="deb"
             pkg_url="${MINIKUBE_BASE_URL}/minikube_latest_${arch}.deb"
-            install_cmd="apt install -y"
+            install_cmd="apt install"
             ;;
         dnf | zypper)
             arch=$(get_rpm_arch)
