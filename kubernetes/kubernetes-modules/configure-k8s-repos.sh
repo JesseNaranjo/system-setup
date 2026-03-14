@@ -152,6 +152,35 @@ should_configure_repo() {
     prompt_yes_no "Configure ${name} repository? (needed to install ${name} packages)" "n"
 }
 
+# Check if newer Kubernetes versions are available at pkgs.k8s.io.
+# Probes up to 2 minor versions ahead of the current K8S_VERSION.
+# Informational only — does not modify K8S_VERSION.
+check_newer_k8s_versions() {
+    local current_minor
+    current_minor="${K8S_VERSION#v1.}"
+
+    if [[ ! "$current_minor" =~ ^[0-9]+$ ]]; then
+        return 0
+    fi
+
+    local newer_versions=()
+
+    for offset in 1 2; do
+        local check_minor=$(( current_minor + offset ))
+        local check_version="v1.${check_minor}"
+        local check_url="https://pkgs.k8s.io/core:/stable:/${check_version}/deb/Release"
+
+        if curl -fsSL --head --connect-timeout 5 "$check_url" >/dev/null 2>&1; then
+            newer_versions+=("$check_version")
+        fi
+    done
+
+    if [[ ${#newer_versions[@]} -gt 0 ]]; then
+        print_info "Newer Kubernetes versions available: ${newer_versions[*]} (current: ${K8S_VERSION})"
+        print_info "To upgrade: update K8S_VERSION in kubernetes-setup.sh and re-run"
+    fi
+}
+
 setup_kubernetes_repo() {
     setup_apt_repo "Kubernetes" \
         "/etc/apt/keyrings/kubernetes-apt-keyring.gpg" \
@@ -199,6 +228,7 @@ main_configure_k8s_repos() {
     if [[ "$repos_configured" == true ]]; then
         print_info "Refreshing package lists..."
         apt update || { print_error "Failed to refresh package lists"; return 1; }
+        check_newer_k8s_versions
     else
         print_info "No repositories configured, skipping package list refresh"
     fi
