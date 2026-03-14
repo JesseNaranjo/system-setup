@@ -63,7 +63,7 @@ has_delegation() {
     local name="$1"
     local service="lxc-bg-start@${name}.service"
 
-    systemctl --user show "$service" -p Delegate 2>/dev/null | grep -q "cpuset"
+    systemctl --user show "$service" -p Delegate 2>/dev/null | grep -qP "^Delegate=.*cpuset.*"
 }
 
 # Create a systemd drop-in to persist cgroup delegation for a container
