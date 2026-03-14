@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # configure-crio.sh - Configure CRI-O container runtime for Kubernetes
-# Creates drop-in configuration and ensures CRI-O service is running
+# Cleans up stale drop-in configuration and ensures CRI-O service is running
 set -euo pipefail
 
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
@@ -15,60 +15,22 @@ source "${SCRIPT_DIR}/utils-k8s.sh"
 # ============================================================================
 
 readonly CRIO_CONF_DIR="/etc/crio/crio.conf.d"
-readonly CRIO_K8S_CONF="${CRIO_CONF_DIR}/10-k8s.conf"
 
 # ============================================================================
 # CRI-O Configuration
 # ============================================================================
 
-# Expected content for the Kubernetes drop-in config
-build_crio_conf_content() {
-    cat <<'EOF'
-[crio.runtime]
-default_runtime = "runc"
-
-[crio.runtime.runtimes.runc]
-runtime_type = "oci"
-EOF
-}
-
-# Check if the drop-in config exists with correct content
-# Returns: 0 if correctly configured, 1 otherwise
-is_crio_configured() {
-    if [[ ! -f "$CRIO_K8S_CONF" ]]; then
-        return 1
+# Clean up stale drop-in from previous versions of this script.
+# The package-provided 10-crio.conf handles runtime configuration;
+# our old 10-k8s.conf overrode defaults and caused runc-not-found failures.
+cleanup_stale_dropin() {
+    local stale_conf="${CRIO_CONF_DIR}/10-k8s.conf"
+    if [[ -f "$stale_conf" ]]; then
+        print_info "Removing stale drop-in: ${stale_conf}"
+        rm -f "$stale_conf" \
+            || { print_warning "Failed to remove ${stale_conf}"; return 0; }
+        print_success "- Removed stale ${stale_conf}"
     fi
-
-    local expected_content
-    expected_content="$(build_crio_conf_content)"
-
-    local current_content
-    current_content="$(cat "$CRIO_K8S_CONF")"
-
-    [[ "$current_content" == "$expected_content" ]]
-}
-
-# Create the drop-in configuration directory and file
-create_crio_dropin() {
-    if is_crio_configured; then
-        print_success "- CRI-O Kubernetes drop-in already configured at ${CRIO_K8S_CONF}"
-        return 0
-    fi
-
-    print_info "Creating CRI-O drop-in configuration at ${CRIO_K8S_CONF}..."
-
-    # Ensure the drop-in directory exists
-    if [[ ! -d "$CRIO_CONF_DIR" ]]; then
-        mkdir -p "$CRIO_CONF_DIR" \
-            || { print_error "Failed to create $CRIO_CONF_DIR"; return 1; }
-    fi
-
-    local content
-    content="$(build_crio_conf_content)"
-    echo "$content" > "$CRIO_K8S_CONF" \
-        || { print_error "Failed to write $CRIO_K8S_CONF"; return 1; }
-
-    print_success "- CRI-O drop-in configuration created at ${CRIO_K8S_CONF}"
 }
 
 # Verify CRI-O socket path exists (informational only)
@@ -120,9 +82,9 @@ main_configure_crio() {
         return 0
     fi
 
-    create_crio_dropin || return 1
-    check_crio_socket
+    cleanup_stale_dropin
     ensure_crio_service || return 1
+    check_crio_socket
     validate_crio || print_warning "CRI-O validation failed, continuing"
 
     print_success "CRI-O container runtime configuration complete"
