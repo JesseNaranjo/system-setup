@@ -33,10 +33,20 @@ cleanup_stale_dropin() {
     fi
 }
 
+# Warn if the package-provided drop-in is missing.
+# CRI-O ships 10-crio.conf with runtime paths, conmon config, and signature policy.
+# Without it, CRI-O may lack essential configuration.
+check_package_dropin() {
+    local package_conf="${CRIO_CONF_DIR}/10-crio.conf"
+    if [[ ! -f "$package_conf" ]]; then
+        print_warning "Package-provided ${package_conf} not found — CRI-O may lack essential runtime configuration"
+    fi
+}
+
 # Verify CRI-O socket path exists (informational only)
 check_crio_socket() {
     if [[ ! -S /var/run/crio/crio.sock ]]; then
-        print_warning "CRI-O socket not found at /var/run/crio/crio.sock (may appear after service starts)"
+        print_warning "CRI-O socket not found at /var/run/crio/crio.sock (CRI-O may still be initializing)"
     fi
 }
 
@@ -83,6 +93,7 @@ main_configure_crio() {
     fi
 
     cleanup_stale_dropin
+    check_package_dropin
     ensure_crio_service || return 1
     check_crio_socket
     validate_crio || print_warning "CRI-O validation failed, continuing"
