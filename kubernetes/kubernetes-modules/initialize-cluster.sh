@@ -47,6 +47,17 @@ reset_cluster() {
 
 # Initialize a new control-plane node with kubeadm
 initialize_control_plane() {
+    # kubeadm preflight loads the "configs" kernel module via modprobe
+    if ! command -v modprobe &>/dev/null; then
+        print_warning "modprobe not found; kubeadm preflight requires it"
+        if prompt_yes_no "Install kmod (provides modprobe)?" "y"; then
+            apt install kmod || { print_error "Failed to install kmod"; return 1; }
+            print_success "kmod installed"
+        else
+            print_warning "Continuing without kmod — kubeadm preflight may fail"
+        fi
+    fi
+
     local pod_cidr
     read -r -p "Enter pod network CIDR [192.168.0.0/16]: " pod_cidr </dev/tty
     pod_cidr="${pod_cidr:-192.168.0.0/16}"
