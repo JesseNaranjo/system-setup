@@ -133,6 +133,25 @@ EOF
     print_success "${name} sources file created: $sources_path"
 }
 
+# Determine whether a repository should be configured.
+# Auto-configures if packages from the repo are already installed (needed for updates).
+# Otherwise prompts the user.
+# Returns: 0 if repo should be configured, 1 to skip.
+should_configure_repo() {
+    local name="$1"
+    shift
+    local packages=("$@")
+
+    for pkg in "${packages[@]}"; do
+        if is_package_installed "$pkg"; then
+            print_info "${name} packages detected, configuring repository for updates"
+            return 0
+        fi
+    done
+
+    prompt_yes_no "Configure ${name} repository? (needed to install ${name} packages)" "n"
+}
+
 setup_kubernetes_repo() {
     setup_apt_repo "Kubernetes" \
         "/etc/apt/keyrings/kubernetes-apt-keyring.gpg" \
@@ -158,11 +177,31 @@ main_configure_k8s_repos() {
 
     check_prerequisites || return 1
     cleanup_deprecated_files || print_warning "Deprecated file cleanup failed, continuing"
-    setup_kubernetes_repo || return 1
-    setup_crio_repo || return 1
 
-    print_info "Refreshing package lists..."
-    apt update || { print_error "Failed to refresh package lists"; return 1; }
+    local repos_configured=false
+
+    if should_configure_repo "Kubernetes" "kubeadm" "kubectl" "kubelet"; then
+        setup_kubernetes_repo || return 1
+        K8S_REPO_CONFIGURED=true
+        repos_configured=true
+    else
+        print_info "Skipping Kubernetes repository configuration"
+    fi
+
+    if should_configure_repo "CRI-O" "cri-o"; then
+        setup_crio_repo || return 1
+        CRIO_REPO_CONFIGURED=true
+        repos_configured=true
+    else
+        print_info "Skipping CRI-O repository configuration"
+    fi
+
+    if [[ "$repos_configured" == true ]]; then
+        print_info "Refreshing package lists..."
+        apt update || { print_error "Failed to refresh package lists"; return 1; }
+    else
+        print_info "No repositories configured, skipping package list refresh"
+    fi
 
     print_success "Repository configuration complete"
 }
