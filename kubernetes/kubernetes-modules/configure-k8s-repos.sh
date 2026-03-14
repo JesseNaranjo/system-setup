@@ -192,7 +192,7 @@ setup_crio_repo() {
     setup_apt_repo "CRI-O" \
         "/etc/apt/keyrings/cri-o-apt-keyring.gpg" \
         "/etc/apt/sources.list.d/cri-o.sources" \
-        "https://pkgs.k8s.io/addons:/cri-o:/stable:/${K8S_VERSION}/deb/"
+        "https://download.opensuse.org/repositories/isv:/cri-o:/stable:/${K8S_VERSION}/deb/"
 }
 
 # ============================================================================
