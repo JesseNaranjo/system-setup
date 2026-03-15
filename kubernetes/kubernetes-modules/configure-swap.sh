@@ -88,7 +88,9 @@ main_configure_swap() {
 
     # Check if running inside a container
     if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
-        print_info "Detected container environment: Swap configuration is not recommended inside containers"
+        print_info "Container environment detected — swap cannot be managed from inside a container"
+        print_container_swap_info
+        print_success "Swap configuration complete (container mode)"
         return 0
     fi
 
