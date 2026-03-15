@@ -207,6 +207,17 @@ echo "            Release: $RELEASE"
 echo "            Architecture: $ARCHITECTURE"
 if lxc-create --name "$CONTAINER_NAME" -t download -- -d "$DISTRIBUTION" -r "$RELEASE" -a "$ARCHITECTURE"; then
     print_success "✓ Container created: $CONTAINER_NAME"
+
+    # Offer Kubernetes container settings
+    START_FLAGS=()
+    if [[ "$CONTAINER_NAME" == *k8s* ]]; then
+        echo ""
+        print_info "This container name suggests Kubernetes usage."
+        print_info "Kubernetes requires cgroup delegation (cpuset) and /proc/swaps masked."
+        if prompt_yes_no "Apply Kubernetes container settings (--delegate --no-swap)?" "y"; then
+            START_FLAGS+=(--delegate --no-swap)
+        fi
+    fi
 else
     print_error "✖ Failed to create container: $CONTAINER_NAME"
     exit 1
@@ -217,8 +228,11 @@ echo ""
 ((CURRENT_STEP++)) || true
 print_info "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Starting container..."
 if [[ -f "$SCRIPT_DIR/start-lxc.sh" ]]; then
-    "$SCRIPT_DIR/start-lxc.sh" "$CONTAINER_NAME"
+    "$SCRIPT_DIR/start-lxc.sh" ${START_FLAGS[@]+"${START_FLAGS[@]}"} "$CONTAINER_NAME"
 else
+    if [[ ${#START_FLAGS[@]} -gt 0 ]]; then
+        print_warning "start-lxc.sh not found — cannot apply ${START_FLAGS[*]}; configure manually"
+    fi
     print_warning "start-lxc.sh not found, attempting to start manually..."
     if systemctl --user start "lxc-bg-start@${CONTAINER_NAME}.service"; then
         print_success "✓ Service and Container started: ${CONTAINER_NAME}"
