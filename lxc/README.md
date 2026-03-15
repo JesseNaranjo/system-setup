@@ -92,6 +92,7 @@ Creates an LXC container with auto-detection of distribution, release, and archi
 - Auto-detects host OS parameters if not specified
 - Prompts before destroying existing containers
 - Uses the sibling `start-lxc.sh` script to start the container
+- When the container name contains `k8s`, prompts to apply Kubernetes settings (`--delegate --no-swap`)
 
 ```bash
 ./create-lxc.sh <container_name> [distribution] [release] [architecture]
@@ -99,6 +100,7 @@ Creates an LXC container with auto-detection of distribution, release, and archi
 # Examples:
 ./create-lxc.sh mycontainer                        # Auto-detect everything
 ./create-lxc.sh mycontainer debian bookworm arm64  # Explicit parameters
+./create-lxc.sh tst-k8s1                           # Prompts for k8s settings
 ```
 
 ### start-lxc.sh
@@ -108,10 +110,43 @@ Starts containers using systemd user services:
 - Uses `lxc-bg-start@.service` for proper lifecycle management
 - Auto-attaches to the container when starting a single container
 - Shows container status after starting multiple containers
+- Supports cgroup delegation and swap restriction flags for Kubernetes containers
+- Persistent settings are applied even if the container is already running (take effect on next restart)
 
 ```bash
-./start-lxc.sh <container_name> [[container_name], ...]
+./start-lxc.sh [options] <container_name> [...]
 ```
+
+**Options:**
+
+| Flag | Persists | Effect |
+|------|----------|--------|
+| `--delegate` | Yes | Creates systemd drop-in with `Delegate=cpuset cpu io memory pids` |
+| `--delegate-once` | No | One-time cgroup delegation via `systemd-run` |
+| `--no-swap` | Yes | Creates `MemorySwapMax=0` drop-in AND masks `/proc/swaps` in container config |
+| `--no-swap-once` | No | One-time `MemorySwapMax=0` via `systemd-run` (does not mask `/proc/swaps`) |
+
+Flags are combinable. For full Kubernetes support, use `--delegate --no-swap`:
+
+```bash
+# Full k8s setup (persist delegation + swap restriction + mask /proc/swaps)
+./start-lxc.sh --delegate --no-swap tst-k8s1
+
+# One-time swap restriction only (cgroup limit, no /proc/swaps mask)
+./start-lxc.sh --no-swap-once tst-k8s1
+
+# Apply settings to an already-running container (takes effect on next restart)
+./start-lxc.sh --delegate --no-swap tst-k8s1
+```
+
+**What `--no-swap` does:**
+
+1. **Cgroup enforcement**: Creates a systemd drop-in (`MemorySwapMax=0`) so the container cannot use swap (cgroup v2)
+2. **Visibility masking**: Adds `lxc.mount.entry = /dev/null proc/swaps none bind,optional 0 0` to the container's LXC config, hiding host swap devices from kubelet
+
+Without the `/proc/swaps` mask, kubelet sees the host's swap devices and refuses to start, even though the container itself cannot use swap.
+
+Containers with `k8s` in their name receive a warning if delegation or swap restriction is missing.
 
 ### stop-lxc.sh
 

@@ -188,6 +188,37 @@ net.bridge.bridge-nf-call-ip6tables = 1
 References:
 - https://kubernetes.io/docs/reference/networking/ports-and-protocols/
 
+## Running in LXC Containers
+
+When running Kubernetes inside unprivileged LXC containers, two additional prerequisites must be met on the **host** side:
+
+### 1. Kernel config must be accessible
+
+kubeadm's `SystemVerification` preflight check needs the kernel config. LXC containers share the host kernel but lack `/boot/config-*`. Copy it from the host:
+
+```bash
+# On the host:
+mkdir -p ~/.local/share/lxc/<container>/rootfs/boot
+cp /boot/config-$(uname -r) ~/.local/share/lxc/<container>/rootfs/boot/
+```
+
+### 2. `/proc/swaps` must be masked
+
+`/proc/swaps` inside the container reflects the host's swap devices. kubelet reads this and refuses to start. Use `start-lxc.sh --no-swap` to both restrict swap via cgroup v2 and mask `/proc/swaps`:
+
+```bash
+# From the lxc/ directory:
+./start-lxc.sh --delegate --no-swap tst-k8s1
+```
+
+Or add the LXC config entry manually:
+
+```
+lxc.mount.entry = /dev/null proc/swaps none bind,optional 0 0
+```
+
+See the [`lxc/`](../lxc/) directory for container management scripts.
+
 ## Troubleshooting
 
 ### Check service status
