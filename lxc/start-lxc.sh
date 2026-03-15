@@ -9,10 +9,13 @@
 #                     container's service, then start normally. Survives restarts.
 #   --delegate-once   Start with cgroup delegation via systemd-run instead of
 #                     the service. One-time only, does not persist.
+#   --no-swap         Persist MemorySwapMax=0 drop-in and mask /proc/swaps in
+#                     container config. Survives restarts.
+#   --no-swap-once    Start with one-time MemorySwapMax=0 (cgroup only, does
+#                     not mask /proc/swaps).
 #
 # If a container name contains 'k8s', the script checks whether cgroup
-# delegation is configured and warns if it is not (Kubernetes requires the
-# cpuset controller).
+# delegation and swap restriction are configured and warns if not.
 #
 # This script starts one or more LXC containers using systemd user services.
 # If only one container is specified, it will automatically attach to the
@@ -23,6 +26,8 @@
 #   ./start-lxc.sh web db cache             # Start multiple containers
 #   ./start-lxc.sh --delegate tst-k8s1      # Persist delegation, then start
 #   ./start-lxc.sh --delegate-once tst-k8s1 # One-time delegation, no persist
+#   ./start-lxc.sh --no-swap tst-k8s1       # Persist swap restriction + mask
+#   ./start-lxc.sh --delegate --no-swap tst-k8s1  # Full k8s setup
 
 set -euo pipefail
 
@@ -83,20 +88,6 @@ EOF
     print_success "Cgroup delegation persisted for ${name}"
 }
 
-# Start a container with one-time cgroup delegation via systemd-run
-# Args: container_name
-# Returns: 0 on success, 1 on failure
-start_with_delegation() {
-    local name="$1"
-
-    if systemd-run --user --scope -p "Delegate=${DELEGATE_CONTROLLERS}" -- \
-        lxc-start -n "$name"; then
-        return 0
-    else
-        return 1
-    fi
-}
-
 # Warn if a k8s container is missing cgroup delegation
 # Args: container_name
 check_k8s_delegation() {
@@ -115,24 +106,115 @@ check_k8s_delegation() {
 }
 
 # ============================================================================
+# Swap Restriction
+# ============================================================================
+
+readonly SWAP_MOUNT_ENTRY="lxc.mount.entry = /dev/null proc/swaps none bind,optional 0 0"
+
+# Check if a container's service has swap restricted via cgroup
+# Args: container_name
+# Returns: 0 if MemorySwapMax is 0, 1 otherwise
+has_no_swap() {
+    local name="$1"
+    local service="lxc-bg-start@${name}.service"
+
+    local swap_max
+    swap_max="$(systemctl --user show "$service" -p MemorySwapMax --value 2>/dev/null)"
+    [[ "$swap_max" == "0" ]]
+}
+
+# Check if a container's LXC config masks /proc/swaps
+# Args: container_name
+# Returns: 0 if masked, 1 otherwise
+has_swap_masked() {
+    local name="$1"
+    local config="${HOME}/.local/share/lxc/${name}/config"
+
+    [[ -f "$config" ]] && grep -qF "proc/swaps" "$config"
+}
+
+# Create a systemd drop-in to persist MemorySwapMax=0 for a container
+# Args: container_name
+install_no_swap_dropin() {
+    local name="$1"
+    local dropin_dir
+    dropin_dir="${HOME}/.config/systemd/user/lxc-bg-start@${name}.service.d"
+
+    mkdir -p "$dropin_dir"
+    cat > "${dropin_dir}/no-swap.conf" <<EOF
+[Service]
+MemorySwapMax=0
+EOF
+
+    systemctl --user daemon-reload
+    print_success "Swap restriction persisted for ${name} (MemorySwapMax=0)"
+}
+
+# Add lxc.mount.entry to mask /proc/swaps inside the container
+# Args: container_name
+mask_proc_swaps() {
+    local name="$1"
+    local config="${HOME}/.local/share/lxc/${name}/config"
+
+    if [[ ! -f "$config" ]]; then
+        print_warning "Container config not found: ${config}"
+        return 1
+    fi
+
+    if has_swap_masked "$name"; then
+        print_info "/proc/swaps already masked for ${name}"
+        return 0
+    fi
+
+    {
+        echo ""
+        echo "# Mask /proc/swaps — prevents kubelet from seeing host swap devices"
+        echo "$SWAP_MOUNT_ENTRY"
+    } >> "$config"
+    print_success "/proc/swaps masked for ${name}"
+}
+
+# Warn if a k8s container is missing swap restriction
+# Args: container_name
+check_k8s_no_swap() {
+    local name="$1"
+
+    if [[ "$name" != *k8s* ]]; then
+        return
+    fi
+
+    if has_no_swap "$name" && has_swap_masked "$name"; then
+        return
+    fi
+
+    print_warning "Container '${name}' looks like a Kubernetes node but has incomplete swap restriction"
+    print_warning "Kubernetes requires swap off. Use --no-swap to enforce cgroup limits and mask /proc/swaps"
+}
+
+# ============================================================================
 # Input Validation
 # ============================================================================
 
 usage() {
-    echo "Usage: ${0##*/} [--delegate|--delegate-once] <container_name> [...]"
+    echo "Usage: ${0##*/} [--delegate|--delegate-once] [--no-swap|--no-swap-once] <container_name> [...]"
     echo ""
     echo "Options:"
     echo "  --delegate        Persist cgroup delegation in service drop-in"
     echo "  --delegate-once   Start with one-time cgroup delegation (no persist)"
+    echo "  --no-swap         Persist MemorySwapMax=0 drop-in and mask /proc/swaps in container config"
+    echo "  --no-swap-once    Start with one-time MemorySwapMax=0 (cgroup only, does not mask /proc/swaps)"
+    echo ""
+    echo "Options are combinable: --delegate --no-swap applies both."
     echo ""
     echo "Examples:"
     echo "  ${0##*/} mycontainer"
-    echo "  ${0##*/} --delegate tst-k8s1"
-    echo "  ${0##*/} --delegate-once tst-k8s1"
+    echo "  ${0##*/} --delegate --no-swap tst-k8s1"
+    echo "  ${0##*/} --no-swap-once tst-k8s1"
 }
 
 # Parse options
 DELEGATE_MODE=""
+SWAP_MODE=""
 CONTAINERS=()
 
 for arg in "$@"; do
@@ -142,6 +224,12 @@ for arg in "$@"; do
             ;;
         --delegate-once)
             DELEGATE_MODE="once"
+            ;;
+        --no-swap)
+            SWAP_MODE="persist"
+            ;;
+        --no-swap-once)
+            SWAP_MODE="once"
             ;;
         --help|-h)
             usage
@@ -173,49 +261,61 @@ print_info "Starting ${#CONTAINERS[@]} container(s)..."
 echo ""
 
 for lxcName in "${CONTAINERS[@]}"; do
-    # Check if container is already running
+    # Install persistent settings BEFORE the running check — they apply on next restart
+    if [[ "$DELEGATE_MODE" == "persist" ]]; then
+        if ! has_delegation "$lxcName"; then
+            install_delegation_dropin "$lxcName"
+        else
+            print_info "Cgroup delegation already configured for ${lxcName}"
+        fi
+    fi
+
+    if [[ "$SWAP_MODE" == "persist" ]]; then
+        if ! has_no_swap "$lxcName"; then
+            install_no_swap_dropin "$lxcName"
+        else
+            print_info "Swap cgroup restriction already configured for ${lxcName}"
+        fi
+        mask_proc_swaps "$lxcName"
+    fi
+
+    # Skip start if already running (persistent settings above still applied)
     if lxc-info -n "${lxcName}" -s 2>/dev/null | grep -q "RUNNING"; then
-        print_success "⊙ Container ${lxcName} is already running..."
+        print_success "⊙ Container ${lxcName} is already running (settings applied for next restart)"
         continue
     fi
 
-    # Handle delegation modes
-    case "$DELEGATE_MODE" in
-        persist)
-            if ! has_delegation "$lxcName"; then
-                install_delegation_dropin "$lxcName"
-            else
-                print_info "Cgroup delegation already configured for ${lxcName}"
-            fi
-            # Start via service (now has delegation)
-            print_info "Starting ${lxcName}..."
-            if systemctl --user start "lxc-bg-start@${lxcName}.service"; then
-                print_success "✓ Service and Container started: ${lxcName}"
-            else
-                print_error "✖ Failed to start service/container: ${lxcName}"
-            fi
-            ;;
-        once)
-            print_info "Starting ${lxcName} with one-time cgroup delegation..."
-            if start_with_delegation "$lxcName"; then
-                print_success "✓ Container started with delegation: ${lxcName}"
-            else
-                print_error "✖ Failed to start container: ${lxcName}"
-            fi
-            ;;
-        *)
-            # Default: check k8s containers for missing delegation
-            check_k8s_delegation "$lxcName"
+    # Start the container
+    if [[ "$DELEGATE_MODE" == "once" || "$SWAP_MODE" == "once" ]]; then
+        # systemd-run bypasses the service, so include ALL desired properties
+        # (both persisted and one-time) for this start
+        run_props=()
+        [[ -n "$DELEGATE_MODE" ]] && run_props+=(-p "Delegate=${DELEGATE_CONTROLLERS}")
+        [[ -n "$SWAP_MODE" ]] && run_props+=(-p "MemorySwapMax=0")
 
-            print_info "Starting ${lxcName}..."
-            if systemctl --user start "lxc-bg-start@${lxcName}.service"; then
-                print_success "✓ Service and Container started: ${lxcName}"
-            else
-                print_error "✖ Failed to start service/container: ${lxcName}"
-            fi
-            ;;
-    esac
-    sleep 0.5
+        print_info "Starting ${lxcName} with one-time properties: ${run_props[*]}..."
+        if systemd-run --user --scope "${run_props[@]}" -- lxc-start -n "$lxcName"; then
+            print_success "✓ Container started: ${lxcName}"
+        else
+            print_error "✖ Failed to start container: ${lxcName}"
+        fi
+    else
+        # No one-time flags: start via service (drop-ins apply automatically)
+        # Warn about missing settings on k8s containers only when no explicit flags
+        if [[ -z "$DELEGATE_MODE" ]]; then
+            check_k8s_delegation "$lxcName"
+        fi
+        if [[ -z "$SWAP_MODE" ]]; then
+            check_k8s_no_swap "$lxcName"
+        fi
+
+        print_info "Starting ${lxcName}..."
+        if systemctl --user start "lxc-bg-start@${lxcName}.service"; then
+            print_success "✓ Service and Container started: ${lxcName}"
+        else
+            print_error "✖ Failed to start service/container: ${lxcName}"
+        fi
+    fi
 done
 echo ""
 
