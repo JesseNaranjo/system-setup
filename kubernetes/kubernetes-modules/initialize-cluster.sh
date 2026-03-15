@@ -42,6 +42,44 @@ reset_cluster() {
 }
 
 # ============================================================================
+# Container Preflight Checks
+# ============================================================================
+
+# Verify kernel config is accessible for kubeadm's SystemVerification preflight
+# kubeadm checks these paths in order; if none exist, it tries modprobe configs
+# which always fails on Debian (CONFIG_IKCONFIG not built as module)
+# Returns: 0 if found, 1 if missing
+ensure_kernel_config() {
+    local release
+    release="$(uname -r)"
+
+    local -a config_paths=(
+        "/proc/config.gz"
+        "/boot/config-${release}"
+        "/usr/src/linux-${release}/.config"
+        "/usr/src/linux/.config"
+        "/usr/lib/modules/${release}/config"
+        "/usr/lib/modules/${release}/build/.config"
+    )
+
+    local path
+    for path in "${config_paths[@]}"; do
+        [[ -f "$path" ]] && return 0
+    done
+
+    print_warning "Kernel config not found — kubeadm preflight will fail"
+    print_info "Debian does not provide the 'configs' kernel module"
+    print_info "In containers, /boot/config-${release} is typically missing"
+    echo ""
+    print_info "To fix, run one of these on the HOST (not inside this container):"
+    print_info "  cp /boot/config-${release} ~/.local/share/lxc/<container>/rootfs/boot/"
+    print_info "  (create /boot/ inside rootfs first if it doesn't exist: mkdir -p ...rootfs/boot)"
+    echo ""
+    print_info "Then re-run this script."
+    return 1
+}
+
+# ============================================================================
 # Control-Plane Initialization
 # ============================================================================
 
@@ -56,6 +94,11 @@ initialize_control_plane() {
         else
             print_warning "Continuing without kmod — kubeadm preflight may fail"
         fi
+    fi
+
+    # In containers, verify kernel config is accessible for kubeadm preflight
+    if [[ "${RUNNING_IN_CONTAINER:-false}" == true ]]; then
+        ensure_kernel_config || return 1
     fi
 
     local pod_cidr
