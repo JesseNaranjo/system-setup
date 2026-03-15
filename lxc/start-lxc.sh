@@ -130,7 +130,7 @@ has_swap_masked() {
     local name="$1"
     local config="${HOME}/.local/share/lxc/${name}/config"
 
-    [[ -f "$config" ]] && grep -qF "proc/swaps" "$config"
+    [[ -f "$config" ]] && grep -q 'lxc\.mount\.entry.*proc/swaps' "$config"
 }
 
 # Create a systemd drop-in to persist MemorySwapMax=0 for a container
@@ -260,6 +260,7 @@ fi
 print_info "Starting ${#CONTAINERS[@]} container(s)..."
 echo ""
 
+any_failed=false
 for lxcName in "${CONTAINERS[@]}"; do
     # Install persistent settings BEFORE the running check — they apply on next restart
     if [[ "$DELEGATE_MODE" == "persist" ]]; then
@@ -276,7 +277,8 @@ for lxcName in "${CONTAINERS[@]}"; do
         else
             print_info "Swap cgroup restriction already configured for ${lxcName}"
         fi
-        mask_proc_swaps "$lxcName"
+        mask_proc_swaps "$lxcName" \
+            || print_warning "Failed to mask /proc/swaps for ${lxcName}; configure manually"
     fi
 
     # Skip start if already running (persistent settings above still applied)
@@ -298,6 +300,7 @@ for lxcName in "${CONTAINERS[@]}"; do
             print_success "✓ Container started: ${lxcName}"
         else
             print_error "✖ Failed to start container: ${lxcName}"
+            any_failed=true
         fi
     else
         # No one-time flags: start via service (drop-ins apply automatically)
@@ -314,6 +317,7 @@ for lxcName in "${CONTAINERS[@]}"; do
             print_success "✓ Service and Container started: ${lxcName}"
         else
             print_error "✖ Failed to start service/container: ${lxcName}"
+            any_failed=true
         fi
     fi
 done
@@ -325,7 +329,7 @@ if [[ ${#CONTAINERS[@]} -eq 1 ]]; then
 
     print_info "Container started. Attaching in:"
     x=3
-    while [ $x -gt 0 ]; do
+    while [[ $x -gt 0 ]]; do
         echo "            $x..."
         sleep 0.75
         x=$((x - 1))
@@ -347,5 +351,9 @@ else
     # Multiple containers, just show status
     lxc-ls --fancy
     echo ""
-    print_success "All containers started successfully"
+    if [[ "$any_failed" == true ]]; then
+        print_warning "Some containers failed to start (see errors above)"
+    else
+        print_success "All containers started successfully"
+    fi
 fi
