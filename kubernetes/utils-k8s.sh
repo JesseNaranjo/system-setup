@@ -306,6 +306,18 @@ is_module_available() {
 }
 
 # ============================================================================
+# Container Swap Utilities
+# ============================================================================
+
+# Print informational message about swap behavior in containers
+# Called by configure-swap.sh and initialize-cluster.sh
+print_container_swap_info() {
+    print_info "/proc/swaps reflects the host's swap — it cannot be changed from inside the container"
+    print_info "The host should mask /proc/swaps and restrict swap for this container"
+    print_info "  Use: start-lxc.sh --no-swap <container_name>"
+}
+
+# ============================================================================
 # Privilege Management
 # ============================================================================
 
