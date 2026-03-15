@@ -79,6 +79,22 @@ ensure_kernel_config() {
     return 1
 }
 
+# Verify swap is not visible in containers
+# kubelet reads /proc/swaps — if it shows host swap devices, kubelet refuses to start
+# Uses swapon --show --noheadings (same pattern as start-k8s.sh, configure-swap.sh)
+# Returns: 0 if no swap visible, 1 if swap entries found
+ensure_swap_masked() {
+    if [[ -z "$(swapon --show --noheadings 2>/dev/null)" ]]; then
+        return 0
+    fi
+
+    print_warning "Host swap devices are visible in /proc/swaps — kubelet will refuse to start"
+    print_container_swap_info
+    echo ""
+    print_info "Then re-run this script."
+    return 1
+}
+
 # ============================================================================
 # Control-Plane Initialization
 # ============================================================================
@@ -99,6 +115,7 @@ initialize_control_plane() {
     # In containers, verify kernel config is accessible for kubeadm preflight
     if [[ "${RUNNING_IN_CONTAINER:-false}" == true ]]; then
         ensure_kernel_config || return 1
+        ensure_swap_masked || return 1
     fi
 
     local pod_cidr
