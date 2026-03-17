@@ -457,28 +457,28 @@ main() {
     print_info "Step 1: Network Configuration"
     print_info "-----------------------------"
     if ! update_mtu; then
-        print_error "MTU configuration failed. Continuing..."
+        print_error "✖ MTU configuration failed. Continuing..."
     fi
     echo ""
 
     print_info "Step 2: nvm & Node.js"
     print_info "---------------------"
     if ! update_nvm; then
-        print_error "nvm update failed. Continuing..."
+        print_error "✖ nvm update failed. Continuing..."
     fi
     echo ""
 
     print_info "Step 3: .NET Tools"
     print_info "------------------"
     if ! update_dotnet; then
-        print_error ".NET tools update failed. Continuing..."
+        print_error "✖ .NET tools update failed. Continuing..."
     fi
     echo ""
 
     print_info "Step 4: Claude CLI"
     print_info "------------------"
     if ! update_claude; then
-        print_error "Claude CLI update failed. Continuing..."
+        print_error "✖ Claude CLI update failed. Continuing..."
     fi
     echo ""
 
