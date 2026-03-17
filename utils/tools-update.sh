@@ -253,6 +253,191 @@ self_update() {
 
 
 # ============================================================================
+# Tool Update Functions
+# ============================================================================
+
+# Fix MTU in container environments to prevent git timeout issues
+update_mtu() {
+    local target_mtu=1200
+
+    if [[ "$RUNNING_IN_CONTAINER" != true ]]; then
+        print_info "- Not running in a container, skipping"
+        return 0
+    fi
+
+    print_info "Running in container environment"
+
+    if [[ ! -f /sys/class/net/eth0/mtu ]]; then
+        print_warning "⚠ eth0 interface not found - skipping MTU configuration"
+        return 0
+    fi
+
+    local current_mtu
+    current_mtu=$(cat /sys/class/net/eth0/mtu)
+
+    if [[ "$current_mtu" == "$target_mtu" ]]; then
+        print_success "- MTU already set to ${target_mtu}"
+        return 0
+    fi
+
+    # Low MTU fixes git timeouts caused by packet fragmentation in container networks
+    print_info "Setting eth0 MTU from ${current_mtu} to ${target_mtu}..."
+    sudo ip link set dev eth0 mtu "$target_mtu"
+    print_success "✓ MTU set to ${target_mtu}"
+}
+
+# Update nvm, Node.js, and global npm packages
+update_nvm() {
+    if [[ ! -f "$HOME/.nvm/nvm.sh" ]]; then
+        print_info "- nvm not found, skipping"
+        return 0
+    fi
+
+    # Download nvm install script to temp file for validation before execution
+    print_info "Downloading nvm install script..."
+    local nvm_script
+    nvm_script="$(make_temp_file)"
+    if curl -fsSL -o "$nvm_script" "https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh" 2>/dev/null; then
+        # Same shebang validation as download_script()
+        if head -n 10 "$nvm_script" | grep -q "^#!/"; then
+            print_info "Updating nvm..."
+            bash "$nvm_script"
+        else
+            print_warning "⚠ Downloaded nvm install script appears invalid - skipping"
+            return 1
+        fi
+    else
+        print_warning "⚠ Failed to download nvm install script"
+        return 1
+    fi
+
+    if [[ -z "${NVM_DIR:-}" ]]; then
+        export NVM_DIR="$HOME/.nvm"
+    fi
+    # shellcheck source=/dev/null
+    . "$NVM_DIR/nvm.sh"
+
+    print_info "Installing latest stable Node.js..."
+    nvm install --latest-npm stable
+    nvm use stable
+
+    print_info "Updating global npm packages..."
+    npm install -g typescript-language-server typescript
+    npm update -g
+
+    print_success "✓ nvm, Node.js, and npm packages updated"
+}
+
+# Update .NET global tools
+update_dotnet() {
+    if ! command -v dotnet &>/dev/null; then
+        print_info "- dotnet not found, skipping"
+        return 0
+    fi
+
+    print_info "Updating .NET global tools..."
+    dotnet tool update --global --all
+    # Install csharp-ls if not already present (install fails if already installed)
+    dotnet tool install --global csharp-ls || true
+
+    print_success "✓ .NET tools updated"
+}
+
+# Update Claude CLI, plugins, and merge default settings
+update_claude() {
+    if ! command -v claude &>/dev/null; then
+        print_info "- Claude CLI not found, skipping"
+        return 0
+    fi
+
+    # Merge default settings if jq and settings file are available
+    if command -v jq &>/dev/null && [[ -f "$HOME/.claude/settings.json" ]]; then
+        print_info "Merging default Claude settings..."
+        local DEFAULT_SETTINGS
+        DEFAULT_SETTINGS=$(cat <<'SETTINGS_EOF'
+{
+    "attribution": {
+        "commit": "",
+        "pr": ""
+    },
+    "effortLevel": "max",
+    "enabledPlugins": {
+        "claude-code-setup@claude-plugins-official": true,
+        "claude-md-management@claude-plugins-official": true,
+        "code-review@jesse-naranjo-claude-plugins": true,
+        "code-simplifier@claude-plugins-official": true,
+        "feature-dev@claude-plugins-official": true,
+        "frontend-design@claude-plugins-official": true,
+        "learning-output-style@claude-plugins-official": false,
+        "microsoft-docs@claude-plugins-official": true,
+        "playwright@claude-plugins-official": true,
+        "superpowers@claude-plugins-official": true,
+        "typescript-lsp@claude-plugins-official": true
+    },
+    "env": {
+        "CLAUDE_CODE_EFFORT_LEVEL": "max",
+        "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+        "ENABLE_LSP_TOOL": "1"
+    },
+    "permissions": {
+        "allow": [
+            "Bash(cat:*)",
+            "Bash(echo:*)",
+            "Bash(find:*)",
+            "Bash(git check-ignore:*)",
+            "Bash(git diff:*)",
+            "Bash(git log:*)",
+            "Bash(git rev-parse:*)",
+            "Bash(git show:*)",
+            "Bash(git status:*)",
+            "Bash(git worktree:*)",
+            "Bash(grep:*)",
+            "Bash(head:*)",
+            "Bash(ln:*)",
+            "Bash(ls:*)",
+            "Bash(node --check:*)",
+            "Bash(node --version:*)",
+            "Bash(npm info:*)",
+            "Bash(npm ls:*)",
+            "Bash(npm run build:*)",
+            "Bash(shellcheck:*)",
+            "Bash(sort:*)",
+            "Bash(wc:*)",
+            "Skill(code-review:*)",
+            "Skill(frontend-design:*)",
+            "Skill(superpowers:*)",
+            "WebSearch"
+        ],
+        "defaultMode": "plan",
+        "disableBypassPermissionsMode": "disable"
+    }
+}
+SETTINGS_EOF
+)
+        if jq --sort-keys --argjson default "$DEFAULT_SETTINGS" '. * $default' "$HOME/.claude/settings.json" > "$HOME/.claude/settings.tmp.json"; then
+            mv "$HOME/.claude/settings.tmp.json" "$HOME/.claude/settings.json"
+            print_success "✓ Claude settings merged"
+        else
+            rm -f "$HOME/.claude/settings.tmp.json"
+            print_warning "⚠ Failed to merge Claude settings - jq error"
+        fi
+    elif ! command -v jq &>/dev/null; then
+        print_warning "⚠ jq not found - skipping Claude settings merge"
+    elif [[ ! -f "$HOME/.claude/settings.json" ]]; then
+        print_warning "⚠ ~/.claude/settings.json not found - skipping settings merge"
+    fi
+
+    print_info "Updating Claude CLI..."
+    claude update
+    # Brief pause between update commands to avoid rate limiting
+    sleep 0.5s
+    claude plugins marketplace update
+
+    print_success "✓ Claude CLI and plugins updated"
+}
+
+
+# ============================================================================
 # Main Entry Point
 # ============================================================================
 
