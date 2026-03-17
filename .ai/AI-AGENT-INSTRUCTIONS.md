@@ -1460,10 +1460,26 @@ echo -e "${CYAN}╰────────────────────�
 ```bash
 print_info "Checking configuration..."      # Process updates
 print_success "✓ Configuration applied"     # Completed actions
-print_warning "Feature unavailable"         # Non-fatal issues
-print_error "Permission denied"             # Fatal errors
+print_warning "⚠ Feature unavailable"      # Non-fatal issues
+print_error "✖ Permission denied"          # Fatal errors
 print_backup "- Created: file.backup"       # Backup operations
 ```
+
+### Unicode Prefix Convention
+
+All `print_success`, `print_warning`, and `print_error` messages MUST use Unicode symbol prefixes:
+
+| Function | Prefix | Meaning | Example |
+|----------|--------|---------|---------|
+| `print_success` | `✓ ` | Action taken / something changed | `print_success "✓ Configuration applied"` |
+| `print_success` | `- ` | Already set / no-op | `print_success "- Configuration already correct"` |
+| `print_warning` | `⚠ ` | Warning | `print_warning "⚠ Feature unavailable"` |
+| `print_error` | `✖ ` | Error | `print_error "✖ Permission denied"` |
+
+**Exceptions — do NOT add a prefix:**
+- Decorative/structural lines: `print_success "═══..."`, `print_warning "═══..."`
+- Multi-line continuations: `print_warning "  1. First step..."`, `print_warning "  2. Second step..."`
+- Completion summaries: `print_success "Setup complete!"`
 
 ### Visual Elements
 ```bash
