@@ -178,24 +178,29 @@ main() {
     fi
     # ====================================================================================================
 
-    echo "Downloading / Updating nvm..."
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
+    if command -v nvm &>/dev/null; then
+        echo "Downloading / Updating nvm..."
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
 
-    echo
-    if [[ -z "$NVM_DIR" ]]; then export NVM_DIR="$HOME/.nvm"; fi
-    . "$NVM_DIR/nvm.sh"                # This loads nvm
-    nvm install --latest-npm stable    # install and use stable
-    nvm use stable
+        echo
+        if [[ -z "$NVM_DIR" ]]; then export NVM_DIR="$HOME/.nvm"; fi
+        . "$NVM_DIR/nvm.sh"                # This loads nvm
+        nvm install --latest-npm stable    # install and use stable
+        nvm use stable
 
-    echo
-    npm install -g typescript-language-server typescript
-    npm update -g
+        echo
+        npm install -g typescript-language-server typescript
+        npm update -g
+    fi
 
-    echo
-    dotnet tool update --global --all
-    dotnet tool install --global csharp-ls
+    if command -v dotnet &>/dev/null; then
+        echo
+        dotnet tool update --global --all
+        dotnet tool install --global csharp-ls
+    fi
 
-    DEFAULT_SETTINGS=$(cat <<EOF
+    if command -v claude &>/dev/null; then
+        DEFAULT_SETTINGS=$(cat <<EOF
 {
     "attribution": {
         "commit": "",
@@ -240,12 +245,13 @@ main() {
 }
 EOF
 )
-    jq --sort-keys --argjson default "$DEFAULT_SETTINGS" '. * $default' ~/.claude/settings.json > ~/.claude/settings.tmp.json && mv ~/.claude/settings.tmp.json ~/.claude/settings.json
+        jq --sort-keys --argjson default "$DEFAULT_SETTINGS" '. * $default' ~/.claude/settings.json > ~/.claude/settings.tmp.json && mv ~/.claude/settings.tmp.json ~/.claude/settings.json
 
-    echo
-    claude update
-    sleep 1s
-    claude plugins marketplace update
+        echo
+        claude update
+        sleep 1s
+        claude plugins marketplace update
+    fi
 }
 
 # Run main function if script is executed directly
