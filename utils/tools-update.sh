@@ -14,6 +14,8 @@ readonly NC='\033[0m' # No Color
 # Self-update configuration
 readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/utils"
 DOWNLOAD_CMD=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 
 # ============================================================================
 # Output Functions
@@ -33,6 +35,106 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}[ ERROR   ]${NC} $1"
+}
+
+# Usage: print_warning_box "line1" "line2" "line3" ...
+# Each line will be padded to fit within the box
+print_warning_box() {
+    local box_width=77
+    local padding=8
+    local content_width=$((box_width - padding - 1))
+
+    echo ""
+    echo -e "            ${YELLOW}╔$(printf '═%.0s' $(seq 1 $box_width))╗${NC}"
+    echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
+
+    for line in "$@"; do
+        local line_len=${#line}
+        local right_pad=$((content_width - line_len))
+        if [[ $right_pad -lt 0 ]]; then
+            right_pad=0
+            line="${line:0:$content_width}"
+        fi
+        printf -v padded_line "%-${content_width}s" "$line"
+        echo -e "            ${YELLOW}║        ${padded_line}║${NC}"
+    done
+
+    echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
+    echo -e "            ${YELLOW}╚$(printf '═%.0s' $(seq 1 $box_width))╝${NC}"
+    echo ""
+}
+
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
+# Prompt user for yes/no confirmation
+# Usage: prompt_yes_no "message" [default]
+#   default: "y" or "n" (optional, defaults to "n")
+# Returns: 0 for yes, 1 for no
+prompt_yes_no() {
+    local prompt_message="$1"
+    local default="${2:-n}"
+    local prompt_suffix
+    local user_reply
+
+    # Set the prompt suffix based on default
+    if [[ "${default,,}" == "y" ]]; then
+        prompt_suffix="(Y/n)"
+    else
+        prompt_suffix="(y/N)"
+    fi
+
+    # Read from /dev/tty to work correctly in piped contexts
+    read -p "$prompt_message $prompt_suffix: " -r user_reply </dev/tty
+
+    # If user just pressed Enter (empty reply), use default
+    if [[ -z "$user_reply" ]]; then
+        [[ "${default,,}" == "y" ]]
+    else
+        [[ $user_reply =~ ^[Yy]$ ]]
+    fi
+}
+
+RUNNING_IN_CONTAINER=false
+
+detect_container() {
+    # Check for LXC container via environment variable
+    if [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ; then
+        RUNNING_IN_CONTAINER=true
+        return
+    fi
+
+    # Check for Docker container
+    if [[ -f /.dockerenv ]]; then
+        RUNNING_IN_CONTAINER=true
+        return
+    fi
+
+    # Check for systemd container
+    if [[ -f /run/systemd/container ]]; then
+        RUNNING_IN_CONTAINER=true
+        return
+    fi
+
+    # Check for LXC in cgroup
+    if grep -q lxc /proc/1/cgroup 2>/dev/null; then
+        RUNNING_IN_CONTAINER=true
+        return
+    fi
+
+    # Not in a container
+    RUNNING_IN_CONTAINER=false
+}
+
+TEMP_FILES=()
+
+make_temp_file() {
+    local tmp
+    tmp=$(mktemp)
+    TEMP_FILES+=("$tmp")
+    echo "$tmp"
 }
 
 
@@ -108,9 +210,9 @@ download_script() {
 # Check for script updates and restart if updated
 self_update() {
     local SCRIPT_FILE="tools-update.sh"
-    local SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
-    local TEMP_SCRIPT_FILE="$(mktemp)"
+    local TEMP_SCRIPT_FILE
+    TEMP_SCRIPT_FILE="$(make_temp_file)"
 
     if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
         rm -f "${TEMP_SCRIPT_FILE}"
