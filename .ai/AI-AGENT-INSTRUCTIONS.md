@@ -453,6 +453,10 @@ This repository uses two distinct script architectures. Choose based on context:
 - No user prompts - runs non-interactively
 - Quick, single-purpose scripts
 
+**Exception:** `tools-update.sh` uses Standalone Script patterns (colors, `print_*` functions,
+user prompts, self-update mechanism) because it needs interactive self-update and structured output.
+New complex scripts in `utils/` should follow Standalone conventions if they need these capabilities.
+
 **Example:**
 ```bash
 #!/usr/bin/env bash
