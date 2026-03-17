@@ -152,8 +152,11 @@ detect_download_cmd() {
         return 0
     else
         DOWNLOAD_CMD=""
-        print_warning "Neither 'curl' nor 'wget' found - self-update disabled"
-        print_info "Install curl or wget to enable automatic updates"
+        print_warning_box \
+            "UPDATES NOT AVAILABLE" \
+            "" \
+            "Neither 'curl' nor 'wget' is installed on this system." \
+            "Self-updating functionality requires one of these tools."
         return 1
     fi
 }
@@ -165,7 +168,7 @@ download_script() {
     local http_status=""
 
     print_info "Fetching ${script_file}..."
-    echo "            ▶ ${REMOTE_BASE}/${script_file}..."
+    print_info "  → ${REMOTE_BASE}/${script_file}"
 
     if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
         http_status=$(curl -H 'Cache-Control: no-cache, no-store' -o "${output_file}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${script_file}" 2>/dev/null || echo "000")
@@ -215,15 +218,12 @@ self_update() {
     TEMP_SCRIPT_FILE="$(make_temp_file)"
 
     if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
-        rm -f "${TEMP_SCRIPT_FILE}"
-        echo ""
         return 1
     fi
 
     # Compare versions
     if diff -q "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
         print_success "- Script is already up-to-date"
-        rm -f "${TEMP_SCRIPT_FILE}"
         return 0
     fi
 
@@ -234,9 +234,7 @@ self_update() {
     echo -e "${CYAN}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
     echo ""
 
-    read -p "→ Overwrite and restart with updated ${SCRIPT_FILE}? [Y/n] " -n 1 -r
-    if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
-        echo ""
+    if prompt_yes_no "→ Overwrite and restart with updated ${SCRIPT_FILE}?" "y"; then
         chmod +x "${TEMP_SCRIPT_FILE}"
         mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"
         print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
@@ -246,7 +244,6 @@ self_update() {
         exit 0
     else
         print_warning "⚠ Skipped update - continuing with local version"
-        rm -f "${TEMP_SCRIPT_FILE}"
     fi
     echo ""
 }
@@ -442,118 +439,50 @@ SETTINGS_EOF
 # ============================================================================
 
 main() {
-    # Check for updates if download tool available
+    cleanup() {
+        for f in "${TEMP_FILES[@]+"${TEMP_FILES[@]}"}"; do
+            rm -f "$f" 2>/dev/null
+        done
+    }
+    trap cleanup EXIT
+
+    detect_container
+
+    # Self-update check
     if detect_download_cmd && [[ ${scriptUpdated:-0} -eq 0 ]]; then
         self_update "$@"
         echo ""
     fi
 
-    # ====================================================================================================
-    # This script sets the MTU of the eth0 interface to 1200 to fix issues with git commands.
-
-    # The problem stems from the MTU being too high in certain network configurations,
-    # leading to timeouts / failed connections / stalls (no output) when performing git operations.
-
-    # Simple commands like `git fetch` or `git clone` may fail due to packet fragmentation or loss.
-    # To resolve this, set the MTU to a lower value.
-    MTU=1200
-    current_mtu=$(cat /sys/class/net/eth0/mtu)
-    if [[ "$current_mtu" != "$MTU" ]]; then
-        echo "Setting MTU to $MTU..."
-        sudo ip link set dev eth0 mtu "$MTU"
-        echo
+    print_info "Step 1: Network Configuration"
+    print_info "-----------------------------"
+    if ! update_mtu; then
+        print_error "MTU configuration failed. Continuing..."
     fi
-    # ====================================================================================================
+    echo ""
 
-    if [[ -f "$HOME/.nvm/nvm.sh" ]]; then
-        echo "Downloading / Updating nvm..."
-        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
-
-        echo
-        if [[ -z "$NVM_DIR" ]]; then export NVM_DIR="$HOME/.nvm"; fi
-        . "$NVM_DIR/nvm.sh"                # This loads nvm
-        nvm install --latest-npm stable    # install and use stable
-        nvm use stable
-
-        echo
-        npm install -g typescript-language-server typescript
-        npm update -g
+    print_info "Step 2: nvm & Node.js"
+    print_info "---------------------"
+    if ! update_nvm; then
+        print_error "nvm update failed. Continuing..."
     fi
+    echo ""
 
-    if command -v dotnet &>/dev/null; then
-        echo
-        dotnet tool update --global --all
-        dotnet tool install --global csharp-ls
+    print_info "Step 3: .NET Tools"
+    print_info "------------------"
+    if ! update_dotnet; then
+        print_error ".NET tools update failed. Continuing..."
     fi
+    echo ""
 
-    if command -v claude &>/dev/null; then
-        DEFAULT_SETTINGS=$(cat <<EOF
-{
-    "attribution": {
-        "commit": "",
-        "pr": ""
-    },
-    "effortLevel": "max",
-    "enabledPlugins": {
-        "claude-code-setup@claude-plugins-official": true,
-        "claude-md-management@claude-plugins-official": true,
-        "code-review@jesse-naranjo-claude-plugins": true,
-        "code-simplifier@claude-plugins-official": true,
-        "feature-dev@claude-plugins-official": true,
-        "frontend-design@claude-plugins-official": true,
-        "learning-output-style@claude-plugins-official": false,
-        "microsoft-docs@claude-plugins-official": true,
-        "playwright@claude-plugins-official": true,
-        "superpowers@claude-plugins-official": true,
-        "typescript-lsp@claude-plugins-official": true
-    },
-    "env": {
-        "CLAUDE_CODE_EFFORT_LEVEL": "max",
-        "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-        "ENABLE_LSP_TOOL": "1"
-    },
-    "permissions": {
-        "allow": [
-            "Bash(cat:*)",
-            "Bash(echo:*)",
-            "Bash(find:*)",
-            "Bash(git check-ignore:*)",
-            "Bash(git diff:*)",
-            "Bash(git log:*)",
-            "Bash(git rev-parse:*)",
-            "Bash(git show:*)",
-            "Bash(git status:*)",
-            "Bash(git worktree:*)",
-            "Bash(grep:*)",
-            "Bash(head:*)",
-            "Bash(ln:*)",
-            "Bash(ls:*)",
-            "Bash(node --check:*)",
-            "Bash(node --version:*)",
-            "Bash(npm info:*)",
-            "Bash(npm ls:*)",
-            "Bash(npm run build:*)",
-            "Bash(shellcheck:*)",
-            "Bash(sort:*)",
-            "Bash(wc:*)",
-            "Skill(code-review:*)",
-            "Skill(frontend-design:*)",
-            "Skill(superpowers:*)",
-            "WebSearch"
-        ],
-        "defaultMode": "plan",
-        "disableBypassPermissionsMode": "disable"
-    }
-}
-EOF
-)
-        jq --sort-keys --argjson default "$DEFAULT_SETTINGS" '. * $default' ~/.claude/settings.json > ~/.claude/settings.tmp.json && mv ~/.claude/settings.tmp.json ~/.claude/settings.json
-
-        echo
-        claude update
-        sleep 1s
-        claude plugins marketplace update
+    print_info "Step 4: Claude CLI"
+    print_info "------------------"
+    if ! update_claude; then
+        print_error "Claude CLI update failed. Continuing..."
     fi
+    echo ""
+
+    print_success "Tools update complete!"
 }
 
 # Run main function if script is executed directly
