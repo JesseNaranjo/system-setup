@@ -178,7 +178,7 @@ main() {
     fi
     # ====================================================================================================
 
-    if command -v nvm &>/dev/null; then
+    if [[ -f "$HOME/.nvm/nvm.sh" ]]; then
         echo "Downloading / Updating nvm..."
         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
 
