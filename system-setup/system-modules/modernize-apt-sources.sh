@@ -33,7 +33,7 @@ modernize_apt_sources() {
 
     # Requires root privileges on Linux
     if ! check_privileges "apt_operations"; then
-        print_warning "Skipping APT sources modernization (requires root privileges)"
+        print_warning "⚠ Skipping APT sources modernization (requires root privileges)"
         return 0
     fi
 
@@ -41,7 +41,7 @@ modernize_apt_sources() {
 
     # 1. Run apt modernize-sources
     if ! apt modernize-sources 2>/dev/null; then
-        print_warning "apt modernize-sources failed or is not available. Skipping."
+        print_warning "⚠ apt modernize-sources failed or is not available. Skipping."
         return 0
     fi
 
@@ -53,7 +53,7 @@ modernize_apt_sources() {
 
     local sources_file="/etc/apt/sources.list.d/debian.sources"
     if [[ ! -f "$sources_file" ]]; then
-        print_warning "DEB822 sources file not found at $sources_file. Skipping."
+        print_warning "⚠ DEB822 sources file not found at $sources_file. Skipping."
         return 0
     fi
 
@@ -61,7 +61,7 @@ modernize_apt_sources() {
     local release=$(grep -m 1 "^Suites:" "$sources_file" | sed -E 's/^Suites:\s*([a-z]+).*/\1/')
 
     if [[ -z "$release" ]]; then
-        print_warning "Could not determine Debian release from $sources_file. Skipping."
+        print_warning "⚠ Could not determine Debian release from $sources_file. Skipping."
         return 0
     fi
 
@@ -162,7 +162,7 @@ modernize_apt_sources() {
             nano "$sources_file"
             print_info "Manual edit completed"
         else
-            print_warning "nano is not installed"
+            print_warning "⚠ nano is not installed"
         fi
     fi
 }

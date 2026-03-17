@@ -124,12 +124,12 @@ backup_file() {
 # ============================================================================
 
 if [[ $EUID != 0 ]]; then
-    print_error "This script requires root privileges (e.g., using su or sudo)."
+    print_error "✖ This script requires root privileges (e.g., using su or sudo)."
     exit 1
 fi
 
 if [[ $# -eq 0 || -z ${1-} ]]; then
-    print_error "Missing required username argument"
+    print_error "✖ Missing required username argument"
     echo ""
     echo "Usage: ${0##*/} <username> [subuid_start]"
     echo ""
@@ -146,7 +146,7 @@ fi
 LIMITED_USER=$1
 
 if ! id -u "$LIMITED_USER" >/dev/null 2>&1; then
-    print_error "User \"$LIMITED_USER\" does not exist on this system"
+    print_error "✖ User \"$LIMITED_USER\" does not exist on this system"
     exit 67  # 67 - EX_NOUSER
 fi
 
@@ -198,7 +198,7 @@ setup_br0_bridge() {
 
     # Check if br0 already exists in the file
     if check_br0_configured; then
-        print_warning "- br0 already defined in /etc/network/interfaces"
+        print_warning "⚠ br0 already defined in /etc/network/interfaces"
         return 0
     fi
 
@@ -215,7 +215,7 @@ iface br0 inet dhcp
     bridge_waitport 0
 EOF
 
-    print_success "- Added br0 configuration to /etc/network/interfaces"
+    print_success "✓ Added br0 configuration to /etc/network/interfaces"
     print_info "- Bridge ports: $bridge_ports"
     print_info "- Bridge forwarding delay: 0 (faster startup)"
     print_info "- Bridge max wait: 0 (no delay)"
@@ -227,14 +227,14 @@ EOF
     if prompt_yes_no "Would you like to bring up the br0 bridge now?"; then
         print_info "Bringing up br0 bridge..."
         if ifup br0 2>/dev/null; then
-            print_success "- br0 bridge is now active"
+            print_success "✓ br0 bridge is now active"
         else
-            print_warning "- Could not bring up br0 automatically"
-            print_warning "- You may need to reboot or run: sudo ifup br0"
+            print_warning "⚠ Could not bring up br0 automatically"
+            print_warning "⚠ You may need to reboot or run: sudo ifup br0"
         fi
     else
-        print_warning "- br0 bridge not activated"
-        print_warning "- Run 'sudo ifup br0' or reboot to activate"
+        print_warning "⚠ br0 bridge not activated"
+        print_warning "⚠ Run 'sudo ifup br0' or reboot to activate"
     fi
 
     echo ""
@@ -249,17 +249,17 @@ SKIP_BRIDGE_SETUP=false
 
 # Check if bridge-utils is installed
 if ! check_bridge_utils; then
-    print_warning "- bridge-utils package is not installed"
+    print_warning "⚠ bridge-utils package is not installed"
     print_info "- Bridge-utils is required for br0 networking"
     echo ""
 
     if prompt_yes_no "Would you like to install bridge-utils now?"; then
         print_info "Installing bridge-utils..."
         if apt-get update && apt-get install -y bridge-utils; then
-            print_success "- bridge-utils installed successfully"
+            print_success "✓ bridge-utils installed successfully"
         else
-            print_error "- Failed to install bridge-utils"
-            print_warning "- Will use default lxcbr0 (NAT mode)"
+            print_error "✖ Failed to install bridge-utils"
+            print_warning "⚠ Will use default lxcbr0 (NAT mode)"
             SKIP_BRIDGE_SETUP=true
         fi
     else
@@ -274,7 +274,7 @@ if [[ "$SKIP_BRIDGE_SETUP" == "false" ]]; then
         print_success "✓ br0 bridge is already configured"
         BRIDGE_LINK="br0"
     else
-        print_warning "- br0 bridge is not configured"
+        print_warning "⚠ br0 bridge is not configured"
         print_info "- Setting up br0 allows containers to connect directly to your network"
         echo ""
 
@@ -282,8 +282,8 @@ if [[ "$SKIP_BRIDGE_SETUP" == "false" ]]; then
         mapfile -t INTERFACES < <(get_network_interfaces)
 
         if [[ ${#INTERFACES[@]} -eq 0 ]]; then
-            print_warning "No suitable network interfaces found"
-            print_warning "Will use default lxcbr0 (NAT mode)"
+            print_warning "⚠ No suitable network interfaces found"
+            print_warning "⚠ Will use default lxcbr0 (NAT mode)"
         elif [[ ${#INTERFACES[@]} -eq 1 ]]; then
             # Single interface - offer to setup automatically
             SINGLE_INTERFACE="${INTERFACES[0]}"
@@ -313,7 +313,7 @@ if [[ "$SKIP_BRIDGE_SETUP" == "false" ]]; then
                     setup_br0_bridge "$SELECTED_INTERFACES"
                     BRIDGE_LINK="br0"
                 else
-                    print_warning "No interfaces specified, will use lxcbr0"
+                    print_warning "⚠ No interfaces specified, will use lxcbr0"
                 fi
             else
                 print_info "Skipping br0 setup, will use lxcbr0"
@@ -334,12 +334,12 @@ print_info "Configuring veth interface permissions..."
 if grep -q "^$VETH_ENTRY" /etc/lxc/lxc-usernet 2>/dev/null; then
     print_success "✓ veth entry already exists in /etc/lxc/lxc-usernet"
 else
-    print_warning "Adding veth entry to /etc/lxc/lxc-usernet"
+    print_warning "⚠ Adding veth entry to /etc/lxc/lxc-usernet"
     backup_file "/etc/lxc/lxc-usernet"
     echo "$VETH_ENTRY" | tee -a /etc/lxc/lxc-usernet > /dev/null
     chmod 644 /etc/lxc/lxc-usernet
     chown root:root /etc/lxc/lxc-usernet
-    print_success "- Added: $VETH_ENTRY"
+    print_success "✓ Added: $VETH_ENTRY"
 fi
 echo ""
 
@@ -350,12 +350,12 @@ print_info "Configuring subuid mappings..."
 if grep -q "^$SUB_ENTRY" /etc/subuid 2>/dev/null; then
     print_success "✓ subuid entry already exists in /etc/subuid"
 else
-    print_warning "Adding subuid entry to /etc/subuid"
+    print_warning "⚠ Adding subuid entry to /etc/subuid"
     backup_file "/etc/subuid"
     echo "$SUB_ENTRY" | tee -a /etc/subuid > /dev/null
     chmod 644 /etc/subuid
     chown root:root /etc/subuid
-    print_success "- Added: $SUB_ENTRY"
+    print_success "✓ Added: $SUB_ENTRY"
 fi
 echo ""
 
@@ -364,12 +364,12 @@ print_info "Configuring subgid mappings..."
 if grep -q "^$SUB_ENTRY" /etc/subgid 2>/dev/null; then
     print_success "✓ subgid entry already exists in /etc/subgid"
 else
-    print_warning "Adding subgid entry to /etc/subgid"
+    print_warning "⚠ Adding subgid entry to /etc/subgid"
     backup_file "/etc/subgid"
     echo "$SUB_ENTRY" | tee -a /etc/subgid > /dev/null
     chmod 644 /etc/subgid
     chown root:root /etc/subgid
-    print_success "- Added: $SUB_ENTRY"
+    print_success "✓ Added: $SUB_ENTRY"
 fi
 echo ""
 
@@ -380,14 +380,14 @@ USER_NAMESPACE_ENABLED=$(sysctl -n kernel.unprivileged_userns_clone 2>/dev/null 
 if [[ "$USER_NAMESPACE_ENABLED" -eq 1 ]]; then
     print_success "✓ User namespaces already enabled"
 else
-    print_warning "User namespaces not enabled, enabling permanently..."
+    print_warning "⚠ User namespaces not enabled, enabling permanently..."
     backup_file "/etc/sysctl.d/99-lxc.conf"
     sysctl -w kernel.unprivileged_userns_clone=1
     echo "kernel.unprivileged_userns_clone = 1" | tee /etc/sysctl.d/99-lxc.conf > /dev/null
     chmod 644 /etc/sysctl.d/99-lxc.conf
     chown root:root /etc/sysctl.d/99-lxc.conf
     sysctl --system > /dev/null 2>&1
-    print_success "- Enabled user namespace support"
+    print_success "✓ Enabled user namespace support"
 fi
 echo ""
 
@@ -423,7 +423,7 @@ chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG"
 chmod 644 "$LIMITED_USER_CONFIG_LXC/default.conf"
 chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_LXC"
 chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_LXC/default.conf"
-print_success "- Created LXC default configuration"
+print_success "✓ Created LXC default configuration"
 echo ""
 
 # Set permissions on user directories
@@ -441,7 +441,7 @@ if [[ -d "$LIMITED_USER_HOME/.local" ]]; then
     fi
 fi
 
-print_success "- Permissions set correctly"
+print_success "✓ Permissions set correctly"
 echo ""
 
 # ============================================================================
@@ -471,15 +471,15 @@ WantedBy=default.target
 EOF
 
 chmod 644 "$LIMITED_USER_CONFIG_SYSTEMD_USER/lxc-bg-start@.service"
-print_success "- Created systemd service template"
+print_success "✓ Created systemd service template"
 echo ""
 
 # Enable systemd lingering
 print_info "Enabling systemd lingering for user: $LIMITED_USER"
 if loginctl enable-linger ${LIMITED_USER}; then
-    print_success "- Systemd lingering enabled"
+    print_success "✓ Systemd lingering enabled"
 else
-    print_warning "- Failed to enable systemd lingering (may need manual intervention)"
+    print_warning "⚠ Failed to enable systemd lingering (may need manual intervention)"
 fi
 echo ""
 

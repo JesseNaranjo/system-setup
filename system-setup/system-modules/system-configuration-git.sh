@@ -109,7 +109,7 @@ main_configure_git() {
 
     # Validate scope parameter is provided
     if [[ -z "$scope" ]]; then
-        print_error "Scope parameter is required"
+        print_error "✖ Scope parameter is required"
         print_info "Usage: $0 <user|system>"
         print_info "  user   - Configure for current user only (~/.gitconfig)"
         print_info "  system - Configure system-wide for all users (/etc/gitconfig)"
@@ -118,7 +118,7 @@ main_configure_git() {
 
     # Validate scope value
     if [[ "$scope" != "user" && "$scope" != "system" ]]; then
-        print_error "Invalid scope: $scope"
+        print_error "✖ Invalid scope: $scope"
         print_info "Usage: $0 <user|system>"
         return 1
     fi
@@ -127,7 +127,7 @@ main_configure_git() {
 
     # Check if git is available
     if ! command -v git &>/dev/null; then
-        print_warning "Git is not installed, skipping git configuration"
+        print_warning "⚠ Git is not installed, skipping git configuration"
         return 0
     fi
 

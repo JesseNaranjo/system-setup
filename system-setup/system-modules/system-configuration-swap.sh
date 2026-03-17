@@ -48,7 +48,7 @@ create_swap_file() {
 
     if [[ "$method" == "dd" ]]; then
         if ! run_elevated dd if=/dev/zero of="$swapfile" bs=1M count="$swap_mb" status=progress 2>&1; then
-            print_error "Failed to create swap file"
+            print_error "✖ Failed to create swap file"
             return 1
         fi
         print_success "✓ Swap file created with dd (${swap_gb} GB)"
@@ -56,7 +56,7 @@ create_swap_file() {
 
     # Set correct permissions
     if ! run_elevated chmod 600 "$swapfile"; then
-        print_error "Failed to set permissions on swap file"
+        print_error "✖ Failed to set permissions on swap file"
         run_elevated rm -f "$swapfile"
         return 1
     fi
@@ -64,7 +64,7 @@ create_swap_file() {
 
     # Set correct ownership
     if ! run_elevated chown root:root "$swapfile"; then
-        print_error "Failed to set ownership on swap file"
+        print_error "✖ Failed to set ownership on swap file"
         run_elevated rm -f "$swapfile"
         return 1
     fi
@@ -85,12 +85,12 @@ format_and_enable_swap() {
     # Format as swap
     if ! run_elevated mkswap "$swapfile" 2>&1 | tail -n 1; then
         if [[ "$retrying" == "true" ]]; then
-            print_error "Failed to format swap file on retry"
+            print_error "✖ Failed to format swap file on retry"
             run_elevated rm -f "$swapfile"
             return 1
         fi
 
-        print_warning "mkswap failed, possibly due to file holes from fallocate"
+        print_warning "⚠ mkswap failed, possibly due to file holes from fallocate"
         print_info "Recreating swap file with dd..."
 
         # Remove the problematic file and recreate with dd
@@ -107,7 +107,7 @@ format_and_enable_swap() {
 
     # Enable swap
     if ! run_elevated swapon "$swapfile"; then
-        print_error "Failed to enable swap"
+        print_error "✖ Failed to enable swap"
         run_elevated rm -f "$swapfile"
         return 1
     fi
@@ -141,16 +141,16 @@ update_fstab_swap_entry() {
         $1 ~ "^" old "$" { gsub(old, new, $1) }
         { print }
     ' /etc/fstab > "$temp_file"; then
-        print_error "Failed to update fstab entry"
-        print_error "Backup saved at: /etc/fstab.backup.*"
+        print_error "✖ Failed to update fstab entry"
+        print_error "✖ Backup saved at: /etc/fstab.backup.*"
         rm -f "$temp_file"
         return 1
     fi
 
     # Move temp file to fstab
     if ! run_elevated mv "$temp_file" /etc/fstab; then
-        print_error "Failed to write updated fstab"
-        print_error "Backup saved at: /etc/fstab.backup.*"
+        print_error "✖ Failed to write updated fstab"
+        print_error "✖ Backup saved at: /etc/fstab.backup.*"
         rm -f "$temp_file"
         return 1
     fi
@@ -184,7 +184,7 @@ migrate_legacy_swapfile() {
     echo ""
 
     if ! prompt_yes_no "            Would you like to rename ${LEGACY_SWAPFILE} to ${SWAPFILE}?" "y"; then
-        print_warning "Declining migration will result in two swap files if you proceed with setup"
+        print_warning "⚠ Declining migration will result in two swap files if you proceed with setup"
         return 0
     fi
     echo ""
@@ -195,8 +195,8 @@ migrate_legacy_swapfile() {
     if [[ "$was_active" == true ]]; then
         print_info "Disabling legacy swap file..."
         if ! run_elevated swapoff "$LEGACY_SWAPFILE"; then
-            print_error "Failed to disable legacy swap file"
-            print_error "Swap may be in use by processes. Please free up swap and try again."
+            print_error "✖ Failed to disable legacy swap file"
+            print_error "✖ Swap may be in use by processes. Please free up swap and try again."
             return 1
         fi
         print_success "✓ Disabled legacy swap file"
@@ -204,7 +204,7 @@ migrate_legacy_swapfile() {
 
     # Rename the file
     if ! run_elevated mv "$LEGACY_SWAPFILE" "$SWAPFILE"; then
-        print_error "Failed to rename swap file"
+        print_error "✖ Failed to rename swap file"
         # Try to re-enable swap if it was active
         if [[ "$was_active" == true ]]; then
             run_elevated swapon "$LEGACY_SWAPFILE" 2>/dev/null || true
@@ -215,28 +215,28 @@ migrate_legacy_swapfile() {
 
     # Verify and set permissions
     if ! run_elevated chmod 600 "$SWAPFILE"; then
-        print_error "Failed to verify permissions on swap file"
+        print_error "✖ Failed to verify permissions on swap file"
         return 1
     fi
     print_success "✓ Verified permissions (chmod 600)"
 
     # Verify and set ownership
     if ! run_elevated chown root:root "$SWAPFILE"; then
-        print_error "Failed to verify ownership on swap file"
+        print_error "✖ Failed to verify ownership on swap file"
         return 1
     fi
     print_success "✓ Verified ownership (chown root:root)"
 
     # Update fstab entry
     if ! update_fstab_swap_entry "$LEGACY_SWAPFILE" "$SWAPFILE"; then
-        print_warning "Failed to update fstab, swap file was renamed but fstab needs manual update"
+        print_warning "⚠ Failed to update fstab, swap file was renamed but fstab needs manual update"
     fi
 
     # Re-enable swap if it was previously active
     if [[ "$was_active" == true ]]; then
         print_info "Re-enabling swap..."
         if ! run_elevated swapon "$SWAPFILE"; then
-            print_error "Failed to re-enable swap at ${SWAPFILE}"
+            print_error "✖ Failed to re-enable swap at ${SWAPFILE}"
             return 1
         fi
         print_success "✓ Swap re-enabled at ${SWAPFILE}"
@@ -263,8 +263,8 @@ configure_swap() {
 
     # Check for conflict: both legacy and new swapfile exist
     if [[ -f "$LEGACY_SWAPFILE" ]] && [[ -f "$SWAPFILE" ]]; then
-        print_warning "Both ${LEGACY_SWAPFILE} and ${SWAPFILE} exist"
-        print_warning "Please manually resolve this conflict before running swap configuration"
+        print_warning "⚠ Both ${LEGACY_SWAPFILE} and ${SWAPFILE} exist"
+        print_warning "⚠ Please manually resolve this conflict before running swap configuration"
         print_info "You may want to:"
         echo "            • Remove one of the swap files"
         echo "            • Or disable and delete the legacy swap file"

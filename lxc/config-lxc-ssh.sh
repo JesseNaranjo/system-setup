@@ -115,7 +115,7 @@ backup_file() {
 # Check if script is run as root
 check_root() {
     if [[ $EUID -ne 0 ]]; then
-        print_error "This script must be run as root"
+        print_error "✖ This script must be run as root"
         echo ""
         echo "Please run: sudo $0 $*"
         exit 1
@@ -128,13 +128,13 @@ validate_user() {
 
     # Check if user is root
     if [[ "$username" == "root" ]]; then
-        print_error "Target user cannot be root"
+        print_error "✖ Target user cannot be root"
         exit 1
     fi
 
     # Check if user exists
     if ! id "$username" &>/dev/null; then
-        print_error "User '$username' does not exist on this system"
+        print_error "✖ User '$username' does not exist on this system"
         exit 1
     fi
 
@@ -142,12 +142,12 @@ validate_user() {
     TARGET_USER_HOME=$(eval echo "~$username")
 
     if [[ ! -d "$TARGET_USER_HOME" ]]; then
-        print_error "Home directory for user '$username' does not exist: $TARGET_USER_HOME"
+        print_error "✖ Home directory for user '$username' does not exist: $TARGET_USER_HOME"
         exit 1
     fi
 
     TARGET_USER="$username"
-    print_success "Target user validated: $TARGET_USER (home: $TARGET_USER_HOME)"
+    print_success "✓ Target user validated: $TARGET_USER (home: $TARGET_USER_HOME)"
 }
 
 # Generate SSH key pair for LXC access
@@ -173,12 +173,12 @@ generate_ssh_keypair() {
             print_success "- Existing SSH key pair is valid"
             return 0
         else
-            print_warning "Existing key appears invalid"
+            print_warning "⚠ Existing key appears invalid"
             if prompt_yes_no "Generate new key pair (existing will be backed up)?" "n"; then
                 backup_file "$private_key"
                 backup_file "$public_key"
             else
-                print_error "Cannot proceed with invalid key"
+                print_error "✖ Cannot proceed with invalid key"
                 exit 1
             fi
         fi
@@ -244,21 +244,21 @@ configure_container_ssh() {
     # Get container's rootfs path
     local config_path="${TARGET_USER_HOME}/.local/share/lxc/${container}/config"
     if [[ ! -f "$config_path" ]]; then
-        print_warning "Container config not found: $config_path - skipping"
+        print_warning "⚠ Container config not found: $config_path - skipping"
         ((CONTAINERS_SKIPPED++)) || true
         return 1
     fi
 
     local rootfs=$(grep "^lxc.rootfs.path" "$config_path" | awk '{print $NF}' | sed 's|^dir:||')
     if [[ ! -d "$rootfs" ]]; then
-        print_warning "Container rootfs not found: $rootfs - skipping"
+        print_warning "⚠ Container rootfs not found: $rootfs - skipping"
         ((CONTAINERS_SKIPPED++)) || true
         return 1
     fi
 
     # Check if SSH is installed in container
     if ! check_ssh_in_container "$container" "$rootfs"; then
-        print_warning "SSH server not found in container $container - skipping"
+        print_warning "⚠ SSH server not found in container $container - skipping"
         print_info "Install SSH in container: use system-setup.sh or apt install openssh-server"
         ((CONTAINERS_SKIPPED++)) || true
         return 1
@@ -269,7 +269,7 @@ configure_container_ssh() {
 
     # Check if user exists in container
     if [[ ! -d "$container_home" ]]; then
-        print_warning "User $TARGET_USER home directory not found in container $container"
+        print_warning "⚠ User $TARGET_USER home directory not found in container $container"
         print_info "Create user in container: adduser $TARGET_USER"
         ((CONTAINERS_SKIPPED++)) || true
         return 1
@@ -287,7 +287,7 @@ configure_container_ssh() {
     local user_gid=$(stat -c "%g" "$container_home")
 
     if [[ -z "$user_uid" || -z "$user_gid" ]]; then
-        print_warning "Could not determine UID/GID for user $TARGET_USER - skipping"
+        print_warning "⚠ Could not determine UID/GID for user $TARGET_USER - skipping"
         ((CONTAINERS_SKIPPED++)) || true
         return 1
     fi
@@ -355,7 +355,7 @@ configure_ssh_config() {
     read -p "Host pattern: " -r host_pattern </dev/tty
 
     if [[ -z "$host_pattern" ]]; then
-        print_warning "No host pattern provided, skipping SSH config setup"
+        print_warning "⚠ No host pattern provided, skipping SSH config setup"
         return 1
     fi
 
@@ -401,7 +401,7 @@ main() {
 
     # Check if user parameter is provided
     if [[ $# -lt 1 ]]; then
-        print_error "Usage: sudo $0 <username>"
+        print_error "✖ Usage: sudo $0 <username>"
         echo ""
         echo "Example: sudo $0 myuser"
         exit 1
@@ -416,7 +416,7 @@ main() {
 
     # Check if LXC is installed
     if ! command -v lxc-ls &>/dev/null; then
-        print_error "LXC is not installed on this system"
+        print_error "✖ LXC is not installed on this system"
         exit 1
     fi
 
@@ -434,7 +434,7 @@ main() {
     read -ra containers <<< "$(get_all_containers)"
 
     if [[ ${#containers[@]} -eq 0 ]]; then
-        print_warning "No containers found for user $TARGET_USER"
+        print_warning "⚠ No containers found for user $TARGET_USER"
         echo ""
         print_info "Create containers and run this script again to configure SSH access"
         exit 0
@@ -455,7 +455,7 @@ main() {
     echo "╚══════════════════════════════════════════════════════════════════════════════╝"
     echo ""
     print_info "Containers configured: $CONTAINERS_CONFIGURED"
-    print_warning "Containers skipped: $CONTAINERS_SKIPPED"
+    print_warning "⚠ Containers skipped: $CONTAINERS_SKIPPED"
     echo ""
 
     if [[ $CONTAINERS_CONFIGURED -gt 0 ]]; then
@@ -464,7 +464,7 @@ main() {
 
         # Check if SSH config is already configured
         if check_ssh_config; then
-            print_success "SSH config already contains entry for ${SSH_KEY_NAME}.key"
+            print_success "- SSH config already contains entry for ${SSH_KEY_NAME}.key"
         else
             # Offer to configure SSH config
             if prompt_yes_no "Would you like to configure ~/.ssh/config for easier SSH access?" "y"; then
@@ -483,7 +483,7 @@ main() {
     fi
 
     if [[ $CONTAINERS_SKIPPED -gt 0 ]]; then
-        print_warning "Some containers were skipped. Check the output above for details."
+        print_warning "⚠ Some containers were skipped. Check the output above for details."
         echo ""
     fi
 }

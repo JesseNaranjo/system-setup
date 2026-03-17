@@ -113,7 +113,7 @@ show_usage() {
 check_required_tools() {
     for tool in tar 7z; do
         if ! command -v "$tool" &>/dev/null; then
-            print_error "$tool is required but not installed"
+            print_error "✖ $tool is required but not installed"
             echo ""
             echo "Install with: sudo apt install $( [[ "$tool" == "7z" ]] && echo "7zip" || echo "$tool" )"
             exit 69  # EX_UNAVAILABLE
@@ -143,7 +143,7 @@ main() {
             --compression=*)
                 COMPRESSION_LEVEL="${1#*=}"
                 if [[ ! "$COMPRESSION_LEVEL" =~ ^(fast|balanced|small)$ ]]; then
-                    print_error "Invalid compression level: $COMPRESSION_LEVEL"
+                    print_error "✖ Invalid compression level: $COMPRESSION_LEVEL"
                     echo "Valid options: fast, balanced, small"
                     exit 64  # EX_USAGE
                 fi
@@ -154,7 +154,7 @@ main() {
                 exit 0
                 ;;
             -*)
-                print_error "Unknown option: $1"
+                print_error "✖ Unknown option: $1"
                 show_usage
                 exit 64  # EX_USAGE
                 ;;
@@ -170,7 +170,7 @@ main() {
     done
 
     if [[ -z "$CONTAINER_NAME" ]]; then
-        print_error "Missing required container name argument"
+        print_error "✖ Missing required container name argument"
         echo ""
         show_usage
         exit 64  # EX_USAGE
@@ -212,7 +212,7 @@ main() {
 
     # Verify container exists
     if [[ ! -d "$CONTAINER_PATH" ]]; then
-        print_error "Container '${CONTAINER_NAME}' not found at ${CONTAINER_PATH}"
+        print_error "✖ Container '${CONTAINER_NAME}' not found at ${CONTAINER_PATH}"
         exit 66  # EX_NOINPUT
     fi
 
@@ -240,7 +240,7 @@ main() {
 
     # Check if container is running
     if lxc-info -n "${CONTAINER_NAME}" -s 2>/dev/null | grep -q "RUNNING"; then
-        print_warning "Container '${CONTAINER_NAME}' is currently running"
+        print_warning "⚠ Container '${CONTAINER_NAME}' is currently running"
         if prompt_yes_no "Stop the container before backup?" "y"; then
             print_info "Stopping container..."
             if [[ -x "${SCRIPT_DIR}/stop-lxc.sh" ]]; then
@@ -250,7 +250,7 @@ main() {
             fi
             echo ""
         else
-            print_warning "Backing up a running container may result in inconsistent data"
+            print_warning "⚠ Backing up a running container may result in inconsistent data"
             if ! prompt_yes_no "Continue anyway?" "n"; then
                 print_info "Backup cancelled by user"
                 exit 75  # EX_TEMPFAIL
@@ -273,7 +273,7 @@ main() {
         print_info "File: ${BACKUP_FILE}"
         print_info "Size: ${BACKUP_SIZE}"
     else
-        print_error "Backup failed"
+        print_error "✖ Backup failed"
         # Clean up partial backup file if it exists
         [[ -f "$BACKUP_FILE" ]] && rm -f "$BACKUP_FILE"
         exit 74  # EX_IOERR

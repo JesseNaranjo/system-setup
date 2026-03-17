@@ -85,7 +85,7 @@ Delegate=${DELEGATE_CONTROLLERS}
 EOF
 
     systemctl --user daemon-reload
-    print_success "Cgroup delegation persisted for ${name}"
+    print_success "✓ Cgroup delegation persisted for ${name}"
 }
 
 # Warn if a k8s container is missing cgroup delegation
@@ -101,8 +101,8 @@ check_k8s_delegation() {
         return
     fi
 
-    print_warning "Container '${name}' looks like a Kubernetes node but has no cgroup delegation"
-    print_warning "Kubernetes requires the cpuset controller. Use --delegate or --delegate-once"
+    print_warning "⚠ Container '${name}' looks like a Kubernetes node but has no cgroup delegation"
+    print_warning "⚠ Kubernetes requires the cpuset controller. Use --delegate or --delegate-once"
 }
 
 # ============================================================================
@@ -147,7 +147,7 @@ MemorySwapMax=0
 EOF
 
     systemctl --user daemon-reload
-    print_success "Swap restriction persisted for ${name} (MemorySwapMax=0)"
+    print_success "✓ Swap restriction persisted for ${name} (MemorySwapMax=0)"
 }
 
 # Add lxc.mount.entry to mask /proc/swaps inside the container
@@ -157,7 +157,7 @@ mask_proc_swaps() {
     local config="${HOME}/.local/share/lxc/${name}/config"
 
     if [[ ! -f "$config" ]]; then
-        print_warning "Container config not found: ${config}"
+        print_warning "⚠ Container config not found: ${config}"
         return 1
     fi
 
@@ -171,7 +171,7 @@ mask_proc_swaps() {
         echo "# Mask /proc/swaps — prevents kubelet from seeing host swap devices"
         echo "$SWAP_MOUNT_ENTRY"
     } >> "$config"
-    print_success "/proc/swaps masked for ${name}"
+    print_success "✓ /proc/swaps masked for ${name}"
 }
 
 # Warn if a k8s container is missing swap restriction
@@ -187,8 +187,8 @@ check_k8s_no_swap() {
         return
     fi
 
-    print_warning "Container '${name}' looks like a Kubernetes node but has incomplete swap restriction"
-    print_warning "Kubernetes requires swap off. Use --no-swap to enforce cgroup limits and mask /proc/swaps"
+    print_warning "⚠ Container '${name}' looks like a Kubernetes node but has incomplete swap restriction"
+    print_warning "⚠ Kubernetes requires swap off. Use --no-swap to enforce cgroup limits and mask /proc/swaps"
 }
 
 # ============================================================================
@@ -236,7 +236,7 @@ for arg in "$@"; do
             exit 0
             ;;
         -*)
-            print_error "Unknown option: $arg"
+            print_error "✖ Unknown option: $arg"
             usage
             exit 64
             ;;
@@ -247,7 +247,7 @@ for arg in "$@"; do
 done
 
 if [[ ${#CONTAINERS[@]} -eq 0 ]]; then
-    print_error "Missing required container name argument"
+    print_error "✖ Missing required container name argument"
     echo ""
     usage
     exit 64  # 64 - EX_USAGE (sysexits.h)
@@ -278,7 +278,7 @@ for lxcName in "${CONTAINERS[@]}"; do
             print_info "Swap cgroup restriction already configured for ${lxcName}"
         fi
         mask_proc_swaps "$lxcName" \
-            || print_warning "Failed to mask /proc/swaps for ${lxcName}; configure manually"
+            || print_warning "⚠ Failed to mask /proc/swaps for ${lxcName}; configure manually"
     fi
 
     # Skip start if already running (persistent settings above still applied)
@@ -352,8 +352,8 @@ else
     lxc-ls --fancy
     echo ""
     if [[ "$any_failed" == true ]]; then
-        print_warning "Some containers failed to start (see errors above)"
+        print_warning "⚠ Some containers failed to start (see errors above)"
     else
-        print_success "All containers started successfully"
+        print_success "✓ All containers started successfully"
     fi
 fi

@@ -24,10 +24,10 @@ ensure_swap_off() {
     if [[ -n "$(swapon --show --noheadings 2>/dev/null)" ]]; then
         print_info "Disabling swap..."
         run_elevated swapoff -a \
-            || { print_error "Failed to disable swap"; return 1; }
-        print_success "Swap disabled"
+            || { print_error "✖ Failed to disable swap"; return 1; }
+        print_success "✓ Swap disabled"
     else
-        print_success "Swap already disabled"
+        print_success "- Swap already disabled"
     fi
 }
 
@@ -37,10 +37,10 @@ ensure_ip_forwarding() {
     if [[ "$current" != "1" ]]; then
         print_info "Enabling IP forwarding..."
         run_elevated sysctl -w net.ipv4.conf.all.forwarding=1 \
-            || { print_error "Failed to enable IP forwarding"; return 1; }
-        print_success "IP forwarding enabled"
+            || { print_error "✖ Failed to enable IP forwarding"; return 1; }
+        print_success "✓ IP forwarding enabled"
     else
-        print_success "IP forwarding already enabled"
+        print_success "- IP forwarding already enabled"
     fi
 }
 
@@ -51,10 +51,10 @@ ensure_ip_forwarding() {
 start_services() {
     print_info "Enabling and starting cri-o and kubelet services..."
     run_elevated systemctl enable crio.service kubelet.service \
-        || { print_error "Failed to enable services"; return 1; }
+        || { print_error "✖ Failed to enable services"; return 1; }
     run_elevated systemctl start crio.service kubelet.service \
-        || { print_error "Failed to start services"; return 1; }
-    print_success "Services started"
+        || { print_error "✖ Failed to start services"; return 1; }
+    print_success "✓ Services started"
 }
 
 show_status() {
@@ -67,7 +67,7 @@ show_status() {
     sleep 5
 
     print_info "Cluster status:"
-    kubectl get all --all-namespaces 2>/dev/null || print_warning "kubectl not available or cluster not ready"
+    kubectl get all --all-namespaces 2>/dev/null || print_warning "⚠ kubectl not available or cluster not ready"
 }
 
 # ============================================================================
@@ -75,15 +75,15 @@ show_status() {
 # ============================================================================
 
 main() {
-    detect_environment || { print_error "Failed to detect environment"; return 1; }
+    detect_environment || { print_error "✖ Failed to detect environment"; return 1; }
 
     if [[ "$DETECTED_OS" != "linux" ]]; then
-        print_error "Kubernetes services are only available on Linux"
+        print_error "✖ Kubernetes services are only available on Linux"
         exit 1
     fi
 
     if ! check_privileges "system_config"; then
-        print_error "Starting Kubernetes services requires root privileges"
+        print_error "✖ Starting Kubernetes services requires root privileges"
         print_info "Please re-run with: sudo $0"
         exit 1
     fi

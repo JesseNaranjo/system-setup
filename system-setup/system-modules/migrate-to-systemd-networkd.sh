@@ -88,12 +88,12 @@ check_migration_preconditions() {
 
     # Check for Linux OS
     if [[ "$DETECTED_OS" != "linux" ]]; then
-        print_error "This migration is only supported on Linux systems."
+        print_error "✖ This migration is only supported on Linux systems."
         return 1
     fi
 
     if ! check_privileges "system_config"; then
-        print_error "Network migration requires root privileges"
+        print_error "✖ Network migration requires root privileges"
         return 1
     fi
 
@@ -112,7 +112,7 @@ check_migration_preconditions() {
 
     # Check for ifquery command
     if ! command -v ifquery &>/dev/null; then
-        print_error "ifquery command not found."
+        print_error "✖ ifquery command not found."
         print_info "The ifquery utility (from ifupdown package) is required to parse interface configurations."
         print_info "Please ensure ifupdown is installed: apt install ifupdown"
         return 1
@@ -120,7 +120,7 @@ check_migration_preconditions() {
 
     # Check for systemd-networkd service
     if ! systemctl list-unit-files systemd-networkd.service &>/dev/null; then
-        print_error "systemd-networkd service not found."
+        print_error "✖ systemd-networkd service not found."
         print_info "This system doesn't appear to have systemd-networkd available."
         return 1
     fi
@@ -133,9 +133,9 @@ check_migration_preconditions() {
 
     # Container warning
     if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
-        print_warning "Running inside a container environment."
-        print_warning "Container networking is often managed by the host system."
-        print_warning "Modifying network configuration inside a container may cause connectivity issues."
+        print_warning "⚠ Running inside a container environment."
+        print_warning "⚠ Container networking is often managed by the host system."
+        print_warning "⚠ Modifying network configuration inside a container may cause connectivity issues."
         echo ""
         if ! prompt_yes_no "Continue with migration anyway?" "n"; then
             print_info "Migration cancelled."
@@ -247,7 +247,7 @@ populate_stanza_cache() {
         local stanza
         stanza=$(extract_original_stanza "$iface")
         if [[ -z "$stanza" ]]; then
-            print_warning "Could not extract stanza for interface: $iface"
+            print_warning "⚠ Could not extract stanza for interface: $iface"
         fi
         STANZA_CACHE["$iface"]="$stanza"
     done
@@ -275,18 +275,18 @@ write_config_file() {
     local file_type="${3:-network}"
 
     if ! printf '%s\n' "$content" > "$file" 2>/dev/null; then
-        print_error "Failed to write $file"
+        print_error "✖ Failed to write $file"
         return 1
     fi
 
     if ! chmod 644 "$file"; then
-        print_error "Failed to set permissions on $file"
+        print_error "✖ Failed to set permissions on $file"
         rm -f "$file"
         return 1
     fi
 
     if ! chown root:root "$file"; then
-        print_error "Failed to set ownership on $file"
+        print_error "✖ Failed to set ownership on $file"
         rm -f "$file"
         return 1
     fi
@@ -539,7 +539,7 @@ netmask_to_cidr() {
             192) ((cidr+=2)) ;;
             128) ((cidr+=1)) ;;
             0) ;;
-            *) print_warning "Unexpected netmask octet: $octet" ;;
+            *) print_warning "⚠ Unexpected netmask octet: $octet" ;;
         esac
     done
 
@@ -559,7 +559,7 @@ perform_migration() {
     local interfaces=$(get_interface_list | sort -u)
 
     if [[ -z "$interfaces" ]]; then
-        print_warning "No interfaces found to migrate."
+        print_warning "⚠ No interfaces found to migrate."
         return 1
     fi
 
@@ -676,7 +676,7 @@ install_systemd_resolved() {
         if apt update && apt install systemd-resolved; then
             print_success "✓ systemd-resolved installed"
         else
-            print_warning "Could not install systemd-resolved - DNS resolution may need manual configuration"
+            print_warning "⚠ Could not install systemd-resolved - DNS resolution may need manual configuration"
             return 1
         fi
     else
@@ -703,8 +703,8 @@ configure_resolv_conf() {
     if prompt_yes_no "Symlink $RESOLV_CONF to systemd-resolved stub?" "y"; then
         # Verify stub file exists (systemd-resolved must be running)
         if [[ ! -e "$RESOLVED_STUB" ]]; then
-            print_warning "systemd-resolved stub not found: $RESOLVED_STUB"
-            print_warning "Ensure systemd-resolved is running before symlinking"
+            print_warning "⚠ systemd-resolved stub not found: $RESOLVED_STUB"
+            print_warning "⚠ Ensure systemd-resolved is running before symlinking"
             print_warning "⚠ Skipped resolv.conf symlink - DNS may need manual configuration"
             return 0
         fi
@@ -713,7 +713,7 @@ configure_resolv_conf() {
         rm -f "$RESOLV_CONF"
 
         if ! ln -s "$RESOLVED_STUB" "$RESOLV_CONF"; then
-            print_error "Failed to create symlink: $RESOLV_CONF -> $RESOLVED_STUB"
+            print_error "✖ Failed to create symlink: $RESOLV_CONF -> $RESOLVED_STUB"
             # Restore from backup
             local latest_backup
             latest_backup=$(ls -t "${RESOLV_CONF}.backup."*.bak 2>/dev/null | head -1)
@@ -766,28 +766,28 @@ enable_systemd_networkd() {
     if systemctl enable systemd-networkd.service 2>/dev/null; then
         print_success "✓ systemd-networkd.service enabled"
     else
-        print_error "Failed to enable systemd-networkd.service"
+        print_error "✖ Failed to enable systemd-networkd.service"
         return 1
     fi
 
     if systemctl start systemd-networkd.service 2>/dev/null; then
         print_success "✓ systemd-networkd.service started"
     else
-        print_warning "Could not start systemd-networkd.service - may require reboot"
+        print_warning "⚠ Could not start systemd-networkd.service - may require reboot"
     fi
 
     # Enable and start systemd-resolved
     if systemctl enable systemd-resolved.service 2>/dev/null; then
         print_success "✓ systemd-resolved.service enabled"
     else
-        print_error "Failed to enable systemd-resolved.service"
+        print_error "✖ Failed to enable systemd-resolved.service"
         return 1
     fi
 
     if systemctl start systemd-resolved.service 2>/dev/null; then
         print_success "✓ systemd-resolved.service started"
     else
-        print_warning "Could not start systemd-resolved.service - may require reboot"
+        print_warning "⚠ Could not start systemd-resolved.service - may require reboot"
     fi
 
     return 0
@@ -810,7 +810,7 @@ verify_network_connectivity() {
                 print_info "Waiting for systemd-networkd to become active... ($i/$max_attempts)"
                 continue
             fi
-            print_error "systemd-networkd is not active"
+            print_error "✖ systemd-networkd is not active"
             return 1
         fi
 
@@ -835,13 +835,13 @@ verify_network_connectivity() {
         fi
     done
 
-    print_error "systemd-networkd verification failed - no interfaces in configured/routable state"
+    print_error "✖ systemd-networkd verification failed - no interfaces in configured/routable state"
     return 1
 }
 
 # Rollback new networking: stop services, delete created files, restore resolv.conf
 rollback_new_networking() {
-    print_warning "Rolling back to old networking..."
+    print_warning "⚠ Rolling back to old networking..."
 
     # Stop and disable systemd-networkd
     systemctl stop systemd-networkd.service 2>/dev/null || true
@@ -964,7 +964,7 @@ migrate_to_systemd_networkd() {
 
     # Perform migration
     if ! perform_migration; then
-        print_error "Migration failed"
+        print_error "✖ Migration failed"
         return 1
     fi
 
@@ -972,14 +972,14 @@ migrate_to_systemd_networkd() {
     if [[ ${#UNSUPPORTED_FOUND[@]} -gt 0 ]]; then
         echo ""
         print_warning "═══════════════════════════════════════════════════════════════════════"
-        print_warning "The following configurations are NOT automatically migrated:"
+        print_warning "⚠ The following configurations are NOT automatically migrated:"
         print_warning "═══════════════════════════════════════════════════════════════════════"
         for item in "${UNSUPPORTED_FOUND[@]}"; do
             echo "            ⚠ $item"
         done
         echo ""
-        print_warning "These configurations will need to be added manually to the generated"
-        print_warning ".network files. Refer to systemd.network(5) man page for syntax."
+        print_warning "⚠ These configurations will need to be added manually to the generated"
+        print_warning "⚠ .network files. Refer to systemd.network(5) man page for syntax."
         print_warning "═══════════════════════════════════════════════════════════════════════"
         echo ""
         if ! prompt_yes_no "Continue with migration anyway?" "n"; then
@@ -1001,14 +1001,14 @@ migrate_to_systemd_networkd() {
 
     # Enable new networking FIRST (before disabling old)
     if ! enable_systemd_networkd; then
-        print_error "Failed to enable systemd-networkd services"
+        print_error "✖ Failed to enable systemd-networkd services"
         print_rollback_instructions
         return 1
     fi
 
     # Verify connectivity before disabling old networking
     if ! verify_network_connectivity; then
-        print_error "New networking failed connectivity test"
+        print_error "✖ New networking failed connectivity test"
         rollback_new_networking
         print_info "Old networking remains active"
         print_rollback_instructions

@@ -31,15 +31,15 @@ check_pki_directory() {
 check_and_renew_certificates() {
     print_info "Checking certificate expiration..."
     kubeadm certs check-expiration \
-        || { print_error "Failed to check certificate expiration"; return 1; }
+        || { print_error "✖ Failed to check certificate expiration"; return 1; }
 
     if prompt_yes_no "Would you like to renew all certificates?" "n"; then
         print_info "Renewing all certificates..."
         kubeadm certs renew all \
-            || { print_error "Failed to renew certificates"; return 1; }
-        print_success "All certificates renewed"
+            || { print_error "✖ Failed to renew certificates"; return 1; }
+        print_success "✓ All certificates renewed"
 
-        print_warning "You must restart the control plane for renewed certificates to take effect."
+        print_warning "⚠ You must restart the control plane for renewed certificates to take effect."
         print_info "Restart control plane pods by moving and restoring their manifests:"
         print_info "  1. mv /etc/kubernetes/manifests/*.yaml /tmp/"
         print_info "  2. Wait for pods to terminate"
@@ -59,7 +59,7 @@ manage_kubeconfig() {
     local admin_conf="/etc/kubernetes/admin.conf"
 
     if [[ ! -f "$admin_conf" ]]; then
-        print_warning "${admin_conf} not found - skipping kubeconfig management"
+        print_warning "⚠ ${admin_conf} not found - skipping kubeconfig management"
         return 0
     fi
 
@@ -79,12 +79,12 @@ manage_kubeconfig() {
         # Kubeconfig does not exist yet
         if prompt_yes_no "No kubeconfig found at ${kube_config}. Copy from ${admin_conf}?" "y"; then
             mkdir -p "$kube_dir" \
-                || { print_error "Failed to create $kube_dir"; return 1; }
+                || { print_error "✖ Failed to create $kube_dir"; return 1; }
             cp "$admin_conf" "$kube_config" \
-                || { print_error "Failed to copy kubeconfig"; return 1; }
+                || { print_error "✖ Failed to copy kubeconfig"; return 1; }
             chown "${user_id}" "$kube_config" \
-                || { print_error "Failed to set kubeconfig ownership"; return 1; }
-            print_success "Kubeconfig copied to ${kube_config}"
+                || { print_error "✖ Failed to set kubeconfig ownership"; return 1; }
+            print_success "✓ Kubeconfig copied to ${kube_config}"
         else
             print_info "Skipped kubeconfig copy"
         fi
@@ -93,10 +93,10 @@ manage_kubeconfig() {
         if prompt_yes_no "Kubeconfig already exists at ${kube_config}. Re-copy from ${admin_conf}?" "n"; then
             backup_file "$kube_config"
             cp "$admin_conf" "$kube_config" \
-                || { print_error "Failed to copy kubeconfig"; return 1; }
+                || { print_error "✖ Failed to copy kubeconfig"; return 1; }
             chown "${user_id}" "$kube_config" \
-                || { print_error "Failed to set kubeconfig ownership"; return 1; }
-            print_success "Kubeconfig re-copied to ${kube_config}"
+                || { print_error "✖ Failed to set kubeconfig ownership"; return 1; }
+            print_success "✓ Kubeconfig re-copied to ${kube_config}"
         else
             print_info "Skipped kubeconfig re-copy"
         fi
@@ -108,7 +108,7 @@ manage_kubeconfig() {
 # ============================================================================
 
 main_manage_certificates() {
-    detect_environment || { print_error "Failed to detect environment"; return 1; }
+    detect_environment || { print_error "✖ Failed to detect environment"; return 1; }
 
     print_info "Managing Kubernetes certificates..."
 

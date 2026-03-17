@@ -309,7 +309,7 @@ run_elevated() {
             sudo "$@"
         else
             # On Linux, shouldn't get here (should already be root for system operations)
-            print_error "Insufficient privileges to run: $*"
+            print_error "✖ Insufficient privileges to run: $*"
             return 1
         fi
     fi
@@ -545,12 +545,12 @@ is_package_installed() {
 verify_package_manager() {
     if [[ "$DETECTED_OS" == "macos" ]]; then
         if ! command -v brew &>/dev/null; then
-            print_error "Homebrew is not installed. Please install it from https://brew.sh"
+            print_error "✖ Homebrew is not installed. Please install it from https://brew.sh"
             return 1
         fi
     else
         if ! command -v apt &>/dev/null; then
-            print_error "apt package manager not found. This script requires apt (Debian/Ubuntu-based systems)"
+            print_error "✖ apt package manager not found. This script requires apt (Debian/Ubuntu-based systems)"
             return 1
         fi
     fi
@@ -603,7 +603,7 @@ create_config_file() {
         # File exists - check permissions and warn if different
         local actual_perms=$(get_file_permissions "$file")
         if [[ "$actual_perms" != "$perms" ]]; then
-            print_warning "$file exists with permissions $actual_perms (expected $perms)"
+            print_warning "⚠ $file exists with permissions $actual_perms (expected $perms)"
         fi
         return 0
     fi
@@ -646,7 +646,7 @@ check_disk_space() {
     fi
 
     if [[ -z "$available_mb" || ! "$available_mb" =~ ^[0-9]+$ || "$available_mb" -lt "$total_needed" ]]; then
-        print_error "Insufficient disk space on ${path} (${available_mb:-unknown} MB available, need ${required_mb} MB + ${buffer_mb} MB buffer)"
+        print_error "✖ Insufficient disk space on ${path} (${available_mb:-unknown} MB available, need ${required_mb} MB + ${buffer_mb} MB buffer)"
         return 1
     fi
     return 0
@@ -800,7 +800,7 @@ update_config_line() {
             return 0
         else
             local current_value=$(grep_file -E "^[[:space:]]*${setting_pattern}" "$file" | head -n 1)
-            print_warning "✖ $description has different value: '$current_value' in $file"
+            print_warning "⚠ $description has different value: '$current_value' in $file"
             backup_file "$file"
             add_change_header "$file" "$config_type"
 
@@ -824,7 +824,7 @@ update_config_line() {
             }
             ' "$file" > "$temp_file"; then
                 rm -f "$temp_file"
-                print_error "Failed to process $file with awk"
+                print_error "✖ Failed to process $file with awk"
                 return 1
             fi
 
@@ -833,14 +833,14 @@ update_config_line() {
             if needs_elevation "$file"; then
                 if ! run_elevated mv "$temp_file" "$file"; then
                     rm -f "$temp_file"
-                    print_error "Failed to update $file"
+                    print_error "✖ Failed to update $file"
                     return 1
                 fi
                 run_elevated chmod "$original_perms" "$file"
             else
                 if ! mv "$temp_file" "$file"; then
                     rm -f "$temp_file"
-                    print_error "Failed to update $file"
+                    print_error "✖ Failed to update $file"
                     return 1
                 fi
                 chmod "$original_perms" "$file"

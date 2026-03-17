@@ -343,18 +343,18 @@ show_status_overview() {
 
     # Check kernel modules (loaded or built into kernel)
     if is_module_available "br_netfilter" && is_module_available "overlay"; then
-        print_success "Kernel modules (br_netfilter, overlay) available"
+        print_success "- Kernel modules (br_netfilter, overlay) available"
     else
-        print_warning "Kernel modules not fully available"
+        print_warning "⚠ Kernel modules not fully available"
     fi
 
     # Check packages
     while IFS=':' read -r display_name package_name; do
         if is_package_installed "$package_name"; then
-            print_success "$display_name is installed"
+            print_success "- $display_name is installed"
             track_special_packages "$package_name"
         else
-            print_warning "$display_name is not installed"
+            print_warning "⚠ $display_name is not installed"
         fi
     done < <(get_package_list)
 
@@ -362,37 +362,37 @@ show_status_overview() {
     local ip_forward
     ip_forward=$(sysctl -n net.ipv4.ip_forward 2>/dev/null || echo "0")
     if [[ "$ip_forward" == "1" ]]; then
-        print_success "IPv4 forwarding enabled"
+        print_success "- IPv4 forwarding enabled"
     else
-        print_warning "IPv4 forwarding disabled"
+        print_warning "⚠ IPv4 forwarding disabled"
     fi
 
     # Check swap
     if [[ -z "$(swapon --show --noheadings 2>/dev/null)" ]]; then
-        print_success "Swap disabled"
+        print_success "- Swap disabled"
     else
-        print_warning "Swap is active"
+        print_warning "⚠ Swap is active"
     fi
 
     # Check Helm
     if command -v helm &>/dev/null; then
-        print_success "Helm installed ($(helm version --short 2>/dev/null || echo 'unknown version'))"
+        print_success "- Helm installed ($(helm version --short 2>/dev/null || echo 'unknown version'))"
     else
-        print_warning "Helm not installed"
+        print_warning "⚠ Helm not installed"
     fi
 
     # Check Minikube
     if command -v minikube &>/dev/null; then
-        print_success "Minikube installed ($(minikube version --short 2>/dev/null || echo 'unknown version'))"
+        print_success "- Minikube installed ($(minikube version --short 2>/dev/null || echo 'unknown version'))"
     else
-        print_warning "Minikube not installed"
+        print_warning "⚠ Minikube not installed"
     fi
 
     # Check cluster
     if [[ -f /etc/kubernetes/admin.conf ]] && kubectl cluster-info &>/dev/null; then
-        print_success "Cluster initialized"
+        print_success "- Cluster initialized"
     else
-        print_warning "Cluster not initialized"
+        print_warning "⚠ Cluster not initialized"
     fi
 
     echo ""
@@ -423,7 +423,7 @@ check_step_prerequisites() {
     done
 
     if [[ ${#failed_deps[@]} -gt 0 ]]; then
-        print_warning "Skipping ${step_name}: prerequisite(s) not met (${failed_deps[*]})"
+        print_warning "⚠ Skipping ${step_name}: prerequisite(s) not met (${failed_deps[*]})"
         return 1
     fi
     return 0
@@ -456,7 +456,7 @@ main() {
     echo "            - Detected OS: $DETECTED_OS"
 
     if [[ "$DETECTED_OS" != "linux" ]]; then
-        print_error "Kubernetes setup requires Linux. This script does not support $DETECTED_OS."
+        print_error "✖ Kubernetes setup requires Linux. This script does not support $DETECTED_OS."
         echo ""
         exit 1
     fi
@@ -470,7 +470,7 @@ main() {
 
     # Root privilege check
     if ! check_privileges "system_config"; then
-        print_error "Kubernetes setup requires root privileges"
+        print_error "✖ Kubernetes setup requires root privileges"
         print_info "Please re-run the script with: sudo $0"
         echo ""
         exit 1
@@ -486,7 +486,7 @@ main() {
     if main_configure_kernel_modules; then
         STEP_KERNEL_MODULES_OK=true
     else
-        print_error "Kernel module configuration failed. Continuing..."
+        print_error "✖ Kernel module configuration failed. Continuing..."
     fi
     echo ""
 
@@ -497,7 +497,7 @@ main() {
     if main_configure_k8s_repos; then
         STEP_REPOS_OK=true
     else
-        print_error "Repository configuration failed. Continuing..."
+        print_error "✖ Repository configuration failed. Continuing..."
     fi
     echo ""
 
@@ -511,10 +511,10 @@ main() {
             if [[ "$KUBEADM_INSTALLED" == true || "$KUBELET_INSTALLED" == true ]]; then
                 STEP_PACKAGES_OK=true
             else
-                print_warning "No core Kubernetes packages available. Dependent steps will be skipped."
+                print_warning "⚠ No core Kubernetes packages available. Dependent steps will be skipped."
             fi
         else
-            print_error "Package installation failed. Continuing..."
+            print_error "✖ Package installation failed. Continuing..."
         fi
     fi
     echo ""
@@ -527,7 +527,7 @@ main() {
         if main_configure_networking; then
             STEP_NETWORKING_OK=true
         else
-            print_error "Network configuration failed. Continuing..."
+            print_error "✖ Network configuration failed. Continuing..."
         fi
     fi
     echo ""
@@ -539,7 +539,7 @@ main() {
     if main_configure_swap; then
         STEP_SWAP_OK=true
     else
-        print_error "Swap configuration failed. Continuing..."
+        print_error "✖ Swap configuration failed. Continuing..."
     fi
     echo ""
 
@@ -550,7 +550,7 @@ main() {
         if check_step_prerequisites "CRI-O Configuration" "STEP_PACKAGES_OK"; then
             source "${SCRIPT_DIR}/kubernetes-modules/configure-crio.sh"
             if ! main_configure_crio; then
-                print_error "CRI-O configuration failed. Continuing..."
+                print_error "✖ CRI-O configuration failed. Continuing..."
             fi
         fi
         echo ""
@@ -563,7 +563,7 @@ main() {
     if prompt_yes_no "            Would you like to install/update Helm?" "n"; then
         source "${SCRIPT_DIR}/kubernetes-modules/install-update-helm.sh"
         if ! main_install_update_helm; then
-            print_error "Helm installation failed. Continuing..."
+            print_error "✖ Helm installation failed. Continuing..."
         fi
         echo ""
     else
@@ -575,7 +575,7 @@ main() {
     if prompt_yes_no "            Would you like to install/update Minikube?" "n"; then
         source "${SCRIPT_DIR}/kubernetes-modules/install-update-minikube.sh"
         if ! main_install_update_minikube; then
-            print_error "Minikube installation failed. Continuing..."
+            print_error "✖ Minikube installation failed. Continuing..."
         fi
         echo ""
     else
@@ -591,7 +591,7 @@ main() {
         if check_step_prerequisites "Cluster Initialization" "STEP_PACKAGES_OK" "STEP_NETWORKING_OK" "STEP_SWAP_OK"; then
             source "${SCRIPT_DIR}/kubernetes-modules/initialize-cluster.sh"
             if ! main_initialize_cluster; then
-                print_error "Cluster initialization failed. Continuing..."
+                print_error "✖ Cluster initialization failed. Continuing..."
             fi
         fi
         echo ""
@@ -606,7 +606,7 @@ main() {
         print_info "---------------------------"
         source "${SCRIPT_DIR}/kubernetes-modules/validate-cluster.sh"
         if ! main_validate_cluster; then
-            print_error "Cluster validation reported issues. Continuing..."
+            print_error "✖ Cluster validation reported issues. Continuing..."
         fi
         echo ""
 
@@ -615,7 +615,7 @@ main() {
         print_info "-------------------------------"
         source "${SCRIPT_DIR}/kubernetes-modules/manage-certificates.sh"
         if ! main_manage_certificates; then
-            print_error "Certificate management failed. Continuing..."
+            print_error "✖ Certificate management failed. Continuing..."
         fi
         echo ""
     fi
@@ -625,7 +625,7 @@ main() {
     print_info "----------------------------------"
     source "${SCRIPT_DIR}/kubernetes-modules/configure-kube-editor.sh"
     if ! main_configure_kube_editor; then
-        print_error "KUBE_EDITOR configuration failed. Continuing..."
+        print_error "✖ KUBE_EDITOR configuration failed. Continuing..."
     fi
     echo ""
 

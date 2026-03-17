@@ -32,12 +32,12 @@ configure_ssh_socket() {
 
     # Check if systemd is available
     if ! command -v systemctl &>/dev/null; then
-        print_warning "systemctl not found - cannot configure SSH socket (systemd required)"
+        print_warning "⚠ systemctl not found - cannot configure SSH socket (systemd required)"
         return 0
     fi
 
     if ! check_privileges "system_config"; then
-        print_error "OpenSSH configuration requires root privileges"
+        print_error "✖ OpenSSH configuration requires root privileges"
         return 1
     fi
 
@@ -63,13 +63,13 @@ configure_ssh_socket() {
     # Case 1: Both ssh.socket and ssh.service are enabled
     # Action: Disable ssh.service (no prompt needed - this is a misconfiguration)
     if [[ "$ssh_socket_enabled" == true && "$ssh_service_enabled" == true ]]; then
-        print_warning "Both ssh.socket and ssh.service are enabled (conflicting configuration)"
+        print_warning "⚠ Both ssh.socket and ssh.service are enabled (conflicting configuration)"
         print_info "Disabling ssh.service to avoid conflicts..."
         if systemctl disable --now ssh.service 2>/dev/null; then
             print_success "✓ ssh.service disabled and stopped"
             print_success "✓ SSH is now using socket-based activation only"
         else
-            print_error "Could not disable ssh.service"
+            print_error "✖ Could not disable ssh.service"
             return 1
         fi
         return 0
@@ -111,7 +111,7 @@ configure_ssh_socket() {
         if systemctl disable --now ssh.service 2>/dev/null; then
             print_success "✓ ssh.service disabled and stopped"
         else
-            print_warning "Could not disable ssh.service (it may not be active)"
+            print_warning "⚠ Could not disable ssh.service (it may not be active)"
         fi
     fi
 
@@ -127,7 +127,7 @@ configure_ssh_socket() {
     if systemctl edit ssh.socket; then
         print_success "✓ ssh.socket configuration saved"
     else
-        print_error "Failed to edit ssh.socket configuration"
+        print_error "✖ Failed to edit ssh.socket configuration"
         return 1
     fi
     echo ""
@@ -142,7 +142,7 @@ configure_ssh_socket() {
         print_info "Current SSH socket status:"
         systemctl status ssh.socket --no-pager --lines=10 || true
     else
-        print_error "Failed to enable ssh.socket"
+        print_error "✖ Failed to enable ssh.socket"
         return 1
     fi
     echo ""

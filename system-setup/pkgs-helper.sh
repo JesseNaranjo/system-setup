@@ -108,7 +108,7 @@ check_feature_available() {
     local support_func="$2"
 
     if ! $support_func; then
-        print_warning "${feature_name} is not available for ${DETECTED_PKG_MANAGER}."
+        print_warning "⚠ ${feature_name} is not available for ${DETECTED_PKG_MANAGER}."
         echo ""
         return 1
     fi
@@ -152,7 +152,7 @@ refresh_and_list_outdated() {
     esac
     echo ""
 
-    print_success "Package index refreshed and outdated packages listed."
+    print_success "✓ Package index refreshed and outdated packages listed."
     echo ""
 }
 
@@ -167,14 +167,14 @@ list_backports_upgrades() {
 
     # Check if aptitude is installed
     if ! command -v aptitude &>/dev/null; then
-        print_error "aptitude is not installed. Please install it with: sudo apt install aptitude"
+        print_error "✖ aptitude is not installed. Please install it with: sudo apt install aptitude"
         return 1
     fi
 
     local release=$(get_release_codename)
 
     if [[ -z "$release" ]]; then
-        print_error "Could not determine release codename from /etc/os-release"
+        print_error "✖ Could not determine release codename from /etc/os-release"
         return 1
     fi
 
@@ -248,7 +248,7 @@ list_residual_configs() {
     local packages=$(echo "$output" | grep -v "^Listing" | grep -v "^$" || true)
 
     if [[ -z "$packages" ]]; then
-        print_success "No packages with residual configuration files found."
+        print_success "- No packages with residual configuration files found."
         echo ""
         return 0
     fi
@@ -263,7 +263,7 @@ list_residual_configs() {
         print_info "Purging residual configuration files..."
         run_elevated apt purge '~c'
         echo ""
-        print_success "Residual configuration files purged."
+        print_success "✓ Residual configuration files purged."
     else
         print_info "Skipped purging residual configuration files."
     fi
@@ -386,8 +386,8 @@ main() {
 
     # Verify we have a supported package manager
     if [[ "$DETECTED_PKG_MANAGER" == "unknown" ]]; then
-        print_error "No supported package manager found."
-        print_error "This script supports: apt (Debian/Ubuntu), brew (macOS), dnf (Fedora/RHEL 8+), zypper (openSUSE)"
+        print_error "✖ No supported package manager found."
+        print_error "✖ This script supports: apt (Debian/Ubuntu), brew (macOS), dnf (Fedora/RHEL 8+), zypper (openSUSE)"
         exit 1
     fi
 
@@ -439,7 +439,7 @@ main() {
                 exit 0
                 ;;
             *)
-                print_error "Invalid choice. Please try again."
+                print_error "✖ Invalid choice. Please try again."
                 echo ""
                 ;;
         esac

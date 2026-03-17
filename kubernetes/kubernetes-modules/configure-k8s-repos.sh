@@ -22,10 +22,10 @@ fi
 check_prerequisites() {
     # gpg can be installed interactively; apt and curl are hard requirements
     if ! command -v gpg &>/dev/null; then
-        print_warning "gpg not found; required for APT repository key management"
+        print_warning "⚠ gpg not found; required for APT repository key management"
         if prompt_yes_no "Install gpg?" "y"; then
-            apt install gpg || { print_error "Failed to install gpg"; return 1; }
-            print_success "gpg installed"
+            apt install gpg || { print_error "✖ Failed to install gpg"; return 1; }
+            print_success "✓ gpg installed"
         else
             print_info "Skipped gpg installation"
             return 1
@@ -40,7 +40,7 @@ check_prerequisites() {
     done
 
     if [[ ${#missing[@]} -gt 0 ]]; then
-        print_error "Missing required commands: ${missing[*]}"
+        print_error "✖ Missing required commands: ${missing[*]}"
         return 1
     fi
 }
@@ -106,17 +106,17 @@ setup_apt_repo() {
     local repo_url="$4"
 
     if is_repo_configured "$name" "$sources_path" "$keyring_path" "$repo_url"; then
-        print_success "${name} ${K8S_VERSION} repo already configured"
+        print_success "- ${name} ${K8S_VERSION} repo already configured"
         return 0
     fi
 
     mkdir -p /etc/apt/keyrings \
-        || { print_error "Failed to create /etc/apt/keyrings"; return 1; }
+        || { print_error "✖ Failed to create /etc/apt/keyrings"; return 1; }
 
     print_info "Downloading ${name} GPG key..."
     curl -fsSL "${repo_url}Release.key" | gpg --dearmor --yes -o "$keyring_path" \
-        || { print_error "Failed to download/import ${name} GPG key"; return 1; }
-    print_success "${name} GPG key installed: $keyring_path"
+        || { print_error "✖ Failed to download/import ${name} GPG key"; return 1; }
+    print_success "✓ ${name} GPG key installed: $keyring_path"
 
     print_info "Creating ${name} apt sources file..."
     if ! tee "$sources_path" > /dev/null << EOF
@@ -127,10 +127,10 @@ Components:
 Signed-By: ${keyring_path}
 EOF
     then
-        print_error "Failed to write $sources_path"
+        print_error "✖ Failed to write $sources_path"
         return 1
     fi
-    print_success "${name} sources file created: $sources_path"
+    print_success "✓ ${name} sources file created: $sources_path"
 }
 
 # Determine whether a repository should be configured.
@@ -200,12 +200,12 @@ setup_crio_repo() {
 # ============================================================================
 
 main_configure_k8s_repos() {
-    detect_environment || { print_error "Failed to detect environment"; return 1; }
+    detect_environment || { print_error "✖ Failed to detect environment"; return 1; }
 
     print_info "Configuring Kubernetes APT repositories..."
 
     check_prerequisites || return 1
-    cleanup_deprecated_files || print_warning "Deprecated file cleanup failed, continuing"
+    cleanup_deprecated_files || print_warning "⚠ Deprecated file cleanup failed, continuing"
 
     local repos_configured=false
 
@@ -227,7 +227,7 @@ main_configure_k8s_repos() {
 
     if [[ "$repos_configured" == true ]]; then
         print_info "Refreshing package lists..."
-        apt update || { print_error "Failed to refresh package lists"; return 1; }
+        apt update || { print_error "✖ Failed to refresh package lists"; return 1; }
         check_newer_k8s_versions
     else
         print_info "No repositories configured, skipping package list refresh"

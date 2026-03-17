@@ -81,7 +81,7 @@ configure_timezone() {
         return 0
     fi
 
-    print_warning "System timezone is set to UTC: $current_tz"
+    print_warning "⚠ System timezone is set to UTC: $current_tz"
     echo ""
 
     if ! prompt_yes_no "Would you like to update the timezone?" "n"; then
@@ -117,13 +117,13 @@ configure_timezone() {
             read -p "            Enter timezone (e.g., Europe/London): " -r new_tz </dev/tty
             ;;
         *)
-            print_error "Invalid choice. Keeping timezone as UTC."
+            print_error "✖ Invalid choice. Keeping timezone as UTC."
             return 1
             ;;
     esac
 
     if [[ -z "$new_tz" ]]; then
-        print_error "No timezone entered. Keeping timezone as UTC."
+        print_error "✖ No timezone entered. Keeping timezone as UTC."
         return 1
     fi
 
@@ -135,7 +135,7 @@ configure_timezone() {
         verified_tz=$(get_current_timezone)
         print_success "✓ Timezone updated to: $verified_tz"
     else
-        print_error "Failed to set timezone"
+        print_error "✖ Failed to set timezone"
         return 1
     fi
 }

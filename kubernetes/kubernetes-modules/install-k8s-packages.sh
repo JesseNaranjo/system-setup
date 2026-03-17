@@ -32,11 +32,11 @@ install_packages() {
     fi
 
     if apt install "${packages[@]}"; then
-        print_success "All packages installed successfully"
+        print_success "✓ All packages installed successfully"
         return 0
     fi
 
-    print_error "Failed to install some packages"
+    print_error "✖ Failed to install some packages"
     return 1
 }
 
@@ -50,14 +50,14 @@ check_and_install_packages() {
 
     # Verify package manager availability
     if ! verify_package_manager; then
-        print_warning "No supported package manager found on this system."
+        print_warning "⚠ No supported package manager found on this system."
         return 1
     fi
 
     # Check if we can install packages
     if ! check_privileges "package_install"; then
         can_install=false
-        print_warning "Cannot install packages without root privileges (will only detect installed packages)"
+        print_warning "⚠ Cannot install packages without root privileges (will only detect installed packages)"
         echo ""
     fi
 
@@ -74,11 +74,11 @@ check_and_install_packages() {
                     fi
                 fi
             else
-                print_success "$display_name is already installed (up to date)"
+                print_success "- $display_name is already installed (up to date)"
             fi
             track_special_packages "$package_name"
         else
-            print_warning "$display_name is not installed"
+            print_warning "⚠ $display_name is not installed"
             if [[ "$can_install" == true ]] && is_repo_available_for_package "$package_name"; then
                 if prompt_yes_no "            - Would you like to install $display_name?" "n"; then
                     packages_to_install+=("$package_name")
@@ -102,7 +102,7 @@ check_and_install_packages() {
                 done
             else
                 # Even if installation fails, we return 0 to allow configuration of already-installed packages
-                print_error "Package installation failed or was cancelled. Continuing with configuration for any packages that are already present."
+                print_error "✖ Package installation failed or was cancelled. Continuing with configuration for any packages that are already present."
             fi
         fi
     else
@@ -120,7 +120,7 @@ check_and_install_packages() {
 # ============================================================================
 
 main_install_k8s_packages() {
-    detect_environment || { print_error "Failed to detect environment"; return 1; }
+    detect_environment || { print_error "✖ Failed to detect environment"; return 1; }
 
     check_and_install_packages || return 1
 }

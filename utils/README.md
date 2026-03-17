@@ -10,6 +10,7 @@ Cross-platform utility scripts for system maintenance, file synchronization, and
 | `rsync-two-way.sh` | Linux/macOS | Two-way file synchronization using rsync |
 | `monitor-battery.sh` | Linux | Monitors battery percentage at regular intervals |
 | `disable-kvm-module.sh` | Linux | Disables the KVM kernel module |
+| `reset-macOS-display-settings.sh` | macOS | Resets macOS display configuration |
 | `compare-directories.ps1` | Windows | Compares two directory trees using PowerShell |
 | `robocopy-two-way.ps1` | Windows | Two-way file synchronization using Robocopy |
 | `troubleshooting.md` | — | Common troubleshooting notes and solutions |

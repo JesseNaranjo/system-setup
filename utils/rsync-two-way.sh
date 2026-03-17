@@ -131,7 +131,7 @@ if [[ $# -eq 0 ]] || [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
 fi
 
 if [[ $# -ne 2 ]]; then
-    print_error "Invalid number of arguments"
+    print_error "✖ Invalid number of arguments"
     echo ""
     show_usage
     exit 1
@@ -190,7 +190,7 @@ done
 
 # Validate local directory exists
 if [[ ! -d "$LOCAL" ]]; then
-    print_error "Local directory does not exist: $LOCAL"
+    print_error "✖ Local directory does not exist: $LOCAL"
     log "ERROR: Local directory does not exist: $LOCAL"
     exit 1
 fi
@@ -201,14 +201,14 @@ if [[ "$REMOTE" =~ ^([^@]+@)?([^:]+):(.+)$ ]]; then
     REMOTE_PATH="${BASH_REMATCH[3]}"
     REMOTE_HOST="${BASH_REMATCH[2]}"
 else
-    print_error "Invalid remote specification format: $REMOTE"
+    print_error "✖ Invalid remote specification format: $REMOTE"
     print_info "Expected format: user@host:/path or host:/path"
     exit 1
 fi
 
 # Check if rsync is installed
 if ! command -v rsync &>/dev/null; then
-    print_error "rsync is not installed. Please install it first."
+    print_error "✖ rsync is not installed. Please install it first."
     log "ERROR: rsync not found in PATH"
     exit 2
 fi
@@ -218,7 +218,7 @@ print_info "Validating connectivity to $REMOTE_HOST..."
 log "Checking SSH connectivity to $REMOTE_HOST"
 
 if ! ssh -o BatchMode=yes -o ConnectTimeout=10 "$REMOTE_USER_HOST" "exit" 2>/dev/null; then
-    print_error "Cannot connect to remote host: $REMOTE_HOST"
+    print_error "✖ Cannot connect to remote host: $REMOTE_HOST"
     print_info "Please verify:"
     echo "  • SSH keys are properly configured"
     echo "  • Remote host is reachable"
@@ -227,7 +227,7 @@ if ! ssh -o BatchMode=yes -o ConnectTimeout=10 "$REMOTE_USER_HOST" "exit" 2>/dev
     exit 3
 fi
 
-print_success "Connected to $REMOTE_HOST"
+print_success "✓ Connected to $REMOTE_HOST"
 log "SSH connectivity verified for $REMOTE_HOST"
 
 # Display sync configuration
@@ -242,7 +242,7 @@ echo ""
 
 # Prompt user to continue
 if ! prompt_yes_no "            → Continue with synchronization?" "y"; then
-    print_warning "Synchronization cancelled by user"
+    print_warning "⚠ Synchronization cancelled by user"
     log "Synchronization cancelled by user"
     exit 0
 fi
@@ -260,11 +260,11 @@ log "Pass 1: LOCAL -> REMOTE"
 echo ""
 
 if rsync "${OPTS[@]}" "$LOCAL/" "$REMOTE"; then
-    print_success "Pass 1 completed successfully"
+    print_success "✓ Pass 1 completed successfully"
     log "Pass 1 completed successfully"
 else
     RSYNC_EXIT=$?
-    print_error "Pass 1 failed with exit code $RSYNC_EXIT"
+    print_error "✖ Pass 1 failed with exit code $RSYNC_EXIT"
     log "ERROR: Pass 1 failed with exit code $RSYNC_EXIT"
     exit 2
 fi
@@ -277,11 +277,11 @@ log "Pass 2: REMOTE -> LOCAL"
 echo ""
 
 if rsync "${OPTS[@]}" "$REMOTE/" "$LOCAL"; then
-    print_success "Pass 2 completed successfully"
+    print_success "✓ Pass 2 completed successfully"
     log "Pass 2 completed successfully"
 else
     RSYNC_EXIT=$?
-    print_error "Pass 2 failed with exit code $RSYNC_EXIT"
+    print_error "✖ Pass 2 failed with exit code $RSYNC_EXIT"
     log "ERROR: Pass 2 failed with exit code $RSYNC_EXIT"
     exit 2
 fi

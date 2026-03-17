@@ -42,7 +42,7 @@ apply_sysctl_setting() {
 
     print_info "Setting $description ($key = $value)..."
     sysctl -w "${key}=${value}" >/dev/null \
-        || { print_error "Failed to set ${key}=${value}"; return 1; }
+        || { print_error "✖ Failed to set ${key}=${value}"; return 1; }
     print_success "- $description applied ($key = $value)"
 }
 
@@ -81,7 +81,7 @@ persist_sysctl_settings() {
     fi
 
     echo "$expected_content" > "$SYSCTL_CONF" \
-        || { print_error "Failed to write $SYSCTL_CONF"; return 1; }
+        || { print_error "✖ Failed to write $SYSCTL_CONF"; return 1; }
     print_success "- Persistence file $SYSCTL_CONF written"
     SYSCTL_FILE_CHANGED=true
     return 0
@@ -92,7 +92,7 @@ persist_sysctl_settings() {
 # ============================================================================
 
 main_configure_networking() {
-    detect_environment || { print_error "Failed to detect environment"; return 1; }
+    detect_environment || { print_error "✖ Failed to detect environment"; return 1; }
 
     print_info "Configuring Kubernetes networking..."
 
@@ -101,9 +101,9 @@ main_configure_networking() {
     if ! is_module_available "br_netfilter"; then
         br_netfilter_available=false
         if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
-            print_warning "br_netfilter not available in container — skipping bridge netfilter settings"
+            print_warning "⚠ br_netfilter not available in container — skipping bridge netfilter settings"
         else
-            print_warning "br_netfilter kernel module is not loaded; bridge-nf-call settings may fail"
+            print_warning "⚠ br_netfilter kernel module is not loaded; bridge-nf-call settings may fail"
         fi
     fi
 
@@ -135,7 +135,7 @@ main_configure_networking() {
         else
             print_info "Reloading sysctl configuration..."
             sysctl --system >/dev/null 2>&1 \
-                || { print_error "Failed to reload sysctl configuration"; return 1; }
+                || { print_error "✖ Failed to reload sysctl configuration"; return 1; }
             print_success "- Sysctl configuration reloaded"
         fi
     fi

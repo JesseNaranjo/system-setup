@@ -38,7 +38,7 @@ load_module() {
     fi
 
     print_info "Loading kernel module: ${module}..."
-    modprobe "$module" || { print_error "Failed to load kernel module: ${module}"; return 1; }
+    modprobe "$module" || { print_error "✖ Failed to load kernel module: ${module}"; return 1; }
     print_success "- ${module} loaded"
 }
 
@@ -87,7 +87,7 @@ persist_modules() {
 # ============================================================================
 
 main_configure_kernel_modules() {
-    detect_environment || { print_error "Failed to detect environment"; return 1; }
+    detect_environment || { print_error "✖ Failed to detect environment"; return 1; }
 
     # Container environment: cannot load kernel modules, verify availability from host
     if [[ "$RUNNING_IN_CONTAINER" == true ]]; then
@@ -98,12 +98,12 @@ main_configure_kernel_modules() {
             if is_module_available "$module"; then
                 print_success "- ${module} available"
             else
-                print_warning "- ${module} not available — host may need to load this module"
+                print_warning "⚠ ${module} not available — host may need to load this module"
                 all_available=false
             fi
         done
         if [[ "$all_available" == false ]]; then
-            print_warning "Some kernel modules are not available. Kubernetes networking may not work correctly"
+            print_warning "⚠ Some kernel modules are not available. Kubernetes networking may not work correctly"
         fi
         persist_modules || return 1
         print_success "Kernel module configuration complete (container mode)"
@@ -111,10 +111,10 @@ main_configure_kernel_modules() {
     fi
 
     if ! command -v modprobe &>/dev/null; then
-        print_warning "modprobe not found; cannot load kernel modules"
+        print_warning "⚠ modprobe not found; cannot load kernel modules"
         if prompt_yes_no "Install kmod (provides modprobe/lsmod)?" "y"; then
-            apt install kmod || { print_error "Failed to install kmod"; return 1; }
-            print_success "kmod installed"
+            apt install kmod || { print_error "✖ Failed to install kmod"; return 1; }
+            print_success "✓ kmod installed"
         else
             print_info "Skipped kmod installation"
             return 1

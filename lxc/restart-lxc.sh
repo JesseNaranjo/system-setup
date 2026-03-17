@@ -48,7 +48,7 @@ if [[ $# -eq 0 || -z ${1-} ]]; then
     RUNNING=( $(/usr/bin/lxc-ls --running) )
 
     if [[ ${#RUNNING[@]} -eq 0 ]]; then
-        print_warning "- No running containers found"
+        print_warning "⚠ No running containers found"
         exit 0
     fi
 else

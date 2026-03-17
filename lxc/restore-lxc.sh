@@ -91,7 +91,7 @@ show_usage() {
 check_required_tools() {
     for tool in tar 7z nano; do
         if ! command -v "$tool" &>/dev/null; then
-            print_error "$tool is required but not installed"
+            print_error "✖ $tool is required but not installed"
             echo ""
             echo "Install with: sudo apt install $( [[ "$tool" == "7z" ]] && echo "7zip" || echo "$tool" )"
             exit 69  # EX_UNAVAILABLE
@@ -122,7 +122,7 @@ main() {
                 exit 0
                 ;;
             -*)
-                print_error "Unknown option: $1"
+                print_error "✖ Unknown option: $1"
                 show_usage
                 exit 64  # EX_USAGE
                 ;;
@@ -138,7 +138,7 @@ main() {
     done
 
     if [[ -z "$BACKUP_FILE" ]]; then
-        print_error "Missing required backup file argument"
+        print_error "✖ Missing required backup file argument"
         echo ""
         show_usage
         exit 64  # EX_USAGE
@@ -146,7 +146,7 @@ main() {
 
     # Verify backup file exists
     if [[ ! -f "$BACKUP_FILE" ]]; then
-        print_error "Backup file not found: ${BACKUP_FILE}"
+        print_error "✖ Backup file not found: ${BACKUP_FILE}"
         exit 66  # EX_NOINPUT
     fi
 
@@ -179,7 +179,7 @@ main() {
     local ORIGINAL_NAME=$(7z x -so "$BACKUP_FILE" 2>/dev/null | tar -tf - 2>/dev/null | head -1 | cut -d'/' -f1)
 
     if [[ -z "$ORIGINAL_NAME" ]]; then
-        print_error "Could not determine container name from backup archive"
+        print_error "✖ Could not determine container name from backup archive"
         print_info "The archive may be corrupted or in an unexpected format"
         exit 65  # EX_DATAERR
     fi
@@ -203,11 +203,11 @@ main() {
 
     # Check if container already exists
     if [[ -d "$CONTAINER_PATH" ]]; then
-        print_warning "Container '${CONTAINER_NAME}' already exists at ${CONTAINER_PATH}"
+        print_warning "⚠ Container '${CONTAINER_NAME}' already exists at ${CONTAINER_PATH}"
 
         # Check if it's running
         if lxc-info -n "${CONTAINER_NAME}" -s 2>/dev/null | grep -q "RUNNING"; then
-            print_warning "Container is currently running"
+            print_warning "⚠ Container is currently running"
             if prompt_yes_no "Stop the container?" "y"; then
                 print_info "Stopping container..."
                 if [[ -x "${SCRIPT_DIR}/stop-lxc.sh" ]]; then
@@ -216,7 +216,7 @@ main() {
                     lxc-stop --name "$CONTAINER_NAME"
                 fi
             else
-                print_error "Cannot restore over a running container"
+                print_error "✖ Cannot restore over a running container"
                 exit 75  # EX_TEMPFAIL
             fi
         fi
@@ -257,9 +257,9 @@ main() {
     # Extract: 7z outputs to stdout, tar extracts with numeric ownership
     if 7z x -so "$BACKUP_FILE" | sudo tar --xattrs --xattrs-include='*' --acls --numeric-owner -xvf - -C "$EXTRACT_PATH"; then
         echo ""
-        print_success "Archive extracted successfully"
+        print_success "✓ Archive extracted successfully"
     else
-        print_error "Extraction failed"
+        print_error "✖ Extraction failed"
         [[ -n "$TEMP_DIR" ]] && sudo rm -rf "$TEMP_DIR"
         exit 74  # EX_IOERR
     fi
@@ -290,7 +290,7 @@ main() {
     local CONFIG_FILE="${CONTAINER_PATH}/config"
 
     echo ""
-    print_success "Container restored to: ${CONTAINER_PATH}"
+    print_success "✓ Container restored to: ${CONTAINER_PATH}"
     echo ""
 
     # Offer to edit config
@@ -309,7 +309,7 @@ main() {
             "${SCRIPT_DIR}/start-lxc.sh" "$CONTAINER_NAME"
         else
             lxc-start --name "$CONTAINER_NAME"
-            print_success "Container '${CONTAINER_NAME}' started"
+            print_success "✓ Container '${CONTAINER_NAME}' started"
         fi
     else
         print_info "Container restored but not started"

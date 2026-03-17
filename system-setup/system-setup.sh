@@ -358,7 +358,7 @@ main() {
                 shift
                 ;;
             *)
-                print_error "Unknown option: $1"
+                print_error "✖ Unknown option: $1"
                 print_info "Use --help for usage information"
                 exit 1
                 ;;
@@ -388,7 +388,7 @@ main() {
     echo "            - Detected OS: $DETECTED_OS"
 
     if [[ "$DETECTED_OS" == "unknown" ]]; then
-        print_error "Unknown operating system. This script supports Linux and macOS."
+        print_error "✖ Unknown operating system. This script supports Linux and macOS."
         echo ""
         exit 1
     fi
@@ -426,7 +426,7 @@ main() {
     print_info "---------------------------"
     source "${SCRIPT_DIR}/system-modules/package-management.sh"
     if ! main_manage_packages; then
-        print_error "Package management failed. Continuing with configuration for installed packages..."
+        print_error "✖ Package management failed. Continuing with configuration for installed packages..."
     fi
     echo ""
 
@@ -474,7 +474,7 @@ main() {
         1) scope="user" ;;
         2) scope="system" ;;
         *)
-            print_error "Invalid choice. Aborting."
+            print_error "✖ Invalid choice. Aborting."
             echo ""
             exit 1
             ;;
@@ -484,7 +484,7 @@ main() {
     if [[ "$scope" == "system" ]]; then
         if ! check_privileges "system_config"; then
             echo ""
-            print_error "System-wide configuration requires root privileges on Linux"
+            print_error "✖ System-wide configuration requires root privileges on Linux"
             print_info "Please re-run the script with: sudo $0"
             echo ""
             exit 1
@@ -554,7 +554,7 @@ main() {
     # Transition reminder: backward-compat artifacts can be removed after 2026-04-01
     if [[ "$(date +%Y%m%d)" -gt "20260401" ]] && [[ -e "${SCRIPT_DIR}/utils.sh" ]]; then
         echo -e "${YELLOW}╭─── TRANSITION REMINDER ─────────────────────────────────────────────────────────────────────────────────────╮${NC}"
-        print_warning "The utils.sh backward-compatibility artifacts (symlink + source fallback) can now be removed."
+        print_warning "⚠ The utils.sh backward-compatibility artifacts (symlink + source fallback) can now be removed."
         print_warning "  1. Delete system-setup/utils.sh symlink"
         print_warning "  2. Replace source fallback with direct: source \"\${SCRIPT_DIR}/utils-sys.sh\""
         print_warning "  3. Add 'utils.sh' to OBSOLETE_SCRIPTS array"

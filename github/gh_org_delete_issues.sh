@@ -130,7 +130,7 @@ while [[ $# -gt 0 ]]; do
             show_help
             ;;
         *)
-            print_error "Unknown argument: $1"
+            print_error "✖ Unknown argument: $1"
             echo ""
             show_help
             ;;
@@ -152,7 +152,7 @@ detect_download_cmd() {
         return 0
     else
         DOWNLOAD_CMD=""
-        print_warning "Neither 'curl' nor 'wget' found - self-update disabled"
+        print_warning "⚠ Neither 'curl' nor 'wget' found - self-update disabled"
         print_info "Install curl or wget to enable automatic updates"
         return 1
     fi
@@ -259,12 +259,12 @@ self_update() {
 verify_gh_auth() {
     print_info "Verifying GitHub CLI authentication..."
     if ! gh auth status >/dev/null 2>&1; then
-        print_error "GitHub CLI not authenticated"
+        print_error "✖ GitHub CLI not authenticated"
         echo ""
         echo "Please run: gh auth login"
         exit 1
     fi
-    print_success "GitHub CLI authenticated"
+    print_success "✓ GitHub CLI authenticated"
 }
 
 # Generate timestamp in ISO8601 format
@@ -376,7 +376,7 @@ attempt_delete_issue() {
         --jq '.data.repository.issue.id' 2>/dev/null || echo "")
 
     if [[ -z "$node_id" || "$node_id" == "null" ]]; then
-        print_warning "    Could not resolve node ID; will close instead"
+        print_warning "⚠ Could not resolve node ID; will close instead"
         return 1
     fi
 
@@ -388,11 +388,11 @@ attempt_delete_issue() {
             }
         }' \
         -F issueId="$node_id" >/dev/null 2>&1; then
-        print_success "    Deleted via GraphQL"
+        print_success "✓ Deleted via GraphQL"
         ((TOTAL_ISSUES_DELETED++)) || true
         return 0
     else
-        print_warning "    Delete failed or not permitted; will close instead"
+        print_warning "⚠ Delete failed or not permitted; will close instead"
         return 1
     fi
 }
@@ -404,10 +404,10 @@ close_issue() {
     local close_reason="not_planned"  # other option: completed
 
     if gh issue close "$num" -R "$repo_name" --reason "$close_reason" -c "Bulk cleanup $(timestamp)" 2>/dev/null; then
-        print_success "    Closed"
+        print_success "✓ Closed"
         ((TOTAL_ISSUES_CLOSED++)) || true
     else
-        print_error "    Close failed"
+        print_error "✖ Close failed"
         ((TOTAL_ISSUES_FAILED++)) || true
         return 1
     fi
@@ -419,10 +419,10 @@ lock_issue() {
     local num="$2"
 
     if gh api -X PUT "repos/${repo_name}/issues/${num}/lock" -f lock_reason="resolved" >/dev/null 2>&1; then
-        print_success "    Locked"
+        print_success "✓ Locked"
         ((TOTAL_ISSUES_LOCKED++)) || true
     else
-        print_warning "    Lock failed (insufficient permissions or already locked)"
+        print_warning "⚠ Lock failed (insufficient permissions or already locked)"
     fi
 }
 
@@ -445,7 +445,7 @@ main() {
     local repos=$(echo "$repos_json" | jq -r '.[] | @base64')
 
     if [[ -z "$repos" ]]; then
-        print_error "No repositories found or failed to fetch repositories"
+        print_error "✖ No repositories found or failed to fetch repositories"
         exit 1
     fi
 

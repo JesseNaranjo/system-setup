@@ -36,7 +36,7 @@ configure_container_static_ip() {
     fi
 
     if ! check_privileges "system_config"; then
-        print_error "Container static IP configuration requires root privileges"
+        print_error "✖ Container static IP configuration requires root privileges"
         return 1
     fi
 
@@ -44,7 +44,7 @@ configure_container_static_ip() {
 
     # Check if systemd-networkd is available
     if [[ ! -d /etc/systemd/network ]]; then
-        print_warning "/etc/systemd/network directory not found - systemd-networkd may not be configured"
+        print_warning "⚠ /etc/systemd/network directory not found - systemd-networkd may not be configured"
         return 0
     fi
 
@@ -65,7 +65,7 @@ configure_container_static_ip() {
     done
 
     if [[ -z "$primary_interface" ]]; then
-        print_warning "No suitable network interface found"
+        print_warning "⚠ No suitable network interface found"
         return 0
     fi
 
@@ -80,10 +80,10 @@ configure_container_static_ip() {
                 echo "              • $ip_addr"
             done <<< "$ip_addresses"
         else
-            print_warning "- No IP address currently assigned"
+            print_warning "⚠ No IP address currently assigned"
         fi
     else
-        print_warning "- 'ip' command not found, cannot display current IP addresses"
+        print_warning "⚠ 'ip' command not found, cannot display current IP addresses"
     fi
 
     # Check if static IP is already configured
@@ -157,7 +157,7 @@ configure_container_static_ip() {
             fi
         fi
 
-        print_error "Invalid IP address format. Please use CIDR notation (e.g., 192.168.1.100/24)"
+        print_error "✖ Invalid IP address format. Please use CIDR notation (e.g., 192.168.1.100/24)"
     done
 
     echo ""
@@ -204,7 +204,7 @@ EOF
         print_info "Current IP addresses on $primary_interface:"
         ip -4 addr show "$primary_interface" 2>/dev/null | grep "inet " | awk '{print "            - " $2}' || true
     else
-        print_warning "Could not restart systemd-networkd (may require manual restart)"
+        print_warning "⚠ Could not restart systemd-networkd (may require manual restart)"
         print_info "To apply changes manually, run: systemctl restart systemd-networkd"
     fi
 

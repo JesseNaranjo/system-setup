@@ -70,7 +70,7 @@ install_packages() {
         fi
     fi
 
-    print_error "Failed to install some packages"
+    print_error "✖ Failed to install some packages"
     return 1
 }
 
@@ -84,24 +84,24 @@ check_and_install_packages() {
 
     # Verify package manager availability
     if ! verify_package_manager; then
-        print_warning "No supported package manager found on this system."
+        print_warning "⚠ No supported package manager found on this system."
         return 1
     fi
 
     # Check if we can install packages
     if ! check_privileges "package_install"; then
         can_install=false
-        print_warning "Cannot install packages without root privileges (will only detect installed packages)"
+        print_warning "⚠ Cannot install packages without root privileges (will only detect installed packages)"
         echo ""
     fi
 
     # Identify all missing packages
     while IFS=':' read -r display_name package_name; do
         if is_package_installed "$package_name"; then
-            print_success "$display_name is already installed"
+            print_success "- $display_name is already installed"
             track_special_packages "$package_name"
         else
-            print_warning "$display_name is not installed"
+            print_warning "⚠ $display_name is not installed"
             if [[ "$can_install" == true ]]; then
                 if prompt_yes_no "            - Would you like to install $display_name?" "n"; then
                     packages_to_install+=("$package_name")
@@ -115,7 +115,7 @@ check_and_install_packages() {
     if [[ ${#packages_to_install[@]} -gt 0 ]]; then
         if [[ "$can_install" == true ]] && ! install_packages "${packages_to_install[@]}"; then
             # Even if installation fails, we return 0 to allow configuration of already-installed packages
-            print_error "Package installation failed or was cancelled. Continuing with configuration for any packages that are already present."
+            print_error "✖ Package installation failed or was cancelled. Continuing with configuration for any packages that are already present."
         fi
         # Invalidate stale package cache so config modules see freshly installed packages
         invalidate_package_cache
@@ -179,7 +179,7 @@ uninstall_packages() {
         fi
     fi
 
-    print_error "Failed to remove some packages"
+    print_error "✖ Failed to remove some packages"
     return 1
 }
 
@@ -199,14 +199,14 @@ check_and_remove_packages() {
 
     # Verify package manager availability
     if ! verify_package_manager; then
-        print_warning "No supported package manager found on this system."
+        print_warning "⚠ No supported package manager found on this system."
         return 1
     fi
 
     # Check if we can remove packages
     if ! check_privileges "package_install"; then
         can_remove=false
-        print_warning "Cannot remove packages without root privileges (will only detect installed packages)"
+        print_warning "⚠ Cannot remove packages without root privileges (will only detect installed packages)"
         echo ""
     fi
 
@@ -214,21 +214,21 @@ check_and_remove_packages() {
     while IFS=':' read -r display_name package_name; do
         if is_package_installed "$package_name"; then
             has_removable_packages=true
-            print_warning "$display_name is installed (candidate for removal)"
+            print_warning "⚠ $display_name is installed (candidate for removal)"
             if [[ "$can_remove" == true ]]; then
                 if prompt_yes_no "            - Would you like to remove $display_name?" "n"; then
                     packages_to_remove+=("$package_name")
                 fi
             fi
         else
-            print_success "$display_name is not installed"
+            print_success "- $display_name is not installed"
         fi
     done < <(get_removable_package_list)
 
     # If there are packages to remove and we have privileges, call the uninstaller
     if [[ ${#packages_to_remove[@]} -gt 0 ]]; then
         if [[ "$can_remove" == true ]] && ! uninstall_packages "${packages_to_remove[@]}"; then
-            print_error "Package removal failed or was cancelled."
+            print_error "✖ Package removal failed or was cancelled."
         fi
         # Invalidate stale package cache so subsequent checks see actual state
         PACKAGE_CACHE_POPULATED=false

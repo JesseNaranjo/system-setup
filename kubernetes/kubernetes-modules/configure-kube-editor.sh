@@ -36,7 +36,7 @@ detect_shell_rc_file() {
 # ============================================================================
 
 main_configure_kube_editor() {
-    detect_environment || { print_error "Failed to detect environment"; return 1; }
+    detect_environment || { print_error "✖ Failed to detect environment"; return 1; }
 
     print_info "Configuring KUBE_EDITOR..."
 
@@ -44,17 +44,17 @@ main_configure_kube_editor() {
     rc_file="$(detect_shell_rc_file)"
 
     if config_exists "$rc_file" "export[[:space:]]+KUBE_EDITOR="; then
-        print_success "KUBE_EDITOR already configured"
+        print_success "- KUBE_EDITOR already configured"
         return 0
     fi
 
     if ! command -v nano &>/dev/null; then
-        print_warning "nano not found, skipping KUBE_EDITOR configuration"
+        print_warning "⚠ nano not found, skipping KUBE_EDITOR configuration"
         return 0
     fi
 
     add_export_if_needed "$rc_file" "KUBE_EDITOR" "nano" "KUBE_EDITOR environment variable" \
-        || { print_error "Failed to configure KUBE_EDITOR"; return 1; }
+        || { print_error "✖ Failed to configure KUBE_EDITOR"; return 1; }
 
     print_success "KUBE_EDITOR configuration complete"
 }

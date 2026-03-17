@@ -69,7 +69,7 @@ prompt_yes_no() {
 # ============================================================================
 
 if [[ $# -eq 0 || -z ${1-} ]]; then
-    print_error "Missing required container name argument"
+    print_error "✖ Missing required container name argument"
     echo ""
     echo "Usage: ${0##*/} <container_name> [distribution] [release] [architecture]"
     echo ""
@@ -104,7 +104,7 @@ if [[ -z "$DISTRIBUTION" ]]; then
         DISTRIBUTION=$(grep "^ID=" /etc/os-release | cut -d= -f2 | tr -d '"')
         print_info "Detected distribution: $DISTRIBUTION"
     else
-        print_error "Could not detect distribution. Please specify it manually."
+        print_error "✖ Could not detect distribution. Please specify it manually."
         exit 1
     fi
 fi
@@ -119,7 +119,7 @@ if [[ -z "$RELEASE" ]]; then
         fi
         print_info "Detected release: $RELEASE"
     else
-        print_error "Could not detect release. Please specify it manually."
+        print_error "✖ Could not detect release. Please specify it manually."
         exit 1
     fi
 fi
@@ -156,7 +156,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTAINER_EXISTS=false
 if lxc-info -n "${CONTAINER_NAME}" &>/dev/null; then
     CONTAINER_EXISTS=true
-    print_warning "Container '${CONTAINER_NAME}' already exists!"
+    print_warning "⚠ Container '${CONTAINER_NAME}' already exists!"
     echo ""
     if ! prompt_yes_no "            Do you want to destroy and recreate it?" "n"; then
         print_info "Operation cancelled by user"
@@ -181,7 +181,7 @@ if [[ "$CONTAINER_EXISTS" == true ]]; then
     if [[ -f "$SCRIPT_DIR/stop-lxc.sh" ]]; then
         "$SCRIPT_DIR/stop-lxc.sh" "$CONTAINER_NAME"
     else
-        print_warning "stop-lxc.sh not found, attempting to stop manually..."
+        print_warning "⚠ stop-lxc.sh not found, attempting to stop manually..."
         lxc-stop --name "$CONTAINER_NAME" || true
         systemctl --user stop "lxc-bg-start@${CONTAINER_NAME}.service" 2>/dev/null || true
     fi
@@ -231,9 +231,9 @@ if [[ -f "$SCRIPT_DIR/start-lxc.sh" ]]; then
     "$SCRIPT_DIR/start-lxc.sh" ${START_FLAGS[@]+"${START_FLAGS[@]}"} "$CONTAINER_NAME"
 else
     if [[ ${#START_FLAGS[@]} -gt 0 ]]; then
-        print_warning "start-lxc.sh not found — cannot apply ${START_FLAGS[*]}; configure manually"
+        print_warning "⚠ start-lxc.sh not found — cannot apply ${START_FLAGS[*]}; configure manually"
     fi
-    print_warning "start-lxc.sh not found, attempting to start manually..."
+    print_warning "⚠ start-lxc.sh not found, attempting to start manually..."
     if systemctl --user start "lxc-bg-start@${CONTAINER_NAME}.service"; then
         print_success "✓ Service and Container started: ${CONTAINER_NAME}"
         echo ""

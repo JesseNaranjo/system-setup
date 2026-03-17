@@ -125,7 +125,7 @@ detect_download_cmd() {
         return 0
     else
         DOWNLOAD_CMD=""
-        print_warning "Neither 'curl' nor 'wget' found - self-update disabled"
+        print_warning "⚠ Neither 'curl' nor 'wget' found - self-update disabled"
         print_info "Install curl or wget to enable automatic updates"
         return 1
     fi
@@ -233,12 +233,12 @@ validate_config() {
     local print_usage=false
 
     if [[ -z "$SRC_ORG" ]]; then
-        print_error "SRC_ORG environment variable is required"
+        print_error "✖ SRC_ORG environment variable is required"
         print_usage=true
     fi
 
     if [[ -z "$DST_ORG" ]]; then
-        print_error "DST_ORG environment variable is required"
+        print_error "✖ DST_ORG environment variable is required"
         print_usage=true
     fi
 
@@ -286,7 +286,7 @@ check_dependencies() {
     fi
 
     if [[ ${#missing_deps[@]} -gt 0 ]]; then
-        print_error "Missing required dependencies: ${missing_deps[*]}"
+        print_error "✖ Missing required dependencies: ${missing_deps[*]}"
         echo ""
         echo "Installation commands:"
         echo "  macOS:    brew install gh jq git"
@@ -297,19 +297,19 @@ check_dependencies() {
     fi
 
     if ! command -v git-lfs >/dev/null 2>&1; then
-        print_warning "git-lfs not installed; LFS objects will NOT be pushed"
+        print_warning "⚠ git-lfs not installed; LFS objects will NOT be pushed"
         print_info "To install: brew install git-lfs (macOS) or apt install git-lfs (Debian)"
         echo ""
     fi
 
-    print_success "All required dependencies are available"
+    print_success "✓ All required dependencies are available"
 }
 
 # Verify GitHub authentication
 verify_auth() {
     print_info "Verifying GitHub CLI authentication..."
     if ! gh auth status >/dev/null 2>&1; then
-        print_error "GitHub CLI not authenticated"
+        print_error "✖ GitHub CLI not authenticated"
         echo ""
         echo "Please run: gh auth login"
         echo ""
@@ -323,7 +323,7 @@ verify_auth() {
     GH_TOKEN="$(gh auth token)"
     export GH_TOKEN
 
-    print_success "GitHub CLI authenticated"
+    print_success "✓ GitHub CLI authenticated"
 }
 
 # ============================================================================
@@ -389,7 +389,7 @@ mirror_git_and_lfs() {
 
     print_step "Pushing (mirror) to ${DST_ORG}/${name}"
     if ! git --git-dir="$gd" push --mirror "$https_dst" 2>/dev/null; then
-        print_error "Git push --mirror failed for ${name}"
+        print_error "✖ Git push --mirror failed for ${name}"
         rm -rf "$gd"
         return 1
     fi
@@ -418,10 +418,10 @@ copy_wiki() {
             if git --git-dir="$wd" push --mirror "$dst_wiki" 2>/dev/null; then
                 ((TOTAL_WIKIS_COPIED++)) || true
             else
-                print_warning "Wiki push failed for ${name}"
+                print_warning "⚠ Wiki push failed for ${name}"
             fi
         else
-            print_warning "Wiki clone failed for ${name}"
+            print_warning "⚠ Wiki clone failed for ${name}"
         fi
         rm -rf "$wd"
     else
@@ -748,13 +748,13 @@ copy_discussions() {
 
     # Build dest category map (name -> id)
     local dstCatsJSON="$(gh_gql -f query="$q" -F so="$SRC_ORG" -F sr="$name" -F do="$DST_ORG" -F dr="$name" -F after="")" || {
-        print_warning "GraphQL fetch failed for ${name} (likely no Discussions)"
+        print_warning "⚠ GraphQL fetch failed for ${name} (likely no Discussions)"
         return
     }
     local dstCats="$(echo "$dstCatsJSON" | jq -c '.data.dst.discussionCategories.nodes')" || dstCats="[]"
     local hasCats="$(echo "$dstCats" | jq 'length>0')" || hasCats="false"
     if [[ "$hasCats" != "true" ]]; then
-        print_warning "Destination repo ${DST_ORG}/${name} has no discussion categories; skipping discussions"
+        print_warning "⚠ Destination repo ${DST_ORG}/${name} has no discussion categories; skipping discussions"
         return
     fi
 
@@ -785,7 +785,7 @@ copy_discussions() {
                 discussion{ id number }
               }
             }'
-            local created="$(gh_gql -f query="$m" -F rid="$dstRepoId" -F cid="$CATID" -F title="$DTITLE" -F body="$BODY")" || { print_warning "Failed to create discussion"; continue; }
+            local created="$(gh_gql -f query="$m" -F rid="$dstRepoId" -F cid="$CATID" -F title="$DTITLE" -F body="$BODY")" || { print_warning "⚠ Failed to create discussion"; continue; }
             local newDid; newDid="$(echo "$created" | jq -r '.data.createDiscussion.discussion.id')"
             ((TOTAL_DISCUSSIONS_COPIED++)) || true
 
@@ -850,7 +850,7 @@ process_repositories() {
         copy_discussions "$NAME"
 
         if [[ "$ARCH" == "true" ]]; then
-            print_warning "Source repository is archived; destination remains unarchived by default"
+            print_warning "⚠ Source repository is archived; destination remains unarchived by default"
         fi
 
         # Add throttle between repository processing to avoid rate limits
@@ -886,7 +886,7 @@ main() {
 
     # Create working directory
     mkdir -p "$WORKDIR"
-    print_success "Working directory created: ${WORKDIR}"
+    print_success "✓ Working directory created: ${WORKDIR}"
     echo ""
 
     process_repositories

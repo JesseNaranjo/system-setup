@@ -23,12 +23,12 @@ check_node_readiness() {
 
     local node_output
     if ! node_output="$(kubectl get nodes --no-headers 2>/dev/null)"; then
-        print_warning "Node readiness: unable to query nodes"
+        print_warning "⚠ Node readiness: unable to query nodes"
         return 0
     fi
 
     if [[ -z "$node_output" ]]; then
-        print_warning "Node readiness: no nodes found"
+        print_warning "⚠ Node readiness: no nodes found"
         return 0
     fi
 
@@ -36,10 +36,10 @@ check_node_readiness() {
     not_ready="$(echo "$node_output" | grep -cv '\bReady\b' || true)"
 
     if [[ "$not_ready" -eq 0 ]]; then
-        print_success "Node readiness: all nodes are Ready"
+        print_success "✓ Node readiness: all nodes are Ready"
         ((_passed++)) || true
     else
-        print_warning "Node readiness: $not_ready node(s) not Ready"
+        print_warning "⚠ Node readiness: $not_ready node(s) not Ready"
     fi
 }
 
@@ -52,12 +52,12 @@ check_system_pods() {
 
     local pod_output
     if ! pod_output="$(kubectl get pods -n kube-system --no-headers 2>/dev/null)"; then
-        print_warning "System pods: unable to query kube-system pods"
+        print_warning "⚠ System pods: unable to query kube-system pods"
         return 0
     fi
 
     if [[ -z "$pod_output" ]]; then
-        print_warning "System pods: no pods found in kube-system"
+        print_warning "⚠ System pods: no pods found in kube-system"
         return 0
     fi
 
@@ -65,10 +65,10 @@ check_system_pods() {
     not_running="$(echo "$pod_output" | grep -cv '\bRunning\b' || true)"
 
     if [[ "$not_running" -eq 0 ]]; then
-        print_success "System pods: all kube-system pods are Running"
+        print_success "✓ System pods: all kube-system pods are Running"
         ((_passed++)) || true
     else
-        print_warning "System pods: $not_running pod(s) not Running"
+        print_warning "⚠ System pods: $not_running pod(s) not Running"
     fi
 }
 
@@ -80,10 +80,10 @@ check_kubelet_service() {
     ((_total++)) || true
 
     if systemctl is-active kubelet &>/dev/null; then
-        print_success "Kubelet service: active"
+        print_success "✓ Kubelet service: active"
         ((_passed++)) || true
     else
-        print_warning "Kubelet service: not active"
+        print_warning "⚠ Kubelet service: not active"
     fi
 }
 
@@ -95,10 +95,10 @@ check_crio_service() {
     ((_total++)) || true
 
     if systemctl is-active crio &>/dev/null; then
-        print_success "CRI-O service: active"
+        print_success "✓ CRI-O service: active"
         ((_passed++)) || true
     else
-        print_warning "CRI-O service: not active"
+        print_warning "⚠ CRI-O service: not active"
     fi
 }
 
@@ -107,7 +107,7 @@ check_crio_service() {
 # ============================================================================
 
 main_validate_cluster() {
-    detect_environment || { print_error "Failed to detect environment"; return 1; }
+    detect_environment || { print_error "✖ Failed to detect environment"; return 1; }
 
     print_info "Validating cluster health..."
 

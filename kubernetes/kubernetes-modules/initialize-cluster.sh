@@ -28,8 +28,8 @@ is_cluster_initialized() {
 # Reset an existing cluster so it can be reinitialized
 # WARNING: This is destructive and removes all cluster state
 reset_cluster() {
-    print_warning "This will destroy the existing cluster on this node."
-    kubeadm reset --force || { print_error "Failed to reset cluster"; return 1; }
+    print_warning "⚠ This will destroy the existing cluster on this node."
+    kubeadm reset --force || { print_error "✖ Failed to reset cluster"; return 1; }
 
     # Clean up kubeconfig for the actual user (not root when using sudo)
     local user_home="$HOME"
@@ -38,7 +38,7 @@ reset_cluster() {
     fi
     rm -rf "${user_home}/.kube/config"
 
-    print_success "Cluster has been reset"
+    print_success "✓ Cluster has been reset"
 }
 
 # ============================================================================
@@ -67,7 +67,7 @@ ensure_kernel_config() {
         [[ -f "$path" ]] && return 0
     done
 
-    print_warning "Kernel config not found — kubeadm preflight will fail"
+    print_warning "⚠ Kernel config not found — kubeadm preflight will fail"
     print_info "Debian does not provide the 'configs' kernel module"
     print_info "In containers, /boot/config-${release} is typically missing"
     echo ""
@@ -88,7 +88,7 @@ ensure_swap_masked() {
         return 0
     fi
 
-    print_warning "Host swap devices are visible in /proc/swaps — kubelet will refuse to start"
+    print_warning "⚠ Host swap devices are visible in /proc/swaps — kubelet will refuse to start"
     print_container_swap_info
     echo ""
     print_info "Then re-run this script."
@@ -103,12 +103,12 @@ ensure_swap_masked() {
 initialize_control_plane() {
     # kubeadm preflight loads the "configs" kernel module via modprobe
     if ! command -v modprobe &>/dev/null; then
-        print_warning "modprobe not found; kubeadm preflight requires it"
+        print_warning "⚠ modprobe not found; kubeadm preflight requires it"
         if prompt_yes_no "Install kmod (provides modprobe)?" "y"; then
-            apt install kmod || { print_error "Failed to install kmod"; return 1; }
-            print_success "kmod installed"
+            apt install kmod || { print_error "✖ Failed to install kmod"; return 1; }
+            print_success "✓ kmod installed"
         else
-            print_warning "Continuing without kmod — kubeadm preflight may fail"
+            print_warning "⚠ Continuing without kmod — kubeadm preflight may fail"
         fi
     fi
 
@@ -124,7 +124,7 @@ initialize_control_plane() {
 
     print_info "Initializing control-plane with pod network CIDR: ${pod_cidr}..."
     kubeadm init --pod-network-cidr="${pod_cidr}" \
-        || { print_error "Failed to initialize control plane"; return 1; }
+        || { print_error "✖ Failed to initialize control plane"; return 1; }
 
     # When running under sudo, configure kubectl for the invoking user, not root
     local user_home="$HOME"
@@ -137,20 +137,20 @@ initialize_control_plane() {
 
     print_info "Configuring kubectl access for ${SUDO_USER:-$(whoami)}..."
     mkdir -p "${user_home}/.kube" \
-        || { print_error "Failed to create .kube directory"; return 1; }
+        || { print_error "✖ Failed to create .kube directory"; return 1; }
     cp /etc/kubernetes/admin.conf "${user_home}/.kube/config" \
-        || { print_error "Failed to copy kubeconfig"; return 1; }
+        || { print_error "✖ Failed to copy kubeconfig"; return 1; }
     chown "${user_id}" "${user_home}/.kube/config" \
-        || { print_error "Failed to set kubeconfig ownership"; return 1; }
-    print_success "kubectl configured at ${user_home}/.kube/config"
+        || { print_error "✖ Failed to set kubeconfig ownership"; return 1; }
+    print_success "✓ kubectl configured at ${user_home}/.kube/config"
 
     echo ""
     print_info "Join command for worker nodes:"
     kubeadm token create --print-join-command \
-        || { print_error "Failed to generate join command"; return 1; }
+        || { print_error "✖ Failed to generate join command"; return 1; }
     echo ""
 
-    print_warning "Next steps: install a CNI plugin (e.g., Calico, Flannel, Cilium)"
+    print_warning "⚠ Next steps: install a CNI plugin (e.g., Calico, Flannel, Cilium)"
 }
 
 # ============================================================================
@@ -163,21 +163,21 @@ join_as_worker() {
     read -r -p "Enter the full 'kubeadm join' command: " join_cmd </dev/tty
 
     if [[ -z "$join_cmd" ]]; then
-        print_error "No join command provided"
+        print_error "✖ No join command provided"
         return 1
     fi
 
     # Validate the command starts with 'kubeadm join'
     if [[ ! "$join_cmd" =~ ^kubeadm[[:space:]]+join[[:space:]] ]]; then
-        print_error "Input must be a 'kubeadm join' command"
+        print_error "✖ Input must be a 'kubeadm join' command"
         return 1
     fi
 
     print_info "Joining cluster as worker node..."
     # Word-splitting is intentional here - kubeadm join arguments are simple tokens
     # shellcheck disable=SC2086
-    $join_cmd || { print_error "Failed to join cluster"; return 1; }
-    print_success "Successfully joined the cluster"
+    $join_cmd || { print_error "✖ Failed to join cluster"; return 1; }
+    print_success "✓ Successfully joined the cluster"
 }
 
 # ============================================================================
@@ -186,12 +186,12 @@ join_as_worker() {
 
 # Handle cluster initialization when cluster is already running
 handle_existing_cluster() {
-    print_success "Cluster is already initialized"
+    print_success "- Cluster is already initialized"
     kubectl cluster-info
 
     if prompt_yes_no "Print join command for worker nodes?" "n"; then
         kubeadm token create --print-join-command \
-            || print_warning "Failed to generate join command"
+            || print_warning "⚠ Failed to generate join command"
     fi
 
     if prompt_yes_no "Reset and reinitialize cluster?" "n"; then
@@ -224,7 +224,7 @@ handle_new_cluster() {
             return 0
             ;;
         *)
-            print_error "Invalid option: ${choice}"
+            print_error "✖ Invalid option: ${choice}"
             return 1
             ;;
     esac
@@ -235,7 +235,7 @@ handle_new_cluster() {
 # ============================================================================
 
 main_initialize_cluster() {
-    detect_environment || { print_error "Failed to detect environment"; return 1; }
+    detect_environment || { print_error "✖ Failed to detect environment"; return 1; }
 
     print_info "Cluster initialization..."
 

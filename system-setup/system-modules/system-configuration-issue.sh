@@ -170,7 +170,7 @@ configure_issue_network() {
 
     # Should already be covered by system scope check, but verify
     if ! check_privileges "system_config"; then
-        print_error "No privileges to configure $issue_file. This should not happen."
+        print_error "✖ No privileges to configure $issue_file. This should not happen."
         return
     fi
 

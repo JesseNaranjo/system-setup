@@ -120,7 +120,7 @@ while [[ $# -gt 0 ]]; do
             show_help
             ;;
         --*)
-            print_error "Unknown argument: $1"
+            print_error "✖ Unknown argument: $1"
             echo ""
             show_help
             ;;
@@ -134,13 +134,13 @@ done
 
 # Validate arguments
 if [[ $DELETE_ALL -eq 0 && ${#REPO_LIST[@]} -eq 0 ]]; then
-    print_error "Must specify either --all or provide repository names"
+    print_error "✖ Must specify either --all or provide repository names"
     echo ""
     show_help
 fi
 
 if [[ $DELETE_ALL -eq 1 && ${#REPO_LIST[@]} -gt 0 ]]; then
-    print_error "Cannot use --all with specific repository names"
+    print_error "✖ Cannot use --all with specific repository names"
     echo ""
     show_help
 fi
@@ -159,7 +159,7 @@ detect_download_cmd() {
         return 0
     else
         DOWNLOAD_CMD=""
-        print_warning "Neither 'curl' nor 'wget' found - self-update disabled"
+        print_warning "⚠ Neither 'curl' nor 'wget' found - self-update disabled"
         print_info "Install curl or wget to enable automatic updates"
         return 1
     fi
@@ -266,12 +266,12 @@ self_update() {
 verify_gh_auth() {
     print_info "Verifying GitHub CLI authentication..."
     if ! gh auth status >/dev/null 2>&1; then
-        print_error "GitHub CLI not authenticated"
+        print_error "✖ GitHub CLI not authenticated"
         echo ""
         echo "Please run: gh auth login"
         exit 1
     fi
-    print_success "GitHub CLI authenticated"
+    print_success "✓ GitHub CLI authenticated"
 }
 
 # Generate timestamp in ISO8601 format
@@ -321,10 +321,10 @@ delete_repository() {
 
     # Attempt to delete the repository
     if gh repo delete "$repo_name" --yes 2>/dev/null; then
-        print_success "Repository deleted"
+        print_success "✓ Repository deleted"
         ((TOTAL_REPOS_DELETED++)) || true
     else
-        print_error "Failed to delete repository (check permissions)"
+        print_error "✖ Failed to delete repository (check permissions)"
         ((TOTAL_REPOS_FAILED++)) || true
     fi
 
@@ -373,7 +373,7 @@ main() {
         local repos=$(echo "$repos_json" | jq -r '.[] | @base64')
 
         if [[ -z "$repos" ]]; then
-            print_error "No repositories found or failed to fetch repositories"
+            print_error "✖ No repositories found or failed to fetch repositories"
             exit 1
         fi
 
@@ -406,7 +406,7 @@ main() {
             if [[ -z "$repo_json" ]]; then
                 echo ""
                 echo -e "${CYAN}━━━━ $full_repo_name ━━━━${NC}"
-                print_error "Repository not found or access denied"
+                print_error "✖ Repository not found or access denied"
                 ((TOTAL_REPOS_FAILED++)) || true
                 continue
             fi
@@ -418,7 +418,7 @@ main() {
             if ! should_process_repo "$repo_name" "$is_archived"; then
                 echo ""
                 echo -e "${CYAN}━━━━ [$visibility] $repo_name ━━━━${NC}"
-                print_warning "Skipped (filtered by configuration)"
+                print_warning "⚠ Skipped (filtered by configuration)"
                 continue
             fi
 

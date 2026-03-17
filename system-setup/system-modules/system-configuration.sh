@@ -201,7 +201,7 @@ configure_shell_prompt_colors_system() {
 
     # Skip if config file doesn't exist
     if [[ ! -f "$shell_config" ]]; then
-        print_warning "Shell configuration file $shell_config does not exist, skipping prompt color configuration"
+        print_warning "⚠ Shell configuration file $shell_config does not exist, skipping prompt color configuration"
         return 0
     fi
 
@@ -277,7 +277,7 @@ $bash_prompt"
         print_success "✓ Custom PS1 prompt configured in $shell_config"
     else
         # Multiple PS1 definitions - comment them all out, add at end, and prompt user
-        print_warning "Found $ps1_count PS1 definitions in $shell_config"
+        print_warning "⚠ Found $ps1_count PS1 definitions in $shell_config"
 
         # Comment out all PS1 lines
         run_elevated sed -i.bak "s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && run_elevated rm -f "${shell_config}.bak"
@@ -384,7 +384,7 @@ configure_shell_for_user() {
 
     # Skip if home directory doesn't exist or is not accessible
     if [[ ! -d "$home_dir" ]]; then
-        print_warning "Home directory $home_dir does not exist, skipping user $username"
+        print_warning "⚠ Home directory $home_dir does not exist, skipping user $username"
         return 0
     fi
 
@@ -523,7 +523,7 @@ configure_fastfetch() {
 
     # Skip if config file doesn't exist
     if [[ ! -f "$shell_config" ]]; then
-        print_warning "Shell configuration file $shell_config does not exist, skipping fastfetch configuration"
+        print_warning "⚠ Shell configuration file $shell_config does not exist, skipping fastfetch configuration"
         return 0
     fi
 
@@ -565,7 +565,7 @@ configure_editor_system() {
 
     # Skip if config file doesn't exist
     if [[ ! -f "$shell_config" ]]; then
-        print_warning "Shell configuration file $shell_config does not exist, skipping editor configuration"
+        print_warning "⚠ Shell configuration file $shell_config does not exist, skipping editor configuration"
         return 0
     fi
 
@@ -643,9 +643,9 @@ configure_shell() {
 
             if [[ $user_count -gt 0 ]]; then
                 if [[ "$DETECTED_OS" == "macos" ]]; then
-                    print_success "Configured shell for $user_count user(s)"
+                    print_success "✓ Configured shell for $user_count user(s)"
                 else
-                    print_success "Configured shell for root and $user_count user(s)"
+                    print_success "✓ Configured shell for root and $user_count user(s)"
                 fi
             fi
         fi
@@ -681,7 +681,7 @@ main_configure_system() {
 
     # Validate scope parameter is provided
     if [[ -z "$scope" ]]; then
-        print_error "Scope parameter is required"
+        print_error "✖ Scope parameter is required"
         print_info "Usage: $0 <user|system>"
         print_info "  user   - Configure for current user only"
         print_info "  system - Configure system-wide for all users"
@@ -690,7 +690,7 @@ main_configure_system() {
 
     # Validate scope value
     if [[ "$scope" != "user" && "$scope" != "system" ]]; then
-        print_error "Invalid scope: $scope"
+        print_error "✖ Invalid scope: $scope"
         print_info "Usage: $0 <user|system>"
         print_info "  user   - Configure for current user only"
         print_info "  system - Configure system-wide for all users"

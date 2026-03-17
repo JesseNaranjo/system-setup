@@ -19,7 +19,7 @@ readonly MINIKUBE_BASE_URL="https://storage.googleapis.com/minikube/releases/lat
 
 check_prerequisites() {
     if ! command -v curl &>/dev/null; then
-        print_error "curl is required but not installed"
+        print_error "✖ curl is required but not installed"
         return 1
     fi
 }
@@ -62,7 +62,7 @@ check_minikube_version() {
 
     local update_output
     if ! update_output=$(minikube update-check 2>&1); then
-        print_warning "Could not check minikube version (no network?), proceeding with install"
+        print_warning "⚠ Could not check minikube version (no network?), proceeding with install"
         return 0
     fi
 
@@ -71,12 +71,12 @@ check_minikube_version() {
     latest_version=$(echo "$update_output" | grep -i "^LatestVersion:" | awk '{print $2}' || true)
 
     if [[ -z "$current_version" || -z "$latest_version" ]]; then
-        print_warning "Could not parse minikube version info, proceeding with install"
+        print_warning "⚠ Could not parse minikube version info, proceeding with install"
         return 0
     fi
 
     if [[ "$current_version" == "$latest_version" ]]; then
-        print_success "Minikube ${current_version} is already up-to-date"
+        print_success "- Minikube ${current_version} is already up-to-date"
         return 1
     fi
 
@@ -89,7 +89,7 @@ check_minikube_version() {
 # ============================================================================
 
 main_install_update_minikube() {
-    detect_environment || { print_error "Failed to detect environment"; return 1; }
+    detect_environment || { print_error "✖ Failed to detect environment"; return 1; }
     check_prerequisites || return 1
 
     # Check if already up-to-date
@@ -97,7 +97,7 @@ main_install_update_minikube() {
         return 0
     fi
 
-    detect_package_manager || { print_error "Failed to detect package manager"; return 1; }
+    detect_package_manager || { print_error "✖ Failed to detect package manager"; return 1; }
 
     local arch pkg_ext pkg_url install_cmd
 
@@ -115,34 +115,34 @@ main_install_update_minikube() {
             install_cmd="${DETECTED_PKG_MANAGER} install -y"
             ;;
         *)
-            print_error "Unsupported package manager: ${DETECTED_PKG_MANAGER} (only apt, dnf, and zypper are supported)"
+            print_error "✖ Unsupported package manager: ${DETECTED_PKG_MANAGER} (only apt, dnf, and zypper are supported)"
             return 1
             ;;
     esac
 
     if [[ "$arch" == "unsupported" ]]; then
-        print_error "Unsupported architecture: $(uname -m) (only x86_64 and aarch64 are supported)"
+        print_error "✖ Unsupported architecture: $(uname -m) (only x86_64 and aarch64 are supported)"
         return 1
     fi
 
     local pkg_path
-    pkg_path=$(mktemp --suffix=".${pkg_ext}") || { print_error "Failed to create temp file"; return 1; }
+    pkg_path=$(mktemp --suffix=".${pkg_ext}") || { print_error "✖ Failed to create temp file"; return 1; }
 
     print_info "Detected package manager: ${DETECTED_PKG_MANAGER}"
     print_info "Downloading minikube for ${arch} to ${pkg_path}..."
     if ! curl -fsSL -o "${pkg_path}" "${pkg_url}"; then
         rm -f "${pkg_path}"
-        print_error "Failed to download minikube from ${pkg_url}"
+        print_error "✖ Failed to download minikube from ${pkg_url}"
         return 1
     fi
 
     print_info "Installing minikube..."
     if $install_cmd "${pkg_path}"; then
         rm -f "${pkg_path}"
-        print_success "Minikube installed/updated successfully"
+        print_success "✓ Minikube installed/updated successfully"
     else
         rm -f "${pkg_path}"
-        print_error "Minikube installation failed"
+        print_error "✖ Minikube installation failed"
         return 1
     fi
 }
