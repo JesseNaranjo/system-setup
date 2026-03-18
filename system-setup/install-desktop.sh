@@ -182,16 +182,14 @@ setup_tigervnc() {
     print_info "── TigerVNC ─────────────────────────────────────────────────"
     echo ""
 
-    if is_package_installed "tigervnc-standalone-server"; then
-        print_success "- TigerVNC is already installed"
-    else
+    if ! is_package_installed "tigervnc-standalone-server"; then
         if ! prompt_yes_no "Install TigerVNC?" "n"; then
             print_info "Skipped TigerVNC installation"
             echo ""
             return 0
         fi
-        install_tigervnc_packages
     fi
+    install_tigervnc_packages
 
     echo ""
     configure_tigervnc
@@ -303,7 +301,7 @@ configure_xrdp_certificates() {
     sudo openssl req -x509 -newkey rsa:2048 -nodes \
         -keyout "$key_file" -out "$cert_file" \
         -days 365 -subj "/CN=$(hostname)"
-    sudo chown -R xrdp:xrdp "$cert_dir"
+    sudo chown xrdp:xrdp "$cert_dir" "$cert_file" "$key_file"
     sudo chmod 0600 "$key_file"
     print_success "✓ XRDP TLS certificate generated (valid for 365 days)"
 }
@@ -319,7 +317,7 @@ configure_xrdp_ini() {
     for i in "${!setting_keys[@]}"; do
         local key="${setting_keys[$i]}"
         local val="${setting_vals[$i]}"
-        if sudo grep -qE "^${key}=${val}$" "$ini_file" 2>/dev/null; then
+        if sudo grep -qF "${key}=${val}" "$ini_file" 2>/dev/null; then
             print_success "- xrdp.ini: ${key} already correct"
         else
             needs_update=true
@@ -340,6 +338,10 @@ configure_xrdp_ini() {
         local key="${setting_keys[$i]}"
         local val="${setting_vals[$i]}"
         sudo sed -i "s|^${key}=.*|${key}=${val}|" "$ini_file"
+        # Append if key was missing or commented out and sed matched nothing
+        if ! sudo grep -qF "${key}=${val}" "$ini_file"; then
+            echo "${key}=${val}" | sudo tee -a "$ini_file" > /dev/null
+        fi
     done
 
     print_success "✓ xrdp.ini TLS settings configured"
@@ -368,16 +370,14 @@ setup_xrdp() {
     print_info "── XRDP ─────────────────────────────────────────────────────"
     echo ""
 
-    if is_package_installed "xrdp"; then
-        print_success "- XRDP is already installed"
-    else
+    if ! is_package_installed "xrdp"; then
         if ! prompt_yes_no "Install XRDP?" "n"; then
             print_info "Skipped XRDP installation"
             echo ""
             return 0
         fi
-        install_xrdp_packages
     fi
+    install_xrdp_packages
 
     echo ""
     configure_xrdp
