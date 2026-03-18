@@ -21,6 +21,18 @@ source "${SCRIPT_DIR}/utils-k8s.sh"
 # ============================================================================
 
 ensure_swap_off() {
+    # In containers, /proc/swaps reflects the host's swap and swapoff requires
+    # CAP_SYS_ADMIN which unprivileged containers lack. The kubelet side is
+    # handled via failSwapOn: false in the kubeadm config (initialize-cluster.sh).
+    if [[ "${RUNNING_IN_CONTAINER:-false}" == true ]]; then
+        if [[ -n "$(swapon --show --noheadings 2>/dev/null)" ]]; then
+            print_info "Container detected — /proc/swaps shows host swap (cannot disable from inside)"
+        else
+            print_success "- Swap not visible"
+        fi
+        return 0
+    fi
+
     if [[ -n "$(swapon --show --noheadings 2>/dev/null)" ]]; then
         print_info "Disabling swap..."
         run_elevated swapoff -a \
