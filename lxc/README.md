@@ -142,9 +142,9 @@ Flags are combinable. For full Kubernetes support, use `--delegate --no-swap`:
 **What `--no-swap` does:**
 
 1. **Cgroup enforcement**: Creates a systemd drop-in (`MemorySwapMax=0`) so the container cannot use swap (cgroup v2)
-2. **Visibility masking**: Adds `lxc.mount.entry = /dev/null proc/swaps none bind,optional 0 0` to the container's LXC config, hiding host swap devices from kubelet
+2. **Visibility masking**: Adds `lxc.mount.entry = /dev/null proc/swaps none bind,optional 0 0` to the container's LXC config (best-effort — LXCFS may override this mount)
 
-Without the `/proc/swaps` mask, kubelet sees the host's swap devices and refuses to start, even though the container itself cannot use swap.
+**Note:** On systems with LXCFS, the `/proc/swaps` bind mount is overridden by the LXCFS FUSE filesystem. The Kubernetes setup script (`initialize-cluster.sh`) handles this automatically by setting `failSwapOn: false` in the kubeadm config for container environments. The `--no-swap` flag remains valuable for cgroup-level swap restriction.
 
 Containers with `k8s` in their name receive a warning if delegation or swap restriction is missing.
 

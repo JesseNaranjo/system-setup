@@ -101,8 +101,9 @@ sudo ./stop-k8s.sh
 ### Initialize control-plane node
 
 ```
-kubeadm init --pod-network-cidr=<cidr>
+kubeadm init --config=/etc/kubernetes/kubeadm-config.yaml
 ```
+- The orchestrator generates the config file with pod CIDR and container-specific settings
 - Example CIDR: `192.168.0.0/16` (Calico default)
 - Save the `kubeadm join` command from the output
 - Reset with `kubeadm reset` (see [cleanup](#cleanup) section)
@@ -202,19 +203,17 @@ mkdir -p ~/.local/share/lxc/<container>/rootfs/boot
 cp /boot/config-$(uname -r) ~/.local/share/lxc/<container>/rootfs/boot/
 ```
 
-### 2. `/proc/swaps` must be masked
+### 2. Swap handling (automatic)
 
-`/proc/swaps` inside the container reflects the host's swap devices. kubelet reads this and refuses to start. Use `start-lxc.sh --no-swap` to both restrict swap via cgroup v2 and mask `/proc/swaps`:
+`/proc/swaps` inside the container reflects the host's swap devices via LXCFS. `swapoff -a` fails (no `CAP_SYS_ADMIN`), and bind-mounting `/dev/null` over `/proc/swaps` is overridden by LXCFS.
+
+`initialize-cluster.sh` handles this automatically by generating a kubeadm config with `failSwapOn: false` when it detects a container environment. No manual action is required.
+
+For cgroup-level swap restriction (prevents the container from actually using host swap), use `start-lxc.sh --no-swap` on the host:
 
 ```bash
 # From the lxc/ directory:
 ./start-lxc.sh --delegate --no-swap tst-k8s1
-```
-
-Or add the LXC config entry manually:
-
-```
-lxc.mount.entry = /dev/null proc/swaps none bind,optional 0 0
 ```
 
 See the [`lxc/`](../lxc/) directory for container management scripts.
