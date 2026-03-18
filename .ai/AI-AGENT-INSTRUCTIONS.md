@@ -2387,7 +2387,7 @@ Each significant folder contains a `README.md` that documents its contents, patt
 | `system-setup/system-modules/README.md` | Module scripts documentation | ✅ |
 | `git/README.md` | Git-related scripts | ❌ |
 | `raspberry-pi/README.md` | Raspberry Pi setup scripts | ❌ |
-| `utils/README.md` | Cross-platform utilities | ❌ |
+| `utils/README.md` | Cross-platform utilities | ✅ |
 
 #### Documentation Folders
 

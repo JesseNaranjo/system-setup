@@ -88,7 +88,7 @@ configure_nano() {
         fi
     fi
 
-    print_success "Nano configuration completed for $config_file"
+    print_success "✓ Nano configuration completed for $config_file"
 }
 
 # ============================================================================
@@ -152,7 +152,7 @@ configure_tmux() {
     add_config_if_needed "tmux" "$config_file" "bind _" 'split-window -vc "#{pane_current_path}"' "vertical split with underscore"
     add_config_if_needed "tmux" "$config_file" 'unbind \"' "" "unbind default vertical split"
 
-    print_success "tmux configuration completed for $config_file"
+    print_success "✓ tmux configuration completed for $config_file"
 }
 
 # ============================================================================
@@ -508,7 +508,7 @@ configure_shell_for_user() {
         chown "$username:$username" "$shell_config" 2>/dev/null || true
     fi
 
-    print_success "Shell configuration completed for $shell_config (user: $username)"
+    print_success "✓ Shell configuration completed for $shell_config (user: $username)"
 }
 
 # Configure fastfetch to run on shell startup (system-wide only)

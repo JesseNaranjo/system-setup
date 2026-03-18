@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# tools-update.sh - Updates developer tools and fixes container network issues
+#
+# Usage: ./tools-update.sh
 
 set -euo pipefail
 
@@ -411,11 +414,12 @@ update_claude() {
 }
 SETTINGS_EOF
 )
-        if jq --sort-keys --argjson default "$DEFAULT_SETTINGS" '. * $default' "$HOME/.claude/settings.json" > "$HOME/.claude/settings.tmp.json"; then
-            mv "$HOME/.claude/settings.tmp.json" "$HOME/.claude/settings.json"
+        local tmp_settings
+        tmp_settings="$(make_temp_file)"
+        if jq --sort-keys --argjson default "$DEFAULT_SETTINGS" '. * $default' "$HOME/.claude/settings.json" > "$tmp_settings"; then
+            mv "$tmp_settings" "$HOME/.claude/settings.json"
             print_success "✓ Claude settings merged"
         else
-            rm -f "$HOME/.claude/settings.tmp.json"
             print_warning "⚠ Failed to merge Claude settings - jq error"
         fi
     elif ! command -v jq &>/dev/null; then
@@ -450,7 +454,7 @@ main() {
 
     # Self-update check
     if detect_download_cmd && [[ ${scriptUpdated:-0} -eq 0 ]]; then
-        self_update "$@"
+        self_update "$@" || true
         echo ""
     fi
 

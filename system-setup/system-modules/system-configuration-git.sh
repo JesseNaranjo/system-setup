@@ -97,7 +97,7 @@ configure_git() {
         fi
     fi
 
-    print_success "Git configuration completed for $config_file"
+    print_success "✓ Git configuration completed for $config_file"
 }
 
 # ============================================================================
