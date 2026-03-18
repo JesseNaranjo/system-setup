@@ -36,7 +36,7 @@ reset_cluster() {
     if [[ -n "${SUDO_USER:-}" ]]; then
         user_home="$(getent passwd "${SUDO_USER}" | cut -d: -f6)"
     fi
-    rm -rf "${user_home}/.kube/config"
+    rm -f "${user_home}/.kube/config"
 
     print_success "✓ Cluster has been reset"
 }
@@ -138,7 +138,14 @@ initialize_control_plane() {
     read -r -p "Enter pod network CIDR [192.168.0.0/16]: " pod_cidr </dev/tty
     pod_cidr="${pod_cidr:-192.168.0.0/16}"
 
-    local config_path="/root/scripts/kubeadm-config.yaml"
+    # Validate CIDR format before embedding in kubeadm config YAML
+    if [[ ! "$pod_cidr" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+        print_error "✖ Invalid CIDR format: ${pod_cidr}"
+        print_info "Expected format: x.x.x.x/y (e.g., 192.168.0.0/16)"
+        return 1
+    fi
+
+    local config_path="/etc/kubernetes/kubeadm-config.yaml"
     generate_kubeadm_config "$pod_cidr" "$config_path"
 
     print_info "Initializing control-plane with pod network CIDR: ${pod_cidr}..."
