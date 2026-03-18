@@ -297,7 +297,19 @@ update_nvm() {
     print_info "Downloading nvm install script..."
     local nvm_script
     nvm_script="$(make_temp_file)"
-    if curl -fsSL -o "$nvm_script" "https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh" 2>/dev/null; then
+    local nvm_url="https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh"
+    local download_ok=false
+
+    if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
+        curl -fsSL -o "$nvm_script" "$nvm_url" 2>/dev/null && download_ok=true
+    elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
+        wget -O "$nvm_script" -q "$nvm_url" 2>/dev/null && download_ok=true
+    else
+        print_warning "⚠ No download tool available - skipping nvm update"
+        return 1
+    fi
+
+    if [[ "$download_ok" == true ]]; then
         # Same shebang validation as download_script()
         if head -n 10 "$nvm_script" | grep -q "^#!/"; then
             print_info "Updating nvm..."
@@ -416,7 +428,10 @@ SETTINGS_EOF
 )
         local tmp_settings
         tmp_settings="$(make_temp_file)"
-        if jq --sort-keys --argjson default "$DEFAULT_SETTINGS" '. * $default' "$HOME/.claude/settings.json" > "$tmp_settings"; then
+        # Merge: defaults as base, user settings override, arrays (permissions.allow) are unioned
+        if jq --sort-keys --argjson default "$DEFAULT_SETTINGS" \
+            '$default * . | .permissions.allow = ([$default.permissions.allow[], .permissions.allow[]] | unique)' \
+            "$HOME/.claude/settings.json" > "$tmp_settings"; then
             mv "$tmp_settings" "$HOME/.claude/settings.json"
             print_success "✓ Claude settings merged"
         else
