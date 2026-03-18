@@ -20,6 +20,7 @@ The script will:
 
 ```
 system-setup/
+├── install-desktop.sh                         # TigerVNC + XRDP desktop setup
 ├── system-setup.sh                            # Main orchestrator
 ├── utils-sys.sh                               # Shared utilities and functions
 ├── utils.sh -> utils-sys.sh                   # Backward-compat symlink
@@ -134,6 +135,51 @@ Shared utility library providing common functionality across all modules.
 
 **Summary:**
 - `print_session_summary()`: Displays all file modifications and backups at end of session
+
+### install-desktop.sh
+
+Installs and configures TigerVNC and XRDP for remote desktop access (Linux only).
+
+**Not part of system-setup.sh orchestration** — this is a standalone script downloaded by system-setup.sh but run independently.
+
+**Must be run as the target user** (not root). Uses sudo for operations requiring root privileges.
+
+**Components:**
+- **TigerVNC**: VNC server with XFCE4 desktop, clipboard support via vncconfig, proper session management via dbus-launch
+- **XRDP**: RDP server with TLS encryption, XFCE4 desktop session
+
+**Features:**
+- Idempotent — safe to run multiple times
+- Prompts before installing each component (skips prompt if already installed)
+- Checks configuration files and updates only if needed
+- TLS certificate management with 30-day expiry check and renewal prompt
+- Optional cleanup of unnecessary packages (default: yes)
+
+**Usage:**
+```bash
+./install-desktop.sh
+```
+
+**Packages Installed:**
+- TigerVNC: `tigervnc-standalone-server`, `xfce4`, `xfce4-terminal`, `dbus-x11`
+- XRDP: `xrdp`, `xorgxrdp`, `xfce4`, `xfce4-terminal`, `dbus-x11`
+
+**Packages Optionally Removed:**
+- `dosfstools`, `eject`, `exfatprogs`, `gnome-accessibility-themes`, `gnome-themes-extra`, `gnome-themes-extra-data`, `gnupg-utils`, `ipp-usb`, `libgpg-error-l10n`, `libgphoto2-l10n`, `sane-airscan`, `sane-utils`, `usbmuxd`, `xserver-xorg-legacy`
+
+**Configuration Files Managed:**
+- `~/.config/tigervnc/config` — VNC server settings (session, geometry via resolution prompt, security)
+- `~/.vnc/xstartup` — VNC session startup script (XFCE with clipboard support)
+- `~/.vnc/passwd` — VNC password (set interactively on first run)
+- `~/.xsession` — XRDP per-user session preference
+- `/etc/tigervnc/vncserver.users` — VNC user-to-display mapping
+- `/etc/xrdp/startwm.sh` — XRDP window manager startup (modified for XFCE)
+- `/etc/xrdp/xrdp.ini` — XRDP TLS configuration
+- `/etc/xrdp/certs/` — TLS certificate and private key
+
+**Services Managed:**
+- `tigervncserver@:1.service`
+- `xrdp`
 
 ---
 
