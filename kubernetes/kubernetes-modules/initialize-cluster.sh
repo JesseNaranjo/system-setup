@@ -79,20 +79,37 @@ ensure_kernel_config() {
     return 1
 }
 
-# Verify swap is not visible in containers
-# kubelet reads /proc/swaps — if it shows host swap devices, kubelet refuses to start
-# Uses swapon --show --noheadings (same pattern as start-k8s.sh, configure-swap.sh)
-# Returns: 0 if no swap visible, 1 if swap entries found
-ensure_swap_masked() {
-    if [[ -z "$(swapon --show --noheadings 2>/dev/null)" ]]; then
-        return 0
+# Generate kubeadm config file for cluster initialization
+# Args: pod_cidr, config_path
+# When running in a container, includes KubeletConfiguration with failSwapOn: false
+# because /proc/swaps reflects the host's swap and cannot be disabled from inside
+generate_kubeadm_config() {
+    local pod_cidr="$1"
+    local config_path="$2"
+
+    mkdir -p "$(dirname "$config_path")"
+
+    cat > "$config_path" <<EOF
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+networking:
+  podSubnet: ${pod_cidr}
+EOF
+
+    # In containers, /proc/swaps reflects the host's swap (via LXCFS or kernel).
+    # swapoff fails (no CAP_SYS_ADMIN) and bind-mounting /dev/null is overridden by LXCFS.
+    # Tell kubelet to ignore swap state.
+    if [[ "${RUNNING_IN_CONTAINER:-false}" == true ]]; then
+        cat >> "$config_path" <<'EOF'
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+failSwapOn: false
+EOF
+        print_info "Container detected — kubeadm config includes failSwapOn: false"
     fi
 
-    print_warning "⚠ Host swap devices are visible in /proc/swaps — kubelet will refuse to start"
-    print_container_swap_info
-    echo ""
-    print_info "Then re-run this script."
-    return 1
+    print_success "✓ Generated kubeadm config at ${config_path}"
 }
 
 # ============================================================================
@@ -115,15 +132,17 @@ initialize_control_plane() {
     # In containers, verify kernel config is accessible for kubeadm preflight
     if [[ "${RUNNING_IN_CONTAINER:-false}" == true ]]; then
         ensure_kernel_config || return 1
-        ensure_swap_masked || return 1
     fi
 
     local pod_cidr
     read -r -p "Enter pod network CIDR [192.168.0.0/16]: " pod_cidr </dev/tty
     pod_cidr="${pod_cidr:-192.168.0.0/16}"
 
+    local config_path="/root/scripts/kubeadm-config.yaml"
+    generate_kubeadm_config "$pod_cidr" "$config_path"
+
     print_info "Initializing control-plane with pod network CIDR: ${pod_cidr}..."
-    kubeadm init --pod-network-cidr="${pod_cidr}" \
+    kubeadm init --config="$config_path" \
         || { print_error "✖ Failed to initialize control plane"; return 1; }
 
     # When running under sudo, configure kubectl for the invoking user, not root
