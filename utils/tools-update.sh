@@ -334,8 +334,8 @@ update_nvm() {
     nvm use stable
 
     print_info "Updating global npm packages..."
-    npm install -g typescript-language-server typescript
-    npm update -g
+    npm install -g typescript-language-server typescript || print_warning "⚠ Failed to install global npm packages"
+    npm update -g || print_warning "⚠ Failed to update global npm packages"
 
     print_success "✓ nvm, Node.js, and npm packages updated"
 }
@@ -350,7 +350,7 @@ update_dotnet() {
     print_info "Updating .NET global tools..."
     dotnet tool update --global --all
     # Install csharp-ls if not already present (install fails if already installed)
-    dotnet tool install --global csharp-ls || true
+    dotnet tool install --global csharp-ls || print_warning "⚠ Failed to install csharp-ls"
 
     print_success "✓ .NET tools updated"
 }
