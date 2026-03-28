@@ -6,7 +6,7 @@ Cross-platform utility scripts for system maintenance, file synchronization, and
 
 | Script | Platform | Purpose |
 |--------|----------|---------|
-| `tools-update.sh` | Linux | Updates developer tools (nvm/Node.js, .NET, Claude CLI) and fixes container MTU |
+| `tools-update.sh` | Linux | Updates developer tools (nvm/Node.js, .NET, Claude CLI/plugins) and fixes container MTU |
 | `rsync-two-way.sh` | Linux/macOS | Two-way file synchronization using rsync |
 | `monitor-battery.sh` | Linux | Monitors battery percentage at regular intervals |
 | `disable-kvm-module.sh` | Linux | Disables the KVM kernel module |
