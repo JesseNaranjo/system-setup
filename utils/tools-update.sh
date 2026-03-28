@@ -447,7 +447,17 @@ SETTINGS_EOF
     claude update
     # Brief pause between update commands to avoid rate limiting
     sleep 0.5s
-    claude plugins marketplace update
+
+    print_info "Updating plugin marketplaces..."
+    claude plugins marketplace update || print_warning "⚠ Marketplace update failed"
+
+    print_info "Updating installed plugins..."
+    claude plugins list --json 2>/dev/null \
+        | jq -r '.[] | select(.enabled == true) | .id' \
+        | while read -r plugin; do
+            claude plugin update "$plugin" || print_warning "⚠ Failed to update $plugin"
+            sleep 0.5s
+        done || print_warning "⚠ Failed to retrieve plugin list"
 
     print_success "✓ Claude CLI and plugins updated"
 }
