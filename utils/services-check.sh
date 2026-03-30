@@ -14,12 +14,21 @@
 
 set -euo pipefail
 
+readonly BLUE='\033[0;34m'
+readonly CYAN='\033[0;36m'
 readonly GREEN='\033[0;32m'
 readonly RED='\033[0;31m'
+readonly YELLOW='\033[1;33m'
 readonly GRAY='\033[0;90m'
 readonly NC='\033[0m'
 
 readonly TIMEOUT=2
+
+# Self-update configuration
+readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/utils"
+DOWNLOAD_CMD=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 
 # Service definitions: "DisplayName:server_binary:port:systemd_unit"
 # - DisplayName: Human-readable name (used for output and argument matching)
@@ -42,6 +51,191 @@ readonly SERVICES=(
 )
 
 # ============================================================================
+# Standard Output Functions
+# ============================================================================
+
+print_info() {
+    echo -e "${BLUE}[ INFO    ]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[ SUCCESS ]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[ WARNING ]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ ERROR   ]${NC} $1"
+}
+
+# Usage: print_warning_box "line1" "line2" "line3" ...
+print_warning_box() {
+    local box_width=77
+    local padding=8
+    local content_width=$((box_width - padding - 1))
+
+    echo ""
+    echo -e "            ${YELLOW}╔$(printf '═%.0s' $(seq 1 $box_width))╗${NC}"
+    echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
+
+    for line in "$@"; do
+        local line_len=${#line}
+        local right_pad=$((content_width - line_len))
+        if [[ $right_pad -lt 0 ]]; then
+            right_pad=0
+            line="${line:0:$content_width}"
+        fi
+        printf -v padded_line "%-${content_width}s" "$line"
+        echo -e "            ${YELLOW}║        ${padded_line}║${NC}"
+    done
+
+    echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
+    echo -e "            ${YELLOW}╚$(printf '═%.0s' $(seq 1 $box_width))╝${NC}"
+    echo ""
+}
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
+# Prompt user for yes/no confirmation
+# Usage: prompt_yes_no "message" [default]
+#   default: "y" or "n" (optional, defaults to "n")
+# Returns: 0 for yes, 1 for no
+prompt_yes_no() {
+    local prompt_message="$1"
+    local default="${2:-n}"
+    local prompt_suffix
+    local user_reply
+
+    if [[ "${default,,}" == "y" ]]; then
+        prompt_suffix="(Y/n)"
+    else
+        prompt_suffix="(y/N)"
+    fi
+
+    read -p "$prompt_message $prompt_suffix: " -r user_reply </dev/tty
+
+    if [[ -z "$user_reply" ]]; then
+        [[ "${default,,}" == "y" ]]
+    else
+        [[ $user_reply =~ ^[Yy]$ ]]
+    fi
+}
+
+TEMP_FILES=()
+
+make_temp_file() {
+    local tmp
+    tmp=$(mktemp)
+    TEMP_FILES+=("$tmp")
+    echo "$tmp"
+}
+
+# ============================================================================
+# Self-Update Functionality
+# ============================================================================
+
+detect_download_cmd() {
+    if command -v curl &>/dev/null; then
+        DOWNLOAD_CMD="curl"
+        return 0
+    elif command -v wget &>/dev/null; then
+        DOWNLOAD_CMD="wget"
+        return 0
+    else
+        DOWNLOAD_CMD=""
+        print_warning_box \
+            "UPDATES NOT AVAILABLE" \
+            "" \
+            "Neither 'curl' nor 'wget' is installed on this system." \
+            "Self-updating functionality requires one of these tools."
+        return 1
+    fi
+}
+
+download_script() {
+    local script_file="$1"
+    local output_file="$2"
+    local http_status=""
+
+    print_info "Fetching ${script_file}..."
+    print_info "  → ${REMOTE_BASE}/${script_file}"
+
+    if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
+        http_status=$(curl -H 'Cache-Control: no-cache, no-store' -o "${output_file}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${script_file}" 2>/dev/null || echo "000")
+        if [[ "$http_status" == "200" ]]; then
+            if head -n 10 "${output_file}" | grep -q "^#!/"; then
+                return 0
+            else
+                print_error "✖ Invalid content received (not a script)"
+                return 1
+            fi
+        elif [[ "$http_status" == "429" ]]; then
+            print_error "✖ Rate limited by GitHub (HTTP 429)"
+            return 1
+        elif [[ "$http_status" != "000" ]]; then
+            print_error "✖ HTTP ${http_status} error"
+            return 1
+        else
+            print_error "✖ Download failed"
+            return 1
+        fi
+    elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
+        if wget --no-cache --no-cookies -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null; then
+            if head -n 10 "${output_file}" | grep -q "^#!/"; then
+                return 0
+            else
+                print_error "✖ Invalid content received (not a script)"
+                return 1
+            fi
+        else
+            print_error "✖ Download failed"
+            return 1
+        fi
+    fi
+
+    return 1
+}
+
+self_update() {
+    local SCRIPT_FILE="services-check.sh"
+    local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
+    local TEMP_SCRIPT_FILE
+    TEMP_SCRIPT_FILE="$(make_temp_file)"
+
+    if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
+        return 1
+    fi
+
+    if diff -q "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
+        print_success "- Script is already up-to-date"
+        return 0
+    fi
+
+    echo ""
+    echo -e "${CYAN}╭────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
+    diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" || true
+    echo -e "${CYAN}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
+    echo ""
+
+    if prompt_yes_no "→ Overwrite and restart with updated ${SCRIPT_FILE}?" "y"; then
+        chmod +x "${TEMP_SCRIPT_FILE}"
+        mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"
+        print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
+        echo ""
+        export scriptUpdated=1
+        exec "${LOCAL_SCRIPT}" "$@"
+        exit 0
+    else
+        print_warning "⚠ Skipped update - continuing with local version"
+    fi
+    echo ""
+}
+
+# ============================================================================
 # Port Check Functions
 # ============================================================================
 
@@ -53,7 +247,7 @@ detect_port_checker() {
     elif command -v timeout &>/dev/null; then
         PORT_CHECK_CMD="tcp"
     else
-        echo -e "${RED}Error: Neither 'nc' (netcat) nor 'timeout' found.${NC}" >&2
+        print_error "✖ Neither 'nc' (netcat) nor 'timeout' found"
         echo "Install netcat (sudo apt install netcat-openbsd) or coreutils (sudo apt install coreutils)" >&2
         exit 1
     fi
@@ -253,6 +447,7 @@ watch_services() {
 }
 
 main() {
+    local original_args=("$@")
     local watch_mode=false
     local watch_interval=10
     local filters=()
@@ -276,6 +471,20 @@ main() {
 
     # Enforce minimum watch interval to prevent busy loops
     [[ "$watch_interval" -lt 1 ]] && watch_interval=1
+
+    # Temp file cleanup
+    cleanup() {
+        for f in "${TEMP_FILES[@]+"${TEMP_FILES[@]}"}"; do
+            rm -f "$f" 2>/dev/null
+        done
+    }
+    trap cleanup EXIT
+
+    # Self-update check (skip in watch mode for faster startup)
+    if [[ "$watch_mode" == false ]] && detect_download_cmd && [[ ${scriptUpdated:-0} -eq 0 ]]; then
+        self_update "${original_args[@]}" || true
+        echo ""
+    fi
 
     detect_port_checker
     detect_systemctl
