@@ -79,10 +79,23 @@ ensure_kernel_config() {
     return 1
 }
 
+# Ensure /dev/kmsg exists in the container
+# kubelet's OOM watcher requires /dev/kmsg; LXC containers lack it by default
+ensure_dev_kmsg() {
+    if [[ -e /dev/kmsg ]]; then
+        print_success "- /dev/kmsg already exists"
+        return 0
+    fi
+
+    ln -s /dev/console /dev/kmsg
+    print_success "✓ Created /dev/kmsg symlink to /dev/console"
+}
+
 # Generate kubeadm config file for cluster initialization
 # Args: pod_cidr, config_path
-# When running in a container, includes KubeletConfiguration with failSwapOn: false
-# because /proc/swaps reflects the host's swap and cannot be disabled from inside
+# When running in a container, includes KubeletConfiguration with:
+#   failSwapOn: false — /proc/swaps reflects host swap, cannot be disabled from inside
+#   KubeletInUserNamespace: true — tolerates read-only /proc/sys and missing /dev/kmsg
 generate_kubeadm_config() {
     local pod_cidr="$1"
     local config_path="$2"
@@ -105,8 +118,10 @@ EOF
 apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration
 failSwapOn: false
+featureGates:
+  KubeletInUserNamespace: true
 EOF
-        print_info "Container detected — kubeadm config includes failSwapOn: false"
+        print_info "Container detected — kubeadm config includes failSwapOn: false, KubeletInUserNamespace: true"
     fi
 
     print_success "✓ Generated kubeadm config at ${config_path}"
@@ -129,9 +144,10 @@ initialize_control_plane() {
         fi
     fi
 
-    # In containers, verify kernel config is accessible for kubeadm preflight
+    # In containers, verify kernel config and /dev/kmsg are accessible
     if [[ "${RUNNING_IN_CONTAINER:-false}" == true ]]; then
         ensure_kernel_config || return 1
+        ensure_dev_kmsg || return 1
     fi
 
     local pod_cidr
