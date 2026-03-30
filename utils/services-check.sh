@@ -41,8 +41,40 @@ readonly SERVICES=(
     "Valkey:valkey-server:6379:valkey-server"
 )
 
+# ============================================================================
+# Port Check Functions
+# ============================================================================
+
+PORT_CHECK_CMD=""
+
+detect_port_checker() {
+    if command -v nc &>/dev/null; then
+        PORT_CHECK_CMD="nc"
+    elif command -v timeout &>/dev/null; then
+        PORT_CHECK_CMD="tcp"
+    else
+        echo -e "${RED}Error: Neither 'nc' (netcat) nor 'timeout' found.${NC}" >&2
+        echo "Install netcat: sudo apt install netcat-openbsd" >&2
+        exit 1
+    fi
+}
+
+check_port() {
+    local port="$1"
+    if [[ "$PORT_CHECK_CMD" == "nc" ]]; then
+        nc -z -w "$TIMEOUT" localhost "$port" &>/dev/null
+    else
+        timeout "$TIMEOUT" bash -c "echo >/dev/tcp/localhost/$port" &>/dev/null
+    fi
+}
+
 main() {
-    echo "services-check.sh - not yet implemented"
+    detect_port_checker
+    if check_port 22; then
+        echo -e "${GREEN}Port 22 is open${NC}"
+    else
+        echo -e "${RED}Port 22 is closed${NC}"
+    fi
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
