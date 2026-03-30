@@ -137,7 +137,27 @@ print_service_not_installed() {
     printf "${GRAY}- %-${pad}s (not installed)${NC}\n" "$name"
 }
 
+# ============================================================================
+# Filter Functions
+# ============================================================================
+
+# Case-insensitive check if a name matches any filter
+matches_filter() {
+    local name="$1"
+    shift
+    local filters=("$@")
+    local name_lower="${name,,}"
+    for filter in "${filters[@]}"; do
+        [[ "${filter,,}" == "$name_lower" ]] && return 0
+    done
+    return 1
+}
+
 main() {
+    local filters=("$@")
+    local has_filters=false
+    [[ ${#filters[@]} -gt 0 ]] && has_filters=true
+
     detect_port_checker
     detect_systemctl
 
@@ -154,7 +174,17 @@ main() {
     for entry in "${SERVICES[@]}"; do
         IFS=':' read -r name binary port unit <<< "$entry"
 
+        # Apply filter if arguments were provided
+        if [[ "$has_filters" == true ]]; then
+            if ! matches_filter "$name" "${filters[@]}"; then
+                continue
+            fi
+        fi
+
         if ! is_installed "$binary" "$unit"; then
+            if [[ "$has_filters" == true ]]; then
+                print_service_not_installed "$name" "$max_len"
+            fi
             continue
         fi
 
@@ -171,6 +201,23 @@ main() {
             print_service_down "$name" "$port" "$max_len" "$status"
         fi
     done
+
+    # Warn about unrecognized filter names
+    if [[ "$has_filters" == true ]]; then
+        local all_names=()
+        for entry in "${SERVICES[@]}"; do
+            all_names+=("${entry%%:*}")
+        done
+        for filter in "${filters[@]}"; do
+            local recognized=false
+            for svc_name in "${all_names[@]}"; do
+                [[ "${svc_name,,}" == "${filter,,}" ]] && recognized=true && break
+            done
+            if [[ "$recognized" == false ]]; then
+                echo -e "${RED}Unknown service: ${filter}${NC}" >&2
+            fi
+        done
+    fi
 
     if [[ $total -eq 0 ]]; then
         echo "No installed services found"
