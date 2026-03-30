@@ -252,6 +252,27 @@ systemctl --user stop lxc-bg-start@mycontainer.service
 systemctl --user status lxc-bg-start@mycontainer.service
 ```
 
+### Cgroup Delegation for Kubernetes
+
+Kubernetes requires cgroup controllers (`cpuset`, `cpu`, `io`, `memory`, `pids`) delegated to the container. This uses a two-layer delegation model:
+
+1. **System level** — `/etc/systemd/system/user@.service.d/delegate.conf` makes controllers available to user sessions
+2. **Per-container** — `start-lxc.sh --delegate` creates a per-service drop-in that delegates controllers to the container
+
+Both layers are required. Without the system-level drop-in, `cpuset` and `io` are not available in user sessions and cannot be delegated further.
+
+`setup-lxc.sh` prompts to create the system-level drop-in automatically. A reboot is required after configuration for the controllers to become available (lingering keeps `user@.service` running across relogins).
+
+**Verify available controllers:**
+```bash
+cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/cgroup.controllers
+# Expected: cpuset cpu io memory pids
+```
+
+**Notes:**
+- `--delegate` and `--delegate-once` work for containers of any name
+- Containers with `k8s` in their name receive automatic warnings if delegation is missing
+
 ### Network Modes
 
 | Bridge | Mode | Description |

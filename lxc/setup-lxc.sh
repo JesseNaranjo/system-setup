@@ -11,6 +11,7 @@
 # - Adding veth interface permissions to /etc/lxc/lxc-usernet
 # - Configuring subuid/subgid mappings in /etc/subuid and /etc/subgid
 # - Enabling user namespaces (kernel.unprivileged_userns_clone)
+# - Configuring system-level cgroup delegation for Kubernetes containers
 # - Creating user's default LXC configuration (~/.config/lxc/default.conf)
 # - Setting up systemd user service for LXC container auto-start
 # - Enabling systemd lingering for the user
@@ -32,6 +33,7 @@ readonly BLUE='\033[0;34m'
 readonly GRAY='\033[0;90m'
 readonly GREEN='\033[0;32m'
 readonly RED='\033[0;31m'
+readonly BOLD_RED='\033[1;31m'
 readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m' # No Color
 
@@ -391,6 +393,43 @@ else
 fi
 echo ""
 
+# Configure system-level cgroup delegation for user services
+# This enables cpuset/io controllers for containers (required for Kubernetes)
+DELEGATE_DROPIN="/etc/systemd/system/user@.service.d/delegate.conf"
+DELEGATE_CONTENT="[Service]
+Delegate=cpuset cpu io memory pids"
+
+print_info "Checking system-level cgroup delegation..."
+if [[ -f "$DELEGATE_DROPIN" ]] && [[ "$(<"$DELEGATE_DROPIN")" == "$DELEGATE_CONTENT" ]]; then
+    print_success "- System-level cgroup delegation already configured"
+else
+    print_info "- Cgroup delegation enables cpuset/io controllers for user services"
+    print_info "- Required for Kubernetes containers to pass cgroup preflight checks"
+    echo ""
+
+    if prompt_yes_no "Configure system-level cgroup delegation?" "y"; then
+        backup_file "$DELEGATE_DROPIN"
+        mkdir -p "$(dirname "$DELEGATE_DROPIN")"
+        echo "$DELEGATE_CONTENT" > "$DELEGATE_DROPIN"
+        chmod 644 "$DELEGATE_DROPIN"
+        chown root:root "$DELEGATE_DROPIN"
+        systemctl daemon-reload
+        print_success "✓ System-level cgroup delegation configured"
+        echo ""
+
+        echo -e "${BOLD_RED}A reboot is required for cgroup controllers to become available.${NC}"
+        if prompt_yes_no "Reboot now?" "n"; then
+            print_info "Rebooting..."
+            reboot
+        else
+            print_warning "⚠ Delegation will not take effect until next reboot"
+        fi
+    else
+        print_info "Skipped system-level cgroup delegation"
+    fi
+fi
+echo ""
+
 # ============================================================================
 # User Configuration
 # ============================================================================
@@ -503,6 +542,9 @@ echo "  - Subuid/Subgid:     $ID_NO-$((ID_NO + 65535))"
 echo "  - Network Bridge:    $BRIDGE_LINK"
 echo "  - LXC Config:        $LIMITED_USER_CONFIG_LXC/default.conf"
 echo "  - Systemd Service:   $LIMITED_USER_CONFIG_SYSTEMD_USER/lxc-bg-start@.service"
+if [[ -f "$DELEGATE_DROPIN" ]]; then
+    echo "  - Cgroup Delegation: $DELEGATE_DROPIN"
+fi
 echo ""
 echo "Next Steps:"
 echo "  1. Switch to the user: su - $LIMITED_USER"

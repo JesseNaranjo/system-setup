@@ -71,6 +71,29 @@ has_delegation() {
     systemctl --user show "$service" -p Delegate 2>/dev/null | grep -qP "^Delegate=.*cpuset.*"
 }
 
+# Check if the user session has all required cgroup controllers available
+# Warns if system-level delegation is missing (non-fatal)
+# Returns: 0 always (warning only)
+check_session_controllers() {
+    local cgroup_file="/sys/fs/cgroup/user.slice/user-$(id -u).slice/cgroup.controllers"
+
+    [[ -f "$cgroup_file" ]] || return 0
+
+    local available
+    available="$(<"$cgroup_file")"
+    local missing=()
+    for controller in $DELEGATE_CONTROLLERS; do
+        if [[ " $available " != *" $controller "* ]]; then
+            missing+=("$controller")
+        fi
+    done
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        print_warning "⚠ Session cgroup is missing controllers: ${missing[*]}"
+        print_warning "⚠ Run setup-lxc.sh to configure system-level delegation, or reboot if recently configured"
+    fi
+}
+
 # Create a systemd drop-in to persist cgroup delegation for a container
 # Args: container_name
 install_delegation_dropin() {
@@ -96,6 +119,8 @@ check_k8s_delegation() {
     if [[ "$name" != *k8s* ]]; then
         return
     fi
+
+    check_session_controllers || true
 
     if has_delegation "$name"; then
         return
@@ -264,6 +289,7 @@ any_failed=false
 for lxcName in "${CONTAINERS[@]}"; do
     # Install persistent settings BEFORE the running check — they apply on next restart
     if [[ "$DELEGATE_MODE" == "persist" ]]; then
+        check_session_controllers || true
         if ! has_delegation "$lxcName"; then
             install_delegation_dropin "$lxcName"
         else
@@ -291,6 +317,7 @@ for lxcName in "${CONTAINERS[@]}"; do
     if [[ "$DELEGATE_MODE" == "once" || "$SWAP_MODE" == "once" ]]; then
         # systemd-run bypasses the service, so include ALL desired properties
         # (both persisted and one-time) for this start
+        [[ "$DELEGATE_MODE" == "once" ]] && { check_session_controllers || true; }
         run_props=()
         [[ -n "$DELEGATE_MODE" ]] && run_props+=(-p "Delegate=${DELEGATE_CONTROLLERS}")
         [[ -n "$SWAP_MODE" ]] && run_props+=(-p "MemorySwapMax=0")
