@@ -108,16 +108,79 @@ is_installed() {
     return 1
 }
 
+# ============================================================================
+# Output Functions
+# ============================================================================
+
+print_service_up() {
+    local name="$1"
+    local port="$2"
+    local pad="$3"
+    printf "${GREEN}✓ %-${pad}s :${port}${NC}\n" "$name"
+}
+
+print_service_down() {
+    local name="$1"
+    local port="$2"
+    local pad="$3"
+    local status="$4"
+    if [[ -n "$status" ]]; then
+        printf "${RED}✗ %-${pad}s :${port} (${status})${NC}\n" "$name"
+    else
+        printf "${RED}✗ %-${pad}s :${port}${NC}\n" "$name"
+    fi
+}
+
+print_service_not_installed() {
+    local name="$1"
+    local pad="$2"
+    printf "${GRAY}- %-${pad}s (not installed)${NC}\n" "$name"
+}
+
 main() {
     detect_port_checker
     detect_systemctl
 
+    # Calculate column width from all service names
+    local max_len=0
+    for entry in "${SERVICES[@]}"; do
+        local name="${entry%%:*}"
+        [[ ${#name} -gt $max_len ]] && max_len=${#name}
+    done
+
+    local total=0
+    local up=0
+
     for entry in "${SERVICES[@]}"; do
         IFS=':' read -r name binary port unit <<< "$entry"
-        if is_installed "$binary" "$unit"; then
-            echo "Installed: $name ($binary / $unit)"
+
+        if ! is_installed "$binary" "$unit"; then
+            continue
+        fi
+
+        (( total += 1 ))
+
+        if check_port "$port"; then
+            print_service_up "$name" "$port" "$max_len"
+            (( up += 1 ))
+        else
+            local status=""
+            if [[ "$HAS_SYSTEMCTL" == true ]] && systemd_unit_exists "$unit"; then
+                status=$(systemd_active_state "$unit" || true)
+            fi
+            print_service_down "$name" "$port" "$max_len" "$status"
         fi
     done
+
+    if [[ $total -eq 0 ]]; then
+        echo "No installed services found"
+        return 0
+    fi
+
+    echo ""
+    echo "${up}/${total} services available"
+
+    [[ $up -eq $total ]]
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
