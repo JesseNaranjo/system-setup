@@ -282,7 +282,7 @@ update_mtu() {
 
     # Low MTU fixes git timeouts caused by packet fragmentation in container networks
     print_info "Setting eth0 MTU from ${current_mtu} to ${target_mtu}..."
-    sudo ip link set dev eth0 mtu "$target_mtu"
+    sudo /usr/bin/ip link set dev eth0 mtu "$target_mtu"
     print_success "✓ MTU set to ${target_mtu}"
 }
 
