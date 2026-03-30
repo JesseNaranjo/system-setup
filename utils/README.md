@@ -9,6 +9,7 @@ Cross-platform utility scripts for system maintenance, file synchronization, and
 | `tools-update.sh` | Linux | Updates developer tools (nvm/Node.js, .NET, Claude CLI/plugins) and fixes container MTU |
 | `rsync-two-way.sh` | Linux/macOS | Two-way file synchronization using rsync |
 | `monitor-battery.sh` | Linux | Monitors battery percentage at regular intervals |
+| `services-check.sh` | Linux/macOS | Checks local service availability (installation + port health) |
 | `disable-kvm-module.sh` | Linux | Disables the KVM kernel module |
 | `reset-macOS-display-settings.sh` | macOS | Resets macOS display configuration |
 | `compare-directories.ps1` | Windows | Compares two directory trees using PowerShell |
@@ -20,6 +21,18 @@ Cross-platform utility scripts for system maintenance, file synchronization, and
 ```bash
 # Update developer tools (run from any directory)
 ./tools-update.sh
+
+# Check all installed services
+./services-check.sh
+
+# Check specific services
+./services-check.sh redis postgresql grafana
+
+# Watch mode (refreshes every 10 seconds by default)
+./services-check.sh --watch
+
+# Watch specific services every 5 seconds
+./services-check.sh --watch 5 redis postgresql
 ```
 
 ## Adding New Scripts
