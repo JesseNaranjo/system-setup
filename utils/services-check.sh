@@ -54,7 +54,7 @@ detect_port_checker() {
         PORT_CHECK_CMD="tcp"
     else
         echo -e "${RED}Error: Neither 'nc' (netcat) nor 'timeout' found.${NC}" >&2
-        echo "Install netcat: sudo apt install netcat-openbsd" >&2
+        echo "Install netcat (sudo apt install netcat-openbsd) or coreutils (sudo apt install coreutils)" >&2
         exit 1
     fi
 }
@@ -165,8 +165,9 @@ run_checks() {
 
     # Calculate column width from all service names
     local max_len=0
+    local entry name binary port unit
     for entry in "${SERVICES[@]}"; do
-        local name="${entry%%:*}"
+        name="${entry%%:*}"
         [[ ${#name} -gt $max_len ]] && max_len=${#name}
     done
 
@@ -219,14 +220,18 @@ validate_filters() {
     [[ $# -eq 0 ]] && return 0
 
     local all_names=()
+    local entry
+    local has_unknown=false
     for entry in "${SERVICES[@]}"; do
         all_names+=("${entry%%:*}")
     done
     for filter in "$@"; do
         if ! matches_filter "$filter" "${all_names[@]}"; then
             echo -e "${RED}Unknown service: ${filter}${NC}" >&2
+            has_unknown=true
         fi
     done
+    [[ "$has_unknown" == false ]]
 }
 
 watch_services() {
@@ -234,7 +239,7 @@ watch_services() {
     shift
     local filters=("$@")
 
-    trap 'echo ""; exit 0' INT
+    trap 'echo ""; exit 0' INT TERM
 
     while true; do
         clear
