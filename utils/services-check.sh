@@ -153,13 +153,14 @@ matches_filter() {
     return 1
 }
 
-main() {
+# ============================================================================
+# Core Check Logic
+# ============================================================================
+
+run_checks() {
     local filters=("$@")
     local has_filters=false
     [[ ${#filters[@]} -gt 0 ]] && has_filters=true
-
-    detect_port_checker
-    detect_systemctl
 
     # Calculate column width from all service names
     local max_len=0
@@ -202,23 +203,6 @@ main() {
         fi
     done
 
-    # Warn about unrecognized filter names
-    if [[ "$has_filters" == true ]]; then
-        local all_names=()
-        for entry in "${SERVICES[@]}"; do
-            all_names+=("${entry%%:*}")
-        done
-        for filter in "${filters[@]}"; do
-            local recognized=false
-            for svc_name in "${all_names[@]}"; do
-                [[ "${svc_name,,}" == "${filter,,}" ]] && recognized=true && break
-            done
-            if [[ "$recognized" == false ]]; then
-                echo -e "${RED}Unknown service: ${filter}${NC}" >&2
-            fi
-        done
-    fi
-
     if [[ $total -eq 0 ]]; then
         echo "No installed services found"
         return 0
@@ -228,6 +212,74 @@ main() {
     echo "${up}/${total} services available"
 
     [[ $up -eq $total ]]
+}
+
+validate_filters() {
+    [[ $# -eq 0 ]] && return 0
+
+    local all_names=()
+    for entry in "${SERVICES[@]}"; do
+        all_names+=("${entry%%:*}")
+    done
+    for filter in "$@"; do
+        if ! matches_filter "$filter" "${all_names[@]}"; then
+            echo -e "${RED}Unknown service: ${filter}${NC}" >&2
+        fi
+    done
+}
+
+watch_services() {
+    local interval="$1"
+    shift
+    local filters=("$@")
+
+    trap 'echo ""; exit 0' INT
+
+    while true; do
+        clear
+        echo "Services ($(date '+%Y-%m-%d %H:%M:%S'))"
+        echo ""
+        run_checks "${filters[@]}" || true
+        echo ""
+        echo -e "${GRAY}[Watching every ${interval}s - Ctrl+C to stop]${NC}"
+        sleep "$interval"
+    done
+}
+
+main() {
+    local watch_mode=false
+    local watch_interval=10
+    local filters=()
+
+    # Parse arguments: --watch [seconds] [service ...]
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --watch)
+                watch_mode=true
+                if [[ $# -gt 1 ]] && [[ "$2" =~ ^[0-9]+$ ]]; then
+                    watch_interval="$2"
+                    shift
+                fi
+                ;;
+            *)
+                filters+=("$1")
+                ;;
+        esac
+        shift
+    done
+
+    # Enforce minimum watch interval to prevent busy loops
+    [[ "$watch_interval" -lt 1 ]] && watch_interval=1
+
+    detect_port_checker
+    detect_systemctl
+    validate_filters "${filters[@]}"
+
+    if [[ "$watch_mode" == true ]]; then
+        watch_services "$watch_interval" "${filters[@]}"
+    else
+        run_checks "${filters[@]}"
+    fi
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
