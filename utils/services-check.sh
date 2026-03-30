@@ -147,8 +147,9 @@ matches_filter() {
     shift
     local filters=("$@")
     local name_lower="${name,,}"
-    for filter in "${filters[@]}"; do
-        [[ "${filter,,}" == "$name_lower" ]] && return 0
+    local f
+    for f in "${filters[@]}"; do
+        [[ "${f,,}" == "$name_lower" ]] && return 0
     done
     return 1
 }
