@@ -30,10 +30,10 @@ set -euo pipefail
 
 # Colors for output
 readonly BLUE='\033[0;34m'
+readonly BOLD_RED='\033[1;31m'
 readonly GRAY='\033[0;90m'
 readonly GREEN='\033[0;32m'
 readonly RED='\033[0;31m'
-readonly BOLD_RED='\033[1;31m'
 readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m' # No Color
 
