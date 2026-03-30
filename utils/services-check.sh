@@ -68,13 +68,56 @@ check_port() {
     fi
 }
 
+# ============================================================================
+# systemd Functions
+# ============================================================================
+
+HAS_SYSTEMCTL=false
+
+detect_systemctl() {
+    if command -v systemctl &>/dev/null; then
+        HAS_SYSTEMCTL=true
+    fi
+}
+
+# Check if a systemd unit exists (is known to systemd)
+systemd_unit_exists() {
+    local unit="$1"
+    [[ "$HAS_SYSTEMCTL" == true ]] || return 1
+    local load_state
+    load_state=$(systemctl show "${unit}.service" --property=LoadState --value 2>/dev/null)
+    [[ "$load_state" == "loaded" ]]
+}
+
+# Get the active state of a systemd unit (active, inactive, failed, etc.)
+systemd_active_state() {
+    local unit="$1"
+    [[ "$HAS_SYSTEMCTL" == true ]] || return 1
+    systemctl is-active "${unit}.service" 2>/dev/null
+}
+
+# ============================================================================
+# Service Detection
+# ============================================================================
+
+is_installed() {
+    local binary="$1"
+    local unit="$2"
+    command -v "$binary" &>/dev/null && return 0
+    systemd_unit_exists "$unit" && return 0
+    return 1
+}
+
 main() {
     detect_port_checker
-    if check_port 22; then
-        echo -e "${GREEN}Port 22 is open${NC}"
-    else
-        echo -e "${RED}Port 22 is closed${NC}"
-    fi
+    detect_systemctl
+
+    for entry in "${SERVICES[@]}"; do
+        IFS=':' read -r name binary port unit <<< "$entry"
+        if is_installed "$binary" "$unit"; then
+            echo "Installed: $name ($binary / $unit)"
+        fi
+    done
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
