@@ -107,7 +107,7 @@ Apply the DRY principle when code duplication creates maintenance risk. Extract 
    ```bash
    # Container detection - rules may change as new container types emerge
    detect_container() {
-       [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ && return 0
+       [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ 2>/dev/null && return 0
        [[ -f /.dockerenv ]] && return 0
        [[ -f /run/systemd/container ]] && return 0
        grep -q lxc /proc/1/cgroup 2>/dev/null && return 0
@@ -1573,7 +1573,7 @@ detect_os() {
 # Sets RUNNING_IN_CONTAINER global variable
 detect_container() {
     # Check for LXC container via environment variable
-    if [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ; then
+    if [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ 2>/dev/null; then
         RUNNING_IN_CONTAINER=true
         return
     fi

@@ -104,7 +104,7 @@ RUNNING_IN_CONTAINER=false
 
 detect_container() {
     # Check for LXC container via environment variable
-    if [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ; then
+    if [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ 2>/dev/null; then
         RUNNING_IN_CONTAINER=true
         return
     fi
