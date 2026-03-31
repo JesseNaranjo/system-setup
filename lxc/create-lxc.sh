@@ -2,16 +2,21 @@
 
 # create-lxc.sh - Create an LXC container (with optional destroy/recreate)
 #
-# Usage: ./create-lxc.sh <container_name> [distribution] [release] [architecture]
+# Usage: ./create-lxc.sh [--privileged] <container_name> [distribution] [release] [architecture]
 #
 # This script creates an LXC container. If a container with the same name
 # already exists, it prompts for confirmation before stopping, destroying,
 # and recreating it. Optional parameters (distribution, release, architecture)
-# will be auto-detected from the host system if not provided.
+# will be auto-detected from the host system if not provided. If auto-detection
+# fails, the lxc-create download template will prompt interactively.
+#
+# Options:
+#   --privileged  Create a privileged container (requires root)
 #
 # Examples:
 #   ./create-lxc.sh mycontainer
 #   ./create-lxc.sh mycontainer debian bookworm amd64
+#   ./create-lxc.sh --privileged mycontainer
 
 set -euo pipefail
 
@@ -68,10 +73,8 @@ prompt_yes_no() {
 # Input Validation
 # ============================================================================
 
-if [[ $# -eq 0 || -z ${1-} ]]; then
-    print_error "✖ Missing required container name argument"
-    echo ""
-    echo "Usage: ${0##*/} <container_name> [distribution] [release] [architecture]"
+show_usage() {
+    echo "Usage: ${0##*/} [--privileged] <container_name> [distribution] [release] [architecture]"
     echo ""
     echo "Arguments:"
     echo "  container_name  - Name of container to refresh (required)"
@@ -79,23 +82,70 @@ if [[ $# -eq 0 || -z ${1-} ]]; then
     echo "  release         - Distribution release (optional, auto-detected if omitted)"
     echo "  architecture    - System architecture (optional, auto-detected if omitted)"
     echo ""
+    echo "Options:"
+    echo "  --privileged    - Create a privileged container (requires root)"
+    echo ""
     echo "Examples:"
     echo "  ${0##*/} mycontainer"
     echo "  ${0##*/} mycontainer debian bookworm amd64"
+    echo "  ${0##*/} --privileged mycontainer"
     echo ""
     echo "If a container with the same name already exists, you will be"
     echo "prompted for confirmation before it is destroyed and recreated."
-    exit 64  # 64 - EX_USAGE (sysexits.h)
-fi
+}
 
 # ============================================================================
 # Main Script
 # ============================================================================
 
-CONTAINER_NAME="$1"
-DISTRIBUTION="${2:-}"
-RELEASE="${3:-}"
-ARCHITECTURE="${4:-}"
+PRIVILEGED=false
+CONTAINER_NAME=""
+DISTRIBUTION=""
+RELEASE=""
+ARCHITECTURE=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --privileged)
+            PRIVILEGED=true
+            shift
+            ;;
+        --help|-h)
+            show_usage
+            exit 0
+            ;;
+        -*)
+            print_error "✖ Unknown option: $1"
+            show_usage
+            exit 64  # EX_USAGE
+            ;;
+        *)
+            if [[ -z "$CONTAINER_NAME" ]]; then
+                CONTAINER_NAME="$1"
+            elif [[ -z "$DISTRIBUTION" ]]; then
+                DISTRIBUTION="$1"
+            elif [[ -z "$RELEASE" ]]; then
+                RELEASE="$1"
+            elif [[ -z "$ARCHITECTURE" ]]; then
+                ARCHITECTURE="$1"
+            fi
+            shift
+            ;;
+    esac
+done
+
+if [[ -z "$CONTAINER_NAME" ]]; then
+    print_error "✖ Missing required container name argument"
+    echo ""
+    show_usage
+    exit 64  # EX_USAGE
+fi
+
+# Privileged mode requires root
+if [[ "$PRIVILEGED" == true && $EUID != 0 ]]; then
+    print_error "✖ --privileged requires root."
+    exit 1
+fi
 
 # Detect distribution if not specified
 if [[ -z "$DISTRIBUTION" ]]; then
@@ -104,8 +154,7 @@ if [[ -z "$DISTRIBUTION" ]]; then
         DISTRIBUTION=$(grep "^ID=" /etc/os-release | cut -d= -f2 | tr -d '"')
         print_info "Detected distribution: $DISTRIBUTION"
     else
-        print_error "✖ Could not detect distribution. Please specify it manually."
-        exit 1
+        print_warning "⚠ Could not detect distribution — download template will prompt"
     fi
 fi
 
@@ -117,10 +166,13 @@ if [[ -z "$RELEASE" ]]; then
         if [[ -z "$RELEASE" ]]; then
             RELEASE=$(grep "^VERSION_ID=" /etc/os-release | cut -d= -f2 | tr -d '"')
         fi
-        print_info "Detected release: $RELEASE"
+        if [[ -n "$RELEASE" ]]; then
+            print_info "Detected release: $RELEASE"
+        else
+            print_warning "⚠ Could not detect release — download template will prompt"
+        fi
     else
-        print_error "✖ Could not detect release. Please specify it manually."
-        exit 1
+        print_warning "⚠ Could not detect release — download template will prompt"
     fi
 fi
 
@@ -144,9 +196,10 @@ fi
 
 echo ""
 print_info "Refreshing container: $CONTAINER_NAME"
-echo "            Distribution: $DISTRIBUTION"
-echo "            Release: $RELEASE"
-echo "            Architecture: $ARCHITECTURE"
+echo "            Distribution: ${DISTRIBUTION:-<will prompt>}"
+echo "            Release: ${RELEASE:-<will prompt>}"
+echo "            Architecture: ${ARCHITECTURE:-<will prompt>}"
+[[ "$PRIVILEGED" == true ]] && echo "            Mode: privileged"
 echo ""
 
 # Get the directory where this script is located
@@ -178,12 +231,18 @@ if [[ "$CONTAINER_EXISTS" == true ]]; then
     # Step: Stop the container
     ((CURRENT_STEP++)) || true
     print_info "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Stopping container..."
+    PRIV_FLAG=()
+    [[ "$PRIVILEGED" == true ]] && PRIV_FLAG=(--privileged)
     if [[ -f "$SCRIPT_DIR/stop-lxc.sh" ]]; then
-        "$SCRIPT_DIR/stop-lxc.sh" "$CONTAINER_NAME"
+        "$SCRIPT_DIR/stop-lxc.sh" ${PRIV_FLAG[@]+"${PRIV_FLAG[@]}"} "$CONTAINER_NAME"
     else
         print_warning "⚠ stop-lxc.sh not found, attempting to stop manually..."
         lxc-stop --name "$CONTAINER_NAME" || true
-        systemctl --user stop "lxc-bg-start@${CONTAINER_NAME}.service" 2>/dev/null || true
+        if [[ "$PRIVILEGED" == true ]]; then
+            systemctl stop "lxc-priv-bg-start@${CONTAINER_NAME}.service" 2>/dev/null || true
+        else
+            systemctl --user stop "lxc-bg-start@${CONTAINER_NAME}.service" 2>/dev/null || true
+        fi
     fi
     echo ""
 
@@ -202,14 +261,19 @@ fi
 # Step: Create the container with specified parameters
 ((CURRENT_STEP++)) || true
 print_info "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Creating container with:"
-echo "            Distribution: $DISTRIBUTION"
-echo "            Release: $RELEASE"
-echo "            Architecture: $ARCHITECTURE"
-if lxc-create --name "$CONTAINER_NAME" -t download -- -d "$DISTRIBUTION" -r "$RELEASE" -a "$ARCHITECTURE"; then
+echo "            Distribution: ${DISTRIBUTION:-<will prompt>}"
+echo "            Release: ${RELEASE:-<will prompt>}"
+echo "            Architecture: ${ARCHITECTURE:-<will prompt>}"
+CREATE_FLAGS=()
+[[ -n "$DISTRIBUTION" ]] && CREATE_FLAGS+=(-d "$DISTRIBUTION")
+[[ -n "$RELEASE" ]] && CREATE_FLAGS+=(-r "$RELEASE")
+[[ -n "$ARCHITECTURE" ]] && CREATE_FLAGS+=(-a "$ARCHITECTURE")
+if lxc-create --name "$CONTAINER_NAME" -t download -- ${CREATE_FLAGS[@]+"${CREATE_FLAGS[@]}"}; then
     print_success "✓ Container created: $CONTAINER_NAME"
 
     # Offer Kubernetes container settings
     START_FLAGS=()
+    [[ "$PRIVILEGED" == true ]] && START_FLAGS+=(--privileged)
     if [[ "$CONTAINER_NAME" == *k8s* ]]; then
         echo ""
         print_info "This container name suggests Kubernetes usage."
@@ -234,17 +298,32 @@ else
         print_warning "⚠ start-lxc.sh not found — cannot apply ${START_FLAGS[*]}; configure manually"
     fi
     print_warning "⚠ start-lxc.sh not found, attempting to start manually..."
-    if systemctl --user start "lxc-bg-start@${CONTAINER_NAME}.service"; then
-        print_success "✓ Service and Container started: ${CONTAINER_NAME}"
-        echo ""
-        lxc-ls --fancy
-        echo ""
-        print_info "Attaching to ${CONTAINER_NAME} as root (use 'exit' or Ctrl+D to detach)..."
-        echo ""
-        lxc-unpriv-attach --name "$CONTAINER_NAME" --set-var HOME=/root -- /bin/bash -l
+    if [[ "$PRIVILEGED" == true ]]; then
+        if systemctl start "lxc-priv-bg-start@${CONTAINER_NAME}.service"; then
+            print_success "✓ Service and Container started: ${CONTAINER_NAME}"
+            echo ""
+            lxc-ls --fancy
+            echo ""
+            print_info "Attaching to ${CONTAINER_NAME} as root (use 'exit' or Ctrl+D to detach)..."
+            echo ""
+            lxc-attach --name "$CONTAINER_NAME" --set-var HOME=/root -- /bin/bash -l
+        else
+            print_error "✖ Failed to start container: ${CONTAINER_NAME}"
+            exit 1
+        fi
     else
-        print_error "✖ Failed to start container: ${CONTAINER_NAME}"
-        exit 1
+        if systemctl --user start "lxc-bg-start@${CONTAINER_NAME}.service"; then
+            print_success "✓ Service and Container started: ${CONTAINER_NAME}"
+            echo ""
+            lxc-ls --fancy
+            echo ""
+            print_info "Attaching to ${CONTAINER_NAME} as root (use 'exit' or Ctrl+D to detach)..."
+            echo ""
+            lxc-unpriv-attach --name "$CONTAINER_NAME" --set-var HOME=/root -- /bin/bash -l
+        else
+            print_error "✖ Failed to start container: ${CONTAINER_NAME}"
+            exit 1
+        fi
     fi
 fi
 
