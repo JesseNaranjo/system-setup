@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 
-# setup-lxc.sh - LXC unprivileged container setup for a specified user
+# setup-lxc.sh - LXC container setup (unprivileged or privileged)
 #
 # Usage: sudo ./setup-lxc.sh <username> [subuid_start:100000]
+#        sudo ./setup-lxc.sh --privileged
 #
-# This script configures unprivileged LXC containers for a specific user by:
+# Unprivileged mode (default):
 # - Checking and optionally installing bridge-utils package
 # - Checking and optionally configuring br0 bridge for direct network access
-# - Backing up /etc/lxc/default.conf
 # - Adding veth interface permissions to /etc/lxc/lxc-usernet
 # - Configuring subuid/subgid mappings in /etc/subuid and /etc/subgid
 # - Enabling user namespaces (kernel.unprivileged_userns_clone)
@@ -16,7 +16,11 @@
 # - Setting up systemd user service for LXC container auto-start
 # - Enabling systemd lingering for the user
 #
-# Network Bridge (br0):
+# Privileged mode (--privileged):
+# - Checking /etc/lxc/default.conf for veth networking
+# - Installing system-level systemd service template for LXC auto-start
+#
+# Network Bridge (br0) [unprivileged only]:
 # - If br0 is not configured, the script offers to set it up
 # - Automatically detects network interfaces and offers configuration
 # - For single interface: offers automatic setup
@@ -130,32 +134,64 @@ if [[ $EUID != 0 ]]; then
     exit 1
 fi
 
-if [[ $# -eq 0 || -z ${1-} ]]; then
-    print_error "✖ Missing required username argument"
+# Parse --privileged flag before positional arguments
+PRIVILEGED=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --privileged)
+            PRIVILEGED=true
+            shift
+            ;;
+        -*)
+            print_error "✖ Unknown option: $1"
+            echo ""
+            echo "Usage: ${0##*/} <username> [subuid_start]"
+            echo "       ${0##*/} --privileged"
+            exit 64  # EX_USAGE
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+if [[ "$PRIVILEGED" == true ]]; then
+    print_info "Configuring LXC for privileged containers (system scope)"
     echo ""
-    echo "Usage: ${0##*/} <username> [subuid_start]"
+else
+    if [[ $# -eq 0 || -z ${1-} ]]; then
+        print_error "✖ Missing required username argument"
+        echo ""
+        echo "Usage: ${0##*/} <username> [subuid_start]"
+        echo "       ${0##*/} --privileged"
+        echo ""
+        echo "Arguments:"
+        echo "  username      - Target user for LXC setup"
+        echo "  subuid_start  - Starting subuid/subgid ID (default: 100000)"
+        echo ""
+        echo "Options:"
+        echo "  --privileged  - Configure for privileged containers (no user needed)"
+        echo ""
+        echo "Example:"
+        echo "  sudo ${0##*/} myuser"
+        echo "  sudo ${0##*/} myuser 200000"
+        echo "  sudo ${0##*/} --privileged"
+        exit 64  # 64 - EX_USAGE (sysexits.h)
+    fi
+
+    LIMITED_USER=$1
+
+    if ! id -u "$LIMITED_USER" >/dev/null 2>&1; then
+        print_error "✖ User \"$LIMITED_USER\" does not exist on this system"
+        exit 67  # 67 - EX_NOUSER
+    fi
+
+    ID_NO=${2:-100000}
+
+    print_info "Configuring LXC for user: $LIMITED_USER (subuid start: $ID_NO)"
     echo ""
-    echo "Arguments:"
-    echo "  username      - Target user for LXC setup"
-    echo "  subuid_start  - Starting subuid/subgid ID (default: 100000)"
-    echo ""
-    echo "Example:"
-    echo "  sudo ${0##*/} myuser"
-    echo "  sudo ${0##*/} myuser 200000"
-    exit 64  # 64 - EX_USAGE (sysexits.h)
 fi
-
-LIMITED_USER=$1
-
-if ! id -u "$LIMITED_USER" >/dev/null 2>&1; then
-    print_error "✖ User \"$LIMITED_USER\" does not exist on this system"
-    exit 67  # 67 - EX_NOUSER
-fi
-
-ID_NO=${2:-100000}
-
-print_info "Configuring LXC for user: $LIMITED_USER (subuid start: $ID_NO)"
-echo ""
 
 # ============================================================================
 # Network Bridge Configuration
@@ -241,6 +277,8 @@ EOF
 
     echo ""
 }
+
+if [[ "$PRIVILEGED" != true ]]; then
 
 # Check and offer to setup br0 bridge
 print_info "Checking network bridge configuration..."
@@ -346,7 +384,7 @@ fi
 echo ""
 
 # Configure subuid mappings
-SUB_ENTRY="$LIMITED_USER:$ID_NO:65535"
+SUB_ENTRY="$LIMITED_USER:$ID_NO:65536"
 
 print_info "Configuring subuid mappings..."
 if grep -q "^$SUB_ENTRY" /etc/subuid 2>/dev/null; then
@@ -445,8 +483,8 @@ mkdir -p "$LIMITED_USER_CONFIG_LXC"
 
 tee "$LIMITED_USER_CONFIG_LXC/default.conf" > /dev/null <<EOF
 # ID Map must match range found in /etc/subuid and /etc/subgid for "$LIMITED_USER"
-lxc.idmap = u 0 $ID_NO 65535
-lxc.idmap = g 0 $ID_NO 65535
+lxc.idmap = u 0 $ID_NO 65536
+lxc.idmap = g 0 $ID_NO 65536
 
 # AppArmor Profile "unconfined" is necessary for networking to work (as of 2025-06-21)
 lxc.apparmor.profile = unconfined
@@ -527,27 +565,100 @@ chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_SYSTEMD"
 chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_SYSTEMD_USER"
 chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_SYSTEMD_USER/lxc-bg-start@.service"
 
+fi  # end unprivileged-only sections
+
+# ============================================================================
+# Privileged Container Configuration
+# ============================================================================
+
+if [[ "$PRIVILEGED" == true ]]; then
+
+# Check /etc/lxc/default.conf for veth networking
+print_info "Checking /etc/lxc/default.conf networking configuration..."
+if grep -q '^lxc.net.0.type.*=.*veth' /etc/lxc/default.conf 2>/dev/null; then
+    print_success "- /etc/lxc/default.conf already has veth networking"
+else
+    print_warning "⚠ /etc/lxc/default.conf has no veth networking"
+    if prompt_yes_no "Add lxcbr0 networking to /etc/lxc/default.conf?" "y"; then
+        backup_file "/etc/lxc/default.conf"
+        cat >> /etc/lxc/default.conf <<EOF
+
+lxc.net.0.name = eth0
+lxc.net.0.type = veth
+lxc.net.0.link = lxcbr0
+lxc.net.0.flags = up
+EOF
+        print_success "✓ Added veth/lxcbr0 networking to /etc/lxc/default.conf"
+    else
+        print_info "Skipped networking configuration"
+    fi
+fi
+echo ""
+
+# Install system-level systemd service template for privileged containers
+PRIV_SERVICE_PATH="/etc/systemd/system/lxc-priv-bg-start@.service"
+
+print_info "Creating system-level systemd service for privileged LXC auto-start..."
+print_info "- Location: $PRIV_SERVICE_PATH"
+
+tee "$PRIV_SERVICE_PATH" > /dev/null <<EOF
+[Unit]
+Description=LXC Container %i
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/lxc-start -n %i
+ExecStop=/usr/bin/lxc-stop -n %i
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+chmod 644 "$PRIV_SERVICE_PATH"
+chown root:root "$PRIV_SERVICE_PATH"
+systemctl daemon-reload
+print_success "✓ Created systemd service template"
+echo ""
+
+fi  # end privileged-only sections
+
 # ============================================================================
 # Summary
 # ============================================================================
 
 echo ""
 echo "========================================================================"
-print_success "LXC configuration completed successfully for user: $LIMITED_USER"
+if [[ "$PRIVILEGED" == true ]]; then
+    print_success "LXC privileged container configuration completed"
+else
+    print_success "LXC configuration completed successfully for user: $LIMITED_USER"
+fi
 echo "========================================================================"
 echo ""
 echo "Configuration Summary:"
-echo "  - User:              $LIMITED_USER"
-echo "  - Subuid/Subgid:     $ID_NO-$((ID_NO + 65535))"
-echo "  - Network Bridge:    $BRIDGE_LINK"
-echo "  - LXC Config:        $LIMITED_USER_CONFIG_LXC/default.conf"
-echo "  - Systemd Service:   $LIMITED_USER_CONFIG_SYSTEMD_USER/lxc-bg-start@.service"
-if [[ -f "$DELEGATE_DROPIN" ]]; then
-    echo "  - Cgroup Delegation: $DELEGATE_DROPIN"
+if [[ "$PRIVILEGED" == true ]]; then
+    echo "  - Mode:              Privileged (system scope)"
+    echo "  - Systemd Service:   /etc/systemd/system/lxc-priv-bg-start@.service"
+    echo "  - LXC Config:        /etc/lxc/default.conf"
+    echo ""
+    echo "Next Steps:"
+    echo "  1. Create a container: lxc-create -n mycontainer -t download"
+    echo "  2. Start the container: lxc-start -n mycontainer"
+    echo "  3. Enable auto-start:  systemctl enable lxc-priv-bg-start@mycontainer"
+else
+    echo "  - User:              $LIMITED_USER"
+    echo "  - Subuid/Subgid:     $ID_NO-$((ID_NO + 65535))"
+    echo "  - Network Bridge:    $BRIDGE_LINK"
+    echo "  - LXC Config:        $LIMITED_USER_CONFIG_LXC/default.conf"
+    echo "  - Systemd Service:   $LIMITED_USER_CONFIG_SYSTEMD_USER/lxc-bg-start@.service"
+    if [[ -f "$DELEGATE_DROPIN" ]]; then
+        echo "  - Cgroup Delegation: $DELEGATE_DROPIN"
+    fi
+    echo ""
+    echo "Next Steps:"
+    echo "  1. Switch to the user: su - $LIMITED_USER"
+    echo "  2. Create a container: lxc-create mycontainer -t download"
+    echo "  3. Start the container: ./start-lxc mycontainer"
 fi
-echo ""
-echo "Next Steps:"
-echo "  1. Switch to the user: su - $LIMITED_USER"
-echo "  2. Create a container: lxc-create mycontainer -t download"
-echo "  3. Start the container: ./start-lxc mycontainer"
 echo ""
