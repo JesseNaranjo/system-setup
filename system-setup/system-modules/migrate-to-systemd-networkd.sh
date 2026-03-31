@@ -604,7 +604,14 @@ perform_migration() {
         fi
 
         # Get inet configuration
-        local config_inet=$(parse_interface_config "$iface")
+        # ifquery doesn't output the method (dhcp/static), so extract it from the file
+        local config_inet=""
+        local inet_method
+        inet_method=$(awk -v iface="$iface" '$1 == "iface" && $2 == iface && $3 == "inet" {print $4; exit}' "$INTERFACES_FILE" 2>/dev/null)
+        if [[ -n "$inet_method" ]]; then
+            config_inet+="method: $inet_method"$'\n'
+        fi
+        config_inet+=$(parse_interface_config "$iface")
 
         # Try to get inet6 configuration
         local config_inet6=""
