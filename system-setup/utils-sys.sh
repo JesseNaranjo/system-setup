@@ -123,6 +123,7 @@ print_warning_box() {
     echo -e "            ${YELLOW}╔$(printf '═%.0s' $(seq 1 $box_width))╗${NC}"
     echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
 
+    local line
     for line in "$@"; do
         local line_len=${#line}
         local right_pad=$((content_width - line_len))
@@ -181,6 +182,7 @@ prompt_yes_no() {
 # Requires: SCRIPT_DIR variable to be set, prompt_yes_no function
 cleanup_obsolete_scripts() {
     # Safely handle empty argument list
+    local obsolete_script
     for obsolete_script in "${@+"$@"}"; do
         local script_path="${SCRIPT_DIR}/${obsolete_script}"
         if [[ -f "${script_path}" ]]; then
@@ -261,6 +263,7 @@ detect_environment() {
 detect_package_manager() {
     local -a pkg_managers=("apt" "brew" "dnf" "zypper")
 
+    local mgr
     for mgr in "${pkg_managers[@]}"; do
         if command -v "$mgr" &>/dev/null; then
             DETECTED_PKG_MANAGER="$mgr"
@@ -461,6 +464,7 @@ populate_package_cache() {
 
     # Get all package names from the package list
     local package_list=()
+    local line
     while read -r line; do
         package_list+=("${line##*:}")
     done < <(get_package_list)
@@ -483,6 +487,7 @@ populate_package_cache() {
 
     PACKAGE_CACHE=()
     # Check each package from our list against installed packages
+    local package
     for package in "${package_list[@]}"; do
         if echo "$installed_packages" | grep -qx "$package"; then
             PACKAGE_CACHE["$package"]="installed"
@@ -495,6 +500,7 @@ populate_package_cache() {
 
     if [[ "$DEBUG_MODE" == true ]]; then
         print_debug "Package cache contents:"
+        local pkg
         for pkg in "${!PACKAGE_CACHE[@]}"; do
             print_debug "  $pkg: ${PACKAGE_CACHE[$pkg]}"
         done
@@ -666,6 +672,7 @@ backup_file() {
     local already_backed_up=false
 
     # Check if already backed up in this session
+    local backed_up_file
     for backed_up_file in "${BACKED_UP_FILES[@]+"${BACKED_UP_FILES[@]}"}"; do
         if [[ "$backed_up_file" == "$file" ]]; then
             already_backed_up=true
@@ -714,6 +721,7 @@ add_change_header() {
     local already_added=false
 
     # Check if header already added in this session
+    local added_file
     for added_file in "${HEADER_ADDED_FILES[@]+"${HEADER_ADDED_FILES[@]}"}"; do
         if [[ "$added_file" == "$file" ]]; then
             already_added=true
@@ -970,6 +978,7 @@ normalize_trailing_newlines() {
     sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$file" > "$temp_file"
 
     # Add (N-1) more newlines since the last line already ends with one
+    local i
     for ((i=1; i<num_lines; i++)); do
         printf '\n' >> "$temp_file"
     done
@@ -994,6 +1003,8 @@ print_session_summary() {
         echo -e "            ${GRAY}No files were modified during this session.${NC}"
         return
     fi
+
+    local file
 
     print_summary "─── Session ─────────────────────────────────────────────────────────"
     echo ""

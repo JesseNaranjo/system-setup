@@ -247,19 +247,6 @@ local local_var="value"    # Function local
 local param1="$1"          # Function parameter
 ```
 
-#### Variable Declaration with Assignment
-
-```bash
-# ALWAYS combine local declaration with initial assignment
-local variable="initial_value"    # ✓ Correct
-local config_file="/etc/myapp.conf"
-local count=0
-
-# Do NOT split declaration and assignment
-local variable                    # ✖ NEVER
-variable="initial_value"
-```
-
 #### Environment Variable Configuration
 
 ```bash
@@ -320,6 +307,22 @@ function_name() {
 }
 ```
 
+#### Loop Variable Scoping
+
+Declare loop variables with `local` before the loop — bash dynamic scoping will otherwise leak the variable into callers:
+
+```bash
+local item
+for item in "${array[@]}"; do
+    # ...
+done
+
+local line
+while read -r line; do
+    # ...
+done < <(some_command)
+```
+
 #### Function Call Patterns
 
 ```bash
@@ -342,6 +345,7 @@ fi
 #### Array Iteration
 
 ```bash
+local item
 for item in "${array[@]}"; do
     echo "$item"
 done
@@ -1682,6 +1686,7 @@ PACKAGE_CACHE_POPULATED=false
 # Populate the package cache with installed packages
 populate_package_cache() {
     local package_list=()
+    local line
     while read -r line; do
         package_list+=("${line##*:}")
     done < <(get_package_list)
@@ -1703,6 +1708,7 @@ populate_package_cache() {
     fi
 
     PACKAGE_CACHE=()
+    local package
     for package in "${package_list[@]}"; do
         if echo "$installed_packages" | grep -qx "$package"; then
             PACKAGE_CACHE["$package"]="installed"
