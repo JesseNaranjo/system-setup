@@ -2,21 +2,25 @@
 
 # stop-lxc.sh - Stop LXC containers
 #
-# Usage: ./stop-lxc.sh [container_name] [[container_name], ...]
+# Usage: ./stop-lxc.sh [--privileged] [container_name] [[container_name], ...]
 #
 # This script stops one or more LXC containers gracefully using lxc-stop
-# and their associated systemd user services.
+# and their associated systemd services.
 #
 # If no container names are provided, it will stop all currently running containers.
 #
 # The script performs a two-step shutdown:
 # 1. Gracefully stops the container using lxc-stop
-# 2. Stops the systemd user service to clean up the service state
+# 2. Stops the associated systemd service to clean up the service state
+#
+# Options:
+#   --privileged  Stop privileged containers (requires root, uses system-scope services)
 #
 # Examples:
 #   ./stop-lxc.sh                       # Stop all running containers
 #   ./stop-lxc.sh mycontainer           # Stop a specific container
 #   ./stop-lxc.sh web db cache          # Stop multiple containers
+#   ./stop-lxc.sh --privileged web      # Stop a privileged container (as root)
 
 set -euo pipefail
 
@@ -48,11 +52,36 @@ print_error() {
 # Main Script
 # ============================================================================
 
-if [[ $# -eq 0 || -z ${1-} ]]; then
+PRIVILEGED=false
+CONTAINERS=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --privileged)
+            PRIVILEGED=true
+            shift
+            ;;
+        -*)
+            print_error "✖ Unknown option: $1"
+            exit 64  # EX_USAGE
+            ;;
+        *)
+            CONTAINERS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# Privileged mode requires root
+if [[ "$PRIVILEGED" == true && $EUID != 0 ]]; then
+    print_error "✖ --privileged requires root."
+    exit 1
+fi
+
+if [[ ${#CONTAINERS[@]} -eq 0 ]]; then
     # No LXCs specified, so stop all running LXCs
     print_info "No containers specified, stopping all running containers..."
 
-    #lxc-ls --running
     RUNNING=( $(/usr/bin/lxc-ls --running) )
 
     if [[ ${#RUNNING[@]} -eq 0 ]]; then
@@ -60,7 +89,7 @@ if [[ $# -eq 0 || -z ${1-} ]]; then
         exit 0
     fi
 else
-    RUNNING=("$@")
+    RUNNING=("${CONTAINERS[@]}")
 fi
 
 print_info "Stopping ${#RUNNING[@]} container(s)..."
@@ -78,10 +107,20 @@ for lxcName in "${RUNNING[@]}"; do
     sleep 0.5
 
     # Stop the systemd service
-    if systemctl --user stop "lxc-bg-start@${lxcName}.service" 2>/dev/null; then
-        print_success "✓ Service stopped: lxc-bg-start@${lxcName}.service"
+    if [[ "$PRIVILEGED" == true ]]; then
+        SERVICE="lxc-priv-bg-start@${lxcName}.service"
+        if systemctl stop "$SERVICE" 2>/dev/null; then
+            print_success "✓ Service stopped: ${SERVICE}"
+        else
+            print_warning "⚠ Service may not be running: ${SERVICE}"
+        fi
     else
-        print_warning "⚠ Service may not be running: lxc-bg-start@${lxcName}.service"
+        SERVICE="lxc-bg-start@${lxcName}.service"
+        if systemctl --user stop "$SERVICE" 2>/dev/null; then
+            print_success "✓ Service stopped: ${SERVICE}"
+        else
+            print_warning "⚠ Service may not be running: ${SERVICE}"
+        fi
     fi
     sleep 0.25
 done
