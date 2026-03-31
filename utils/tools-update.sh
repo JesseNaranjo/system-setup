@@ -475,13 +475,13 @@ main() {
     }
     trap cleanup EXIT
 
-    detect_container
-
     # Self-update check
     if detect_download_cmd && [[ ${scriptUpdated:-0} -eq 0 ]]; then
         self_update "$@" || true
         echo ""
     fi
+
+    detect_container
 
     print_info "Step 1: Network Configuration"
     print_info "-----------------------------"
