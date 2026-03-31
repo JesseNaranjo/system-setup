@@ -2,7 +2,7 @@
 
 # config-lxc-ssh.sh - Configure SSH keys for LXC containers
 #
-# Usage: sudo ./config-lxc-ssh.sh <username>
+# Usage: sudo ./config-lxc-ssh.sh <username> [--privileged]
 #
 # This script configures SSH authentication for a user across all LXC containers by:
 # - Generating a shared SSH key pair for LXC container access (if it doesn't exist)
@@ -10,6 +10,10 @@
 # - Setting proper permissions for SSH directories and key files
 # - Verifying SSH is installed in each container
 # - Creating authorized_keys entries for passwordless authentication
+#
+# Arguments:
+#   username      User whose SSH keys to generate and deploy (required)
+#   --privileged  Use /var/lib/lxc/ instead of ~/.local/share/lxc/
 #
 # Requirements:
 # - Must be run as root (to access container rootfs)
@@ -32,6 +36,7 @@ readonly NC='\033[0m' # No Color
 
 # Global variables
 BACKED_UP_FILES=""
+PRIVILEGED=false
 TARGET_USER=""
 TARGET_USER_HOME=""
 SSH_KEY_NAME="id_local-lxc-access"
@@ -114,7 +119,7 @@ backup_file() {
 
 # Check if script is run as root
 check_root() {
-    if [[ $EUID -ne 0 ]]; then
+    if [[ $EUID != 0 ]]; then
         print_error "✖ This script must be run as root"
         echo ""
         echo "Please run: sudo $0 $*"
@@ -202,7 +207,12 @@ generate_ssh_keypair() {
 # Get list of all LXC containers for the user
 get_all_containers() {
     local containers=()
-    local lxc_path="${TARGET_USER_HOME}/.local/share/lxc"
+    local lxc_path
+    if [[ "$PRIVILEGED" == true ]]; then
+        lxc_path="/var/lib/lxc"
+    else
+        lxc_path="${TARGET_USER_HOME}/.local/share/lxc"
+    fi
 
     # Check if LXC directory exists
     if [[ ! -d "$lxc_path" ]]; then
@@ -242,7 +252,13 @@ configure_container_ssh() {
     print_info "Configuring container: $container"
 
     # Get container's rootfs path
-    local config_path="${TARGET_USER_HOME}/.local/share/lxc/${container}/config"
+    local lxc_path
+    if [[ "$PRIVILEGED" == true ]]; then
+        lxc_path="/var/lib/lxc"
+    else
+        lxc_path="${TARGET_USER_HOME}/.local/share/lxc"
+    fi
+    local config_path="${lxc_path}/${container}/config"
     if [[ ! -f "$config_path" ]]; then
         print_warning "⚠ Container config not found: $config_path - skipping"
         ((CONTAINERS_SKIPPED++)) || true
@@ -399,19 +415,41 @@ main() {
     echo "╚══════════════════════════════════════════════════════════════════════════════╝"
     echo ""
 
-    # Check if user parameter is provided
-    if [[ $# -lt 1 ]]; then
-        print_error "✖ Usage: sudo $0 <username>"
+    # Parse arguments
+    local username=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --privileged)
+                PRIVILEGED=true
+                shift
+                ;;
+            -*)
+                print_error "✖ Unknown option: $1"
+                echo ""
+                echo "Usage: sudo $0 <username> [--privileged]"
+                exit 64  # EX_USAGE
+                ;;
+            *)
+                username="$1"
+                shift
+                ;;
+        esac
+    done
+
+    if [[ -z "$username" ]]; then
+        print_error "✖ Usage: sudo $0 <username> [--privileged]"
         echo ""
         echo "Example: sudo $0 myuser"
+        echo "         sudo $0 myuser --privileged"
         exit 1
     fi
 
     # Check root privileges
-    check_root "$@"
+    check_root
 
     # Validate target user
-    validate_user "$1"
+    validate_user "$username"
     echo ""
 
     # Check if LXC is installed
