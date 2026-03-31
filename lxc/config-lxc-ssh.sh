@@ -122,7 +122,7 @@ check_root() {
     if [[ $EUID != 0 ]]; then
         print_error "✖ This script must be run as root"
         echo ""
-        echo "Please run: sudo $0 $*"
+        echo "Please run: sudo $0 <username> [--privileged]"
         exit 1
     fi
 }
