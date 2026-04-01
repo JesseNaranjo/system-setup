@@ -5,6 +5,8 @@
 # Usage: ./start-lxc.sh [options] <container_name> [[container_name], ...]
 #
 # Options:
+#   --privileged      Operate on system-scope (privileged) containers.
+#                     Requires root. Uses /var/lib/lxc and system services.
 #   --delegate        Persist cgroup delegation in a systemd drop-in for the
 #                     container's service, then start normally. Survives restarts.
 #   --delegate-once   Start with cgroup delegation via systemd-run instead of
@@ -17,9 +19,10 @@
 # If a container name contains 'k8s', the script checks whether cgroup
 # delegation and swap restriction are configured and warns if not.
 #
-# This script starts one or more LXC containers using systemd user services.
-# If only one container is specified, it will automatically attach to the
-# container after startup with a 3-second countdown.
+# This script starts one or more LXC containers using systemd user services
+# (or system services with --privileged). If only one container is specified,
+# it will automatically attach to the container after startup with a 3-second
+# countdown.
 #
 # Examples:
 #   ./start-lxc.sh mycontainer              # Start and attach to one container
@@ -28,6 +31,7 @@
 #   ./start-lxc.sh --delegate-once tst-k8s1 # One-time delegation, no persist
 #   ./start-lxc.sh --no-swap tst-k8s1       # Persist swap restriction + mask
 #   ./start-lxc.sh --delegate --no-swap tst-k8s1  # Full k8s setup
+#   ./start-lxc.sh --privileged tst-k8s1    # Start a privileged container
 
 set -euo pipefail
 
@@ -66,15 +70,20 @@ print_error() {
 # Returns: 0 if delegation is configured, 1 otherwise
 has_delegation() {
     local name="$1"
-    local service="lxc-bg-start@${name}.service"
+    local service="${SERVICE_PREFIX}@${name}.service"
 
-    systemctl --user show "$service" -p Delegate 2>/dev/null | grep -qP "^Delegate=.*cpuset.*"
+    "${SYSTEMCTL_CMD[@]}" show "$service" -p Delegate 2>/dev/null | grep -qP "^Delegate=.*cpuset.*"
 }
 
 # Check if the user session has all required cgroup controllers available
 # Warns if system-level delegation is missing (non-fatal)
 # Returns: 0 always (warning only)
 check_session_controllers() {
+    # System-scope services have full cgroup access; session check is user-only
+    if [[ "$PRIVILEGED" == true ]]; then
+        return 0
+    fi
+
     local cgroup_file="/sys/fs/cgroup/user.slice/user-$(id -u).slice/cgroup.controllers"
 
     [[ -f "$cgroup_file" ]] || return 0
@@ -99,7 +108,7 @@ check_session_controllers() {
 install_delegation_dropin() {
     local name="$1"
     local dropin_dir
-    dropin_dir="${HOME}/.config/systemd/user/lxc-bg-start@${name}.service.d"
+    dropin_dir="${DROPIN_BASE}/${SERVICE_PREFIX}@${name}.service.d"
 
     mkdir -p "$dropin_dir"
     cat > "${dropin_dir}/delegate.conf" <<EOF
@@ -107,7 +116,7 @@ install_delegation_dropin() {
 Delegate=${DELEGATE_CONTROLLERS}
 EOF
 
-    systemctl --user daemon-reload
+    "${SYSTEMCTL_CMD[@]}" daemon-reload
     print_success "✓ Cgroup delegation persisted for ${name}"
 }
 
@@ -141,10 +150,10 @@ readonly SWAP_MOUNT_ENTRY="lxc.mount.entry = /dev/null proc/swaps none bind,opti
 # Returns: 0 if MemorySwapMax is 0, 1 otherwise
 has_no_swap() {
     local name="$1"
-    local service="lxc-bg-start@${name}.service"
+    local service="${SERVICE_PREFIX}@${name}.service"
 
     local swap_max
-    swap_max="$(systemctl --user show "$service" -p MemorySwapMax --value 2>/dev/null)"
+    swap_max="$("${SYSTEMCTL_CMD[@]}" show "$service" -p MemorySwapMax --value 2>/dev/null)"
     [[ "$swap_max" == "0" ]]
 }
 
@@ -153,7 +162,7 @@ has_no_swap() {
 # Returns: 0 if masked, 1 otherwise
 has_swap_masked() {
     local name="$1"
-    local config="${HOME}/.local/share/lxc/${name}/config"
+    local config="${LXC_PATH}/${name}/config"
 
     [[ -f "$config" ]] && grep -q 'lxc\.mount\.entry.*proc/swaps' "$config"
 }
@@ -163,7 +172,7 @@ has_swap_masked() {
 install_no_swap_dropin() {
     local name="$1"
     local dropin_dir
-    dropin_dir="${HOME}/.config/systemd/user/lxc-bg-start@${name}.service.d"
+    dropin_dir="${DROPIN_BASE}/${SERVICE_PREFIX}@${name}.service.d"
 
     mkdir -p "$dropin_dir"
     cat > "${dropin_dir}/no-swap.conf" <<EOF
@@ -171,7 +180,7 @@ install_no_swap_dropin() {
 MemorySwapMax=0
 EOF
 
-    systemctl --user daemon-reload
+    "${SYSTEMCTL_CMD[@]}" daemon-reload
     print_success "✓ Swap restriction persisted for ${name} (MemorySwapMax=0)"
 }
 
@@ -179,7 +188,7 @@ EOF
 # Args: container_name
 mask_proc_swaps() {
     local name="$1"
-    local config="${HOME}/.local/share/lxc/${name}/config"
+    local config="${LXC_PATH}/${name}/config"
 
     if [[ ! -f "$config" ]]; then
         print_warning "⚠ Container config not found: ${config}"
@@ -221,9 +230,10 @@ check_k8s_no_swap() {
 # ============================================================================
 
 usage() {
-    echo "Usage: ${0##*/} [--delegate|--delegate-once] [--no-swap|--no-swap-once] <container_name> [...]"
+    echo "Usage: ${0##*/} [--privileged] [--delegate|--delegate-once] [--no-swap|--no-swap-once] <container_name> [...]"
     echo ""
     echo "Options:"
+    echo "  --privileged      Operate on system-scope (privileged) containers (requires root)"
     echo "  --delegate        Persist cgroup delegation in service drop-in"
     echo "  --delegate-once   Start with one-time cgroup delegation (no persist)"
     echo "  --no-swap         Persist MemorySwapMax=0 drop-in and mask /proc/swaps in container config"
@@ -235,15 +245,20 @@ usage() {
     echo "  ${0##*/} mycontainer"
     echo "  ${0##*/} --delegate --no-swap tst-k8s1"
     echo "  ${0##*/} --no-swap-once tst-k8s1"
+    echo "  ${0##*/} --privileged tst-k8s1"
 }
 
 # Parse options
 DELEGATE_MODE=""
 SWAP_MODE=""
+PRIVILEGED=false
 CONTAINERS=()
 
 for arg in "$@"; do
     case "$arg" in
+        --privileged)
+            PRIVILEGED=true
+            ;;
         --delegate)
             DELEGATE_MODE="persist"
             ;;
@@ -270,6 +285,24 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+# Derived globals — set once after parsing, used by all helper functions
+if [[ "$PRIVILEGED" == true ]]; then
+    [[ $EUID != 0 ]] && { print_error "✖ --privileged requires root."; exit 1; }
+    LXC_PATH="/var/lib/lxc"
+    SERVICE_PREFIX="lxc-priv-bg-start"
+    SYSTEMCTL_CMD=(systemctl)
+    SYSTEMD_RUN_CMD=(systemd-run --scope)
+    ATTACH_CMD="lxc-attach"
+    DROPIN_BASE="/etc/systemd/system"
+else
+    LXC_PATH="${HOME}/.local/share/lxc"
+    SERVICE_PREFIX="lxc-bg-start"
+    SYSTEMCTL_CMD=(systemctl --user)
+    SYSTEMD_RUN_CMD=(systemd-run --user --scope)
+    ATTACH_CMD="lxc-unpriv-attach"
+    DROPIN_BASE="${HOME}/.config/systemd/user"
+fi
 
 if [[ ${#CONTAINERS[@]} -eq 0 ]]; then
     print_error "✖ Missing required container name argument"
@@ -323,7 +356,7 @@ for lxcName in "${CONTAINERS[@]}"; do
         [[ -n "$SWAP_MODE" ]] && run_props+=(-p "MemorySwapMax=0")
 
         print_info "Starting ${lxcName} with one-time properties: ${run_props[*]}..."
-        if systemd-run --user --scope "${run_props[@]}" -- lxc-start -n "$lxcName"; then
+        if "${SYSTEMD_RUN_CMD[@]}" "${run_props[@]}" -- lxc-start -n "$lxcName"; then
             print_success "✓ Container started: ${lxcName}"
         else
             print_error "✖ Failed to start container: ${lxcName}"
@@ -340,7 +373,7 @@ for lxcName in "${CONTAINERS[@]}"; do
         fi
 
         print_info "Starting ${lxcName}..."
-        if systemctl --user start "lxc-bg-start@${lxcName}.service"; then
+        if "${SYSTEMCTL_CMD[@]}" start "${SERVICE_PREFIX}@${lxcName}.service"; then
             print_success "✓ Service and Container started: ${lxcName}"
         else
             print_error "✖ Failed to start service/container: ${lxcName}"
@@ -373,7 +406,7 @@ if [[ ${#CONTAINERS[@]} -eq 1 ]]; then
     #   not setup correctly (for example, check $HOME without the --set-var argument)
     print_info "Attaching to ${lxcName} as root (use 'exit' or Ctrl+D to detach)..."
     echo ""
-    lxc-unpriv-attach --name "${lxcName}" --set-var HOME=/root -- /bin/bash -l
+    "$ATTACH_CMD" --name "${lxcName}" --set-var HOME=/root -- /bin/bash -l
 else
     # Multiple containers, just show status
     lxc-ls --fancy
