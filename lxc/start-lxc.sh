@@ -399,7 +399,7 @@ if [[ ${#CONTAINERS[@]} -eq 1 ]]; then
     lxc-ls --fancy
     echo ""
 
-    # lxc-unpriv-attach reuses the calling environment in the container:
+    # lxc-attach / lxc-unpriv-attach reuse the calling environment in the container:
     # - All env variables are passed through, so by default the container thinks
     #   that it's running as the user that attached into the LXC
     # - Even though inside the container you may be root, the env variables are
