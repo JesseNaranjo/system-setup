@@ -91,6 +91,44 @@ ensure_dev_kmsg() {
     print_success "✓ Created /dev/kmsg symlink to /dev/console"
 }
 
+# Verify /proc/sys is writable for kubelet (privileged containers only)
+# In unprivileged containers, KubeletInUserNamespace handles read-only /proc/sys.
+# In privileged containers (no user namespace), kubelet must write kernel tunables.
+# Returns: 0 if writable or unprivileged, 1 if read-only in privileged container
+ensure_proc_sys_writable() {
+    # Determine container type from uid_map (canonical runc/moby method)
+    # Init namespace signature is exactly "0 0 4294967295"; anything else = user namespace
+    local uid_map_line
+    uid_map_line="$(head -1 /proc/self/uid_map 2>/dev/null)" || return 0
+
+    local inside_uid outside_uid count
+    read -r inside_uid outside_uid count <<< "$uid_map_line"
+
+    if [[ "$inside_uid" != "0" || "$outside_uid" != "0" || "$count" != "4294967295" ]]; then
+        print_success "- Unprivileged container (KubeletInUserNamespace handles /proc/sys)"
+        return 0
+    fi
+
+    # Privileged container: check if /proc/sys is on a read-only mount
+    # /proc/mounts is authoritative; [[ -w ]] only checks permission bits, not mount flags
+    if awk '$2 == "/proc/sys" && $4 ~ /(^|,)ro(,|$)/' /proc/mounts 2>/dev/null | grep -q .; then
+        print_error "✖ /proc/sys is read-only — kubelet will fail to start"
+        echo ""
+        print_info "Kubelet needs to write kernel tunables (vm.overcommit_memory, kernel.panic, etc.)"
+        print_info "KubeletInUserNamespace does not apply (this is not a user namespace container)"
+        echo ""
+        print_info "Fix: on the HOST, stop this container and restart with:"
+        print_info "  sudo ./start-lxc.sh --privileged --k8s <container_name>"
+        print_info "  (container name may differ from hostname '$(hostname)')"
+        echo ""
+        print_info "Or manually add to the container's LXC config:"
+        print_info "  lxc.mount.auto = cgroup:mixed proc:rw sys:rw"
+        return 1
+    fi
+
+    print_success "- /proc/sys is writable"
+}
+
 # Generate kubeadm config file for cluster initialization
 # Args: pod_cidr, config_path
 # When running in a container, includes KubeletConfiguration with:
@@ -148,6 +186,7 @@ initialize_control_plane() {
     if [[ "${RUNNING_IN_CONTAINER:-false}" == true ]]; then
         ensure_kernel_config || return 1
         ensure_dev_kmsg || return 1
+        ensure_proc_sys_writable || return 1
     fi
 
     local pod_cidr
@@ -201,6 +240,11 @@ initialize_control_plane() {
 
 # Join this node to an existing cluster as a worker
 join_as_worker() {
+    # Container preflight — worker kubelet has the same /proc/sys requirement
+    if [[ "${RUNNING_IN_CONTAINER:-false}" == true ]]; then
+        ensure_proc_sys_writable || return 1
+    fi
+
     local join_cmd
     read -r -p "Enter the full 'kubeadm join' command: " join_cmd </dev/tty
 
