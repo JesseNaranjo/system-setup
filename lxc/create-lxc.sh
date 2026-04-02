@@ -277,9 +277,9 @@ if lxc-create --name "$CONTAINER_NAME" -t download -- ${CREATE_FLAGS[@]+"${CREAT
     if [[ "$CONTAINER_NAME" == *k8s* ]]; then
         echo ""
         print_info "This container name suggests Kubernetes usage."
-        print_info "Kubernetes requires cgroup delegation (cpuset) and /proc/swaps masked."
-        if prompt_yes_no "Apply Kubernetes container settings (--delegate --no-swap)?" "y"; then
-            START_FLAGS+=(--delegate --no-swap)
+        print_info "Kubernetes requires cgroup delegation, swap restriction, and writable /proc/sys."
+        if prompt_yes_no "Apply Kubernetes container settings (--k8s)?" "y"; then
+            START_FLAGS+=(--k8s)
         fi
     fi
 else
