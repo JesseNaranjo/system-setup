@@ -110,7 +110,7 @@ Creates an LXC container with auto-detection of distribution, release, and archi
 - Auto-detects host OS parameters if not specified (falls back to interactive prompt on failure)
 - Prompts before destroying existing containers
 - Uses the sibling `start-lxc.sh` script to start the container
-- When the container name contains `k8s`, prompts to apply Kubernetes settings (`--delegate --no-swap`)
+- When the container name contains `k8s`, prompts to apply Kubernetes settings (`--k8s`)
 - With `--privileged`, creates a truly privileged container (no user namespace remapping)
 
 ```bash
@@ -142,22 +142,26 @@ Starts containers using systemd services:
 | Flag | Persists | Effect |
 |------|----------|--------|
 | `--privileged` | — | Operate on system-scope (privileged) containers. Requires root. |
+| `--k8s` | Yes | Applies all Kubernetes settings: delegation + swap restriction + `/proc/sys` writability |
 | `--delegate` | Yes | Creates systemd drop-in with `Delegate=cpuset cpu io memory pids` |
 | `--delegate-once` | No | One-time cgroup delegation via `systemd-run` |
 | `--no-swap` | Yes | Creates `MemorySwapMax=0` drop-in AND masks `/proc/swaps` in container config |
 | `--no-swap-once` | No | One-time `MemorySwapMax=0` via `systemd-run` (does not mask `/proc/swaps`) |
 
-Flags are combinable. For full Kubernetes support, use `--delegate --no-swap`:
+Flags are combinable. For full Kubernetes support, use `--k8s`:
 
 ```bash
-# Full k8s setup (persist delegation + swap restriction + mask /proc/swaps)
+# Full k8s setup (recommended)
+sudo ./start-lxc.sh --privileged --k8s tst-k8s1
+
+# Equivalent granular flags
 ./start-lxc.sh --delegate --no-swap tst-k8s1
 
 # One-time swap restriction only (cgroup limit, no /proc/swaps mask)
 ./start-lxc.sh --no-swap-once tst-k8s1
 
 # Apply settings to an already-running container (takes effect on next restart)
-./start-lxc.sh --delegate --no-swap tst-k8s1
+./start-lxc.sh --privileged --k8s tst-k8s1
 ```
 
 **What `--no-swap` does:**
@@ -167,7 +171,7 @@ Flags are combinable. For full Kubernetes support, use `--delegate --no-swap`:
 
 **Note:** On systems with LXCFS, the `/proc/swaps` bind mount is overridden by the LXCFS FUSE filesystem. The Kubernetes setup script (`initialize-cluster.sh`) handles this automatically by setting `failSwapOn: false` in the kubeadm config for container environments. The `--no-swap` flag remains valuable for cgroup-level swap restriction.
 
-Containers with `k8s` in their name receive a warning if delegation or swap restriction is missing.
+Containers with `k8s` in their name receive a warning if delegation, swap restriction, or `/proc/sys` writability is missing.
 
 ### stop-lxc.sh
 

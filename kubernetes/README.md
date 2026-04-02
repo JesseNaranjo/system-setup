@@ -191,7 +191,7 @@ References:
 
 ## Running in LXC Containers
 
-When running Kubernetes inside unprivileged LXC containers, two additional prerequisites must be met on the **host** side:
+When running Kubernetes inside LXC containers, additional prerequisites must be met on the **host** side:
 
 ### 1. Kernel config must be accessible
 
@@ -209,12 +209,24 @@ cp /boot/config-$(uname -r) ~/.local/share/lxc/<container>/rootfs/boot/
 
 `initialize-cluster.sh` handles this automatically by generating a kubeadm config with `failSwapOn: false` when it detects a container environment. No manual action is required.
 
-For cgroup-level swap restriction (prevents the container from actually using host swap), use `start-lxc.sh --no-swap` on the host:
+For cgroup-level swap restriction (prevents the container from actually using host swap), use `start-lxc.sh --k8s` on the host:
 
 ```bash
 # From the lxc/ directory:
-./start-lxc.sh --delegate --no-swap tst-k8s1
+sudo ./start-lxc.sh --privileged --k8s tst-k8s1
 ```
+
+### 3. /proc/sys writability (privileged containers)
+
+In privileged LXC containers, `/proc/sys` is read-only by default (LXC `proc:mixed` mount mode). The kubelet needs to write kernel tunables (`vm.overcommit_memory`, `kernel.panic`, etc.). The `KubeletInUserNamespace` feature gate does not help because privileged containers have no user namespace.
+
+Fix: start the container with `--k8s` to mount `/proc` and `/sys` read-write:
+
+```bash
+sudo ./start-lxc.sh --privileged --k8s tst-k8s1
+```
+
+The `initialize-cluster.sh` preflight check will detect read-only `/proc/sys` and fail early with guidance.
 
 See the [`lxc/`](../lxc/) directory for container management scripts.
 
