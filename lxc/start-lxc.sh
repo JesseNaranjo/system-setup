@@ -15,9 +15,13 @@
 #                     container config. Survives restarts.
 #   --no-swap-once    Start with one-time MemorySwapMax=0 (cgroup only, does
 #                     not mask /proc/swaps).
+#   --k8s             Apply all Kubernetes container settings at once:
+#                     cgroup delegation + swap restriction + /proc/sys writability.
+#                     Equivalent to --delegate --no-swap, plus proc:rw.
 #
 # If a container name contains 'k8s', the script checks whether cgroup
-# delegation and swap restriction are configured and warns if not.
+# delegation, swap restriction, and /proc/sys writability are configured
+# and warns if not.
 #
 # This script starts one or more LXC containers using systemd user services
 # (or system services with --privileged). If only one container is specified,
@@ -30,7 +34,9 @@
 #   ./start-lxc.sh --delegate tst-k8s1      # Persist delegation, then start
 #   ./start-lxc.sh --delegate-once tst-k8s1 # One-time delegation, no persist
 #   ./start-lxc.sh --no-swap tst-k8s1       # Persist swap restriction + mask
-#   ./start-lxc.sh --delegate --no-swap tst-k8s1  # Full k8s setup
+#   ./start-lxc.sh --delegate --no-swap tst-k8s1  # Full k8s setup (granular)
+#   ./start-lxc.sh --privileged --k8s tst-k8s1   # Full k8s setup (privileged)
+#   ./start-lxc.sh --k8s tst-k8s1                # Full k8s setup (unprivileged)
 #   ./start-lxc.sh --privileged tst-k8s1    # Start a privileged container
 
 set -euo pipefail
@@ -282,19 +288,23 @@ check_k8s_proc_rw() {
 # ============================================================================
 
 usage() {
-    echo "Usage: ${0##*/} [--privileged] [--delegate|--delegate-once] [--no-swap|--no-swap-once] <container_name> [...]"
+    echo "Usage: ${0##*/} [--privileged] [--k8s] [--delegate|--delegate-once] [--no-swap|--no-swap-once] <container_name> [...]"
     echo ""
     echo "Options:"
     echo "  --privileged      Operate on system-scope (privileged) containers (requires root)"
+    echo "  --k8s             Apply all Kubernetes settings: --delegate + --no-swap + proc:rw"
     echo "  --delegate        Persist cgroup delegation in service drop-in"
     echo "  --delegate-once   Start with one-time cgroup delegation (no persist)"
     echo "  --no-swap         Persist MemorySwapMax=0 drop-in and mask /proc/swaps in container config"
     echo "  --no-swap-once    Start with one-time MemorySwapMax=0 (cgroup only, does not mask /proc/swaps)"
     echo ""
-    echo "Options are combinable: --delegate --no-swap applies both."
+    echo "--k8s is equivalent to --delegate --no-swap plus /proc/sys writability."
+    echo "Individual flags can override --k8s regardless of order: --k8s --delegate-once (or"
+    echo "--delegate-once --k8s) uses one-time delegation for the current start."
     echo ""
     echo "Examples:"
     echo "  ${0##*/} mycontainer"
+    echo "  ${0##*/} --privileged --k8s tst-k8s1"
     echo "  ${0##*/} --delegate --no-swap tst-k8s1"
     echo "  ${0##*/} --no-swap-once tst-k8s1"
     echo "  ${0##*/} --privileged tst-k8s1"
@@ -303,6 +313,7 @@ usage() {
 # Parse options
 DELEGATE_MODE=""
 SWAP_MODE=""
+PROC_RW=false
 PRIVILEGED=false
 CONTAINERS=()
 
@@ -310,6 +321,11 @@ for arg in "$@"; do
     case "$arg" in
         --privileged)
             PRIVILEGED=true
+            ;;
+        --k8s)
+            [[ -z "$DELEGATE_MODE" ]] && DELEGATE_MODE="persist"
+            [[ -z "$SWAP_MODE" ]] && SWAP_MODE="persist"
+            PROC_RW=true
             ;;
         --delegate)
             DELEGATE_MODE="persist"
@@ -406,6 +422,11 @@ for lxcName in "${CONTAINERS[@]}"; do
             || print_warning "⚠ Failed to mask /proc/swaps for ${lxcName}; configure manually"
     fi
 
+    if [[ "$PROC_RW" == true ]]; then
+        install_proc_rw "$lxcName" \
+            || print_warning "⚠ Failed to set proc:rw for ${lxcName}; configure manually"
+    fi
+
     # Skip start if already running (persistent settings above still applied)
     if lxc-info -n "${lxcName}" -s 2>/dev/null | grep -q "RUNNING"; then
         print_success "⊙ Container ${lxcName} is already running (settings applied for next restart)"
@@ -436,6 +457,9 @@ for lxcName in "${CONTAINERS[@]}"; do
         fi
         if [[ -z "$SWAP_MODE" ]]; then
             check_k8s_no_swap "$lxcName"
+        fi
+        if [[ "$PROC_RW" != true ]]; then
+            check_k8s_proc_rw "$lxcName"
         fi
 
         print_info "Starting ${lxcName}..."
