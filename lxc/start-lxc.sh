@@ -284,6 +284,58 @@ check_k8s_proc_rw() {
 }
 
 # ============================================================================
+# AppArmor Profile
+# ============================================================================
+
+# Check if a container's AppArmor profile is set to unconfined
+# Args: container_name
+# Returns: 0 if unconfined, 1 otherwise
+has_apparmor_unconfined() {
+    local name="$1"
+    local config="${LXC_PATH}/${name}/config"
+
+    [[ -f "$config" ]] && grep -qE '^lxc\.apparmor\.profile\s*=\s*unconfined' "$config"
+}
+
+# Set AppArmor profile to unconfined in the container's LXC config
+# The default 'generated' profile blocks /proc/sys writes even with proc:rw
+# Appending overrides earlier values (LXC uses last-occurrence-wins)
+# Args: container_name
+install_apparmor_unconfined() {
+    local name="$1"
+    local config="${LXC_PATH}/${name}/config"
+
+    if [[ ! -f "$config" ]]; then
+        print_warning "⚠ Container config not found: ${config}"
+        return 1
+    fi
+
+    if has_apparmor_unconfined "$name"; then
+        print_info "AppArmor already unconfined for ${name}"
+        return 0
+    fi
+
+    {
+        echo ""
+        echo "# Disable AppArmor confinement — required for kubelet to write /proc/sys tunables"
+        echo "lxc.apparmor.profile = unconfined"
+    } >> "$config"
+    print_success "✓ AppArmor set to unconfined for ${name}"
+}
+
+# Warn if a k8s container has a restricting AppArmor profile
+# Args: container_name
+check_k8s_apparmor() {
+    local name="$1"
+
+    [[ "$name" != *k8s* ]] && return
+    has_apparmor_unconfined "$name" && return
+
+    print_warning "⚠ Container '${name}' looks like a Kubernetes node but AppArmor is not unconfined"
+    print_warning "⚠ Kubelet requires unconfined AppArmor to write /proc/sys. Use --k8s"
+}
+
+# ============================================================================
 # Input Validation
 # ============================================================================
 
@@ -425,6 +477,8 @@ for lxcName in "${CONTAINERS[@]}"; do
     if [[ "$PROC_RW" == true ]]; then
         install_proc_rw "$lxcName" \
             || print_warning "⚠ Failed to set proc:rw for ${lxcName}; configure manually"
+        install_apparmor_unconfined "$lxcName" \
+            || print_warning "⚠ Failed to set AppArmor unconfined for ${lxcName}; configure manually"
     fi
 
     # Skip start if already running (persistent settings above still applied)
@@ -460,6 +514,7 @@ for lxcName in "${CONTAINERS[@]}"; do
         fi
         if [[ "$PROC_RW" != true ]]; then
             check_k8s_proc_rw "$lxcName"
+            check_k8s_apparmor "$lxcName"
         fi
 
         print_info "Starting ${lxcName}..."

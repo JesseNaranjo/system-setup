@@ -94,7 +94,10 @@ ensure_dev_kmsg() {
 # Verify /proc/sys is writable for kubelet (privileged containers only)
 # In unprivileged containers, KubeletInUserNamespace handles read-only /proc/sys.
 # In privileged containers (no user namespace), kubelet must write kernel tunables.
-# Returns: 0 if writable or unprivileged, 1 if read-only in privileged container
+# Checks two failure modes:
+#   EROFS  — /proc/sys mounted read-only (LXC proc:mixed default)
+#   EACCES — AppArmor 'generated' profile blocks /proc/sys writes
+# Returns: 0 if writable or unprivileged, 1 if not writable
 ensure_proc_sys_writable() {
     # Determine container type from uid_map (canonical runc/moby method)
     # Init namespace signature is exactly "0 0 4294967295"; anything else = user namespace
@@ -109,8 +112,7 @@ ensure_proc_sys_writable() {
         return 0
     fi
 
-    # Privileged container: check if /proc/sys is on a read-only mount
-    # /proc/mounts is authoritative; [[ -w ]] only checks permission bits, not mount flags
+    # Privileged container: check if /proc/sys is on a read-only mount (EROFS)
     if awk '$2 == "/proc/sys" && $4 ~ /(^|,)ro(,|$)/' /proc/mounts 2>/dev/null | grep -q .; then
         print_error "✖ /proc/sys is read-only — kubelet will fail to start"
         echo ""
@@ -123,6 +125,25 @@ ensure_proc_sys_writable() {
         echo ""
         print_info "Or manually add to the container's LXC config:"
         print_info "  lxc.mount.auto = cgroup:mixed proc:rw sys:rw"
+        return 1
+    fi
+
+    # Mount is rw — verify writes aren't blocked by AppArmor (EACCES)
+    # Write the current value back (no-op) to test actual write permission
+    local test_val
+    test_val="$(cat /proc/sys/vm/overcommit_memory 2>/dev/null)" || { print_success "- /proc/sys is writable"; return 0; }
+    if ! printf '%s' "$test_val" > /proc/sys/vm/overcommit_memory 2>/dev/null; then
+        print_error "✖ /proc/sys write blocked (likely AppArmor) — kubelet will fail to start"
+        echo ""
+        print_info "The mount is read-write but writes are denied (permission denied)."
+        print_info "This typically means AppArmor's 'generated' profile is restricting /proc/sys access."
+        echo ""
+        print_info "Fix: on the HOST, stop this container and restart with:"
+        print_info "  sudo ./start-lxc.sh --privileged --k8s <container_name>"
+        print_info "  (container name may differ from hostname '$(hostname)')"
+        echo ""
+        print_info "Or manually add to the container's LXC config:"
+        print_info "  lxc.apparmor.profile = unconfined"
         return 1
     fi
 
