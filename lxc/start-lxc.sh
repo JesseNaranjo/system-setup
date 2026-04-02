@@ -5,8 +5,6 @@
 # Usage: ./start-lxc.sh [options] <container_name> [[container_name], ...]
 #
 # Options:
-#   --privileged      Operate on system-scope (privileged) containers.
-#                     Requires root. Uses /var/lib/lxc and system services.
 #   --delegate        Persist cgroup delegation in a systemd drop-in for the
 #                     container's service, then start normally. Survives restarts.
 #   --delegate-once   Start with cgroup delegation via systemd-run instead of
@@ -23,8 +21,12 @@
 # delegation, swap restriction, and /proc/sys writability are configured
 # and warns if not.
 #
-# This script starts one or more LXC containers using systemd user services
-# (or system services with --privileged). If only one container is specified,
+# When run as root (e.g., via sudo), the script operates on privileged
+# (system-scope) containers at /var/lib/lxc. Otherwise, it operates on
+# unprivileged (user-scope) containers at ~/.local/share/lxc.
+#
+# This script starts one or more LXC containers using systemd services.
+# If only one container is specified,
 # it will automatically attach to the container after startup with a 3-second
 # countdown.
 #
@@ -35,9 +37,8 @@
 #   ./start-lxc.sh --delegate-once tst-k8s1 # One-time delegation, no persist
 #   ./start-lxc.sh --no-swap tst-k8s1       # Persist swap restriction + mask
 #   ./start-lxc.sh --delegate --no-swap tst-k8s1  # Full k8s setup (granular)
-#   ./start-lxc.sh --privileged --k8s tst-k8s1   # Full k8s setup (privileged)
+#   sudo ./start-lxc.sh --k8s tst-k8s1           # Full k8s setup (privileged)
 #   ./start-lxc.sh --k8s tst-k8s1                # Full k8s setup (unprivileged)
-#   ./start-lxc.sh --privileged tst-k8s1    # Start a privileged container
 
 set -euo pipefail
 
@@ -340,11 +341,12 @@ check_k8s_apparmor() {
 # ============================================================================
 
 usage() {
-    echo "Usage: ${0##*/} [--privileged] [--k8s] [--delegate|--delegate-once] [--no-swap|--no-swap-once] <container_name> [...]"
+    echo "Usage: ${0##*/} [--k8s] [--delegate|--delegate-once] [--no-swap|--no-swap-once] <container_name> [...]"
+    echo ""
+    echo "Run as root (sudo) for privileged containers, or as a regular user for unprivileged."
     echo ""
     echo "Options:"
-    echo "  --privileged      Operate on system-scope (privileged) containers (requires root)"
-    echo "  --k8s             Apply all Kubernetes settings: --delegate + --no-swap + proc:rw"
+    echo "  --k8s             Apply all Kubernetes settings: --delegate + --no-swap + proc:rw + AppArmor"
     echo "  --delegate        Persist cgroup delegation in service drop-in"
     echo "  --delegate-once   Start with one-time cgroup delegation (no persist)"
     echo "  --no-swap         Persist MemorySwapMax=0 drop-in and mask /proc/swaps in container config"
@@ -356,24 +358,19 @@ usage() {
     echo ""
     echo "Examples:"
     echo "  ${0##*/} mycontainer"
-    echo "  ${0##*/} --privileged --k8s tst-k8s1"
+    echo "  sudo ${0##*/} --k8s tst-k8s1"
     echo "  ${0##*/} --delegate --no-swap tst-k8s1"
     echo "  ${0##*/} --no-swap-once tst-k8s1"
-    echo "  ${0##*/} --privileged tst-k8s1"
 }
 
 # Parse options
 DELEGATE_MODE=""
 SWAP_MODE=""
 PROC_RW=false
-PRIVILEGED=false
 CONTAINERS=()
 
 for arg in "$@"; do
     case "$arg" in
-        --privileged)
-            PRIVILEGED=true
-            ;;
         --k8s)
             [[ -z "$DELEGATE_MODE" ]] && DELEGATE_MODE="persist"
             [[ -z "$SWAP_MODE" ]] && SWAP_MODE="persist"
@@ -406,13 +403,10 @@ for arg in "$@"; do
     esac
 done
 
-# Running as root implies --privileged (e.g., sudo ./start-lxc.sh ...)
-if [[ "$PRIVILEGED" == false && $EUID == 0 ]]; then
-    PRIVILEGED=true
-fi
-
 # Derived globals — set once after parsing, used by all helper functions
-if [[ "$PRIVILEGED" == true ]]; then
+# Root = privileged (system-scope), non-root = unprivileged (user-scope)
+if [[ $EUID == 0 ]]; then
+    PRIVILEGED=true
     LXC_PATH="/var/lib/lxc"
     SERVICE_PREFIX="lxc-priv-bg-start"
     SYSTEMCTL_CMD=(systemctl)
@@ -420,6 +414,7 @@ if [[ "$PRIVILEGED" == true ]]; then
     ATTACH_CMD="lxc-attach"
     DROPIN_BASE="/etc/systemd/system"
 else
+    PRIVILEGED=false
     LXC_PATH="${HOME}/.local/share/lxc"
     SERVICE_PREFIX="lxc-bg-start"
     SYSTEMCTL_CMD=(systemctl --user)

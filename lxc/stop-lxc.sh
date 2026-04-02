@@ -2,7 +2,7 @@
 
 # stop-lxc.sh - Stop LXC containers
 #
-# Usage: ./stop-lxc.sh [--privileged] [container_name] [[container_name], ...]
+# Usage: ./stop-lxc.sh [container_name] [[container_name], ...]
 #
 # This script stops one or more LXC containers gracefully using lxc-stop
 # and their associated systemd services.
@@ -13,14 +13,15 @@
 # 1. Gracefully stops the container using lxc-stop
 # 2. Stops the associated systemd service to clean up the service state
 #
-# Options:
-#   --privileged  Stop privileged containers (requires root, uses system-scope services)
+# When run as root (e.g., via sudo), the script operates on privileged
+# (system-scope) containers. Otherwise, it operates on unprivileged
+# (user-scope) containers.
 #
 # Examples:
 #   ./stop-lxc.sh                       # Stop all running containers
 #   ./stop-lxc.sh mycontainer           # Stop a specific container
 #   ./stop-lxc.sh web db cache          # Stop multiple containers
-#   ./stop-lxc.sh --privileged web      # Stop a privileged container (as root)
+#   sudo ./stop-lxc.sh web              # Stop a privileged container
 
 set -euo pipefail
 
@@ -52,15 +53,10 @@ print_error() {
 # Main Script
 # ============================================================================
 
-PRIVILEGED=false
 CONTAINERS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --privileged)
-            PRIVILEGED=true
-            shift
-            ;;
         -*)
             print_error "✖ Unknown option: $1"
             exit 64  # EX_USAGE
@@ -72,9 +68,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Running as root implies --privileged (e.g., sudo ./stop-lxc.sh ...)
-if [[ "$PRIVILEGED" == false && $EUID == 0 ]]; then
+# Root = privileged (system-scope), non-root = unprivileged (user-scope)
+if [[ $EUID == 0 ]]; then
     PRIVILEGED=true
+else
+    PRIVILEGED=false
 fi
 
 if [[ ${#CONTAINERS[@]} -eq 0 ]]; then
