@@ -142,7 +142,7 @@ Starts containers using systemd services:
 | Flag | Persists | Effect |
 |------|----------|--------|
 | `--privileged` | — | Operate on system-scope (privileged) containers. Requires root. |
-| `--k8s` | Yes | Applies all Kubernetes settings: delegation + swap restriction + `/proc/sys` writability |
+| `--k8s` | Yes | Applies all Kubernetes settings: delegation + swap restriction + `/proc/sys` writability + AppArmor unconfined |
 | `--delegate` | Yes | Creates systemd drop-in with `Delegate=cpuset cpu io memory pids` |
 | `--delegate-once` | No | One-time cgroup delegation via `systemd-run` |
 | `--no-swap` | Yes | Creates `MemorySwapMax=0` drop-in AND masks `/proc/swaps` in container config |
@@ -171,7 +171,7 @@ sudo ./start-lxc.sh --privileged --k8s tst-k8s1
 
 **Note:** On systems with LXCFS, the `/proc/swaps` bind mount is overridden by the LXCFS FUSE filesystem. The Kubernetes setup script (`initialize-cluster.sh`) handles this automatically by setting `failSwapOn: false` in the kubeadm config for container environments. The `--no-swap` flag remains valuable for cgroup-level swap restriction.
 
-Containers with `k8s` in their name receive a warning if delegation, swap restriction, or `/proc/sys` writability is missing.
+Containers with `k8s` in their name receive a warning if delegation, swap restriction, `/proc/sys` writability, or AppArmor confinement is missing.
 
 ### stop-lxc.sh
 
