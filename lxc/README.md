@@ -1,21 +1,20 @@
 # LXC Container Management Scripts
 
-This directory contains scripts for managing unprivileged LXC containers on Linux systems. The scripts provide a complete workflow for setting up, creating, managing, backing up, and restoring containers.
+This directory contains scripts for managing LXC containers on Linux systems. The scripts provide a complete workflow for setting up, creating, managing, backing up, and restoring both unprivileged and privileged containers.
 
 ## Script Overview
 
 | Script | Description | Requires Root |
 |--------|-------------|---------------|
-| `setup-lxc.sh` | Configure unprivileged LXC for a user | Yes |
-| `create-lxc.sh` | Create a new container (auto-detects distro) | No |
-| `start-lxc.sh` | Start container(s) via systemd user service | No |
-| `stop-lxc.sh` | Stop container(s) gracefully | No |
-| `restart-lxc.sh` | Restart container(s) | No |
+| `setup-lxc.sh` | Configure LXC for a user or privileged mode | Yes (always) |
+| `create-lxc.sh` | Create a new container (auto-detects distro) | With `--privileged` |
+| `start-lxc.sh` | Start container(s) via systemd service | With `--privileged` |
+| `stop-lxc.sh` | Stop container(s) gracefully | With `--privileged` |
+| `restart-lxc.sh` | Restart container(s) | With `--privileged` |
 | `backup-lxc.sh` | Backup container to compressed archive | Yes (sudo) |
 | `restore-lxc.sh` | Restore container from backup | Yes (sudo) |
-| `config-lxc-ssh.sh` | Configure SSH keys for container access | Yes |
+| `config-lxc-ssh.sh` | Configure SSH keys for container access | Yes (always) |
 | `_download-lxc-scripts.sh` | Self-updating script manager | No |
-| `create-priv-lxc.sh` | Create privileged container (legacy/unsafe) | Yes |
 
 ## Quick Start
 
@@ -30,6 +29,19 @@ su - myuser
 
 # 3. Create your first container
 ./create-lxc.sh mycontainer
+```
+
+### Initial Setup (Privileged)
+
+```bash
+# 1. Configure LXC for privileged mode (run as root)
+sudo ./setup-lxc.sh --privileged
+
+# 2. Create a privileged container
+sudo ./create-lxc.sh --privileged mycontainer
+
+# 3. Start the container
+sudo ./start-lxc.sh --privileged mycontainer
 ```
 
 ### Daily Operations
@@ -71,8 +83,9 @@ su - myuser
 
 ### setup-lxc.sh
 
-Configures the host system for unprivileged LXC containers:
+Configures the host system for LXC containers.
 
+**Unprivileged mode** (default):
 - Installs and configures bridge-utils for br0 networking (optional)
 - Configures veth interface permissions (`/etc/lxc/lxc-usernet`)
 - Sets up subuid/subgid mappings (`/etc/subuid`, `/etc/subgid`)
@@ -81,33 +94,40 @@ Configures the host system for unprivileged LXC containers:
 - Sets up systemd user service for container auto-start
 - Enables systemd lingering for the user
 
+**Privileged mode** (`--privileged`):
+- Checks `/etc/lxc/default.conf` for veth networking (offers to add if missing)
+- Installs system-level systemd service template (`lxc-priv-bg-start@.service`)
+
 ```bash
 sudo ./setup-lxc.sh <username> [subuid_start]
+sudo ./setup-lxc.sh --privileged
 ```
 
 ### create-lxc.sh
 
 Creates an LXC container with auto-detection of distribution, release, and architecture:
 
-- Auto-detects host OS parameters if not specified
+- Auto-detects host OS parameters if not specified (falls back to interactive prompt on failure)
 - Prompts before destroying existing containers
 - Uses the sibling `start-lxc.sh` script to start the container
 - When the container name contains `k8s`, prompts to apply Kubernetes settings (`--delegate --no-swap`)
+- With `--privileged`, creates a truly privileged container (no user namespace remapping)
 
 ```bash
-./create-lxc.sh <container_name> [distribution] [release] [architecture]
+./create-lxc.sh [--privileged] <container_name> [distribution] [release] [architecture]
 
 # Examples:
 ./create-lxc.sh mycontainer                        # Auto-detect everything
 ./create-lxc.sh mycontainer debian bookworm arm64  # Explicit parameters
 ./create-lxc.sh tst-k8s1                           # Prompts for k8s settings
+sudo ./create-lxc.sh --privileged mycontainer      # Privileged container
 ```
 
 ### start-lxc.sh
 
-Starts containers using systemd user services:
+Starts containers using systemd services:
 
-- Uses `lxc-bg-start@.service` for proper lifecycle management
+- Uses `lxc-bg-start@.service` (or `lxc-priv-bg-start@.service` with `--privileged`) for proper lifecycle management
 - Auto-attaches to the container when starting a single container
 - Shows container status after starting multiple containers
 - Supports cgroup delegation and swap restriction flags for Kubernetes containers
@@ -121,6 +141,7 @@ Starts containers using systemd user services:
 
 | Flag | Persists | Effect |
 |------|----------|--------|
+| `--privileged` | — | Operate on system-scope (privileged) containers. Requires root. |
 | `--delegate` | Yes | Creates systemd drop-in with `Delegate=cpuset cpu io memory pids` |
 | `--delegate-once` | No | One-time cgroup delegation via `systemd-run` |
 | `--no-swap` | Yes | Creates `MemorySwapMax=0` drop-in AND masks `/proc/swaps` in container config |
@@ -153,11 +174,11 @@ Containers with `k8s` in their name receive a warning if delegation or swap rest
 Stops containers gracefully:
 
 - Uses `lxc-stop` for graceful shutdown
-- Stops associated systemd user service
+- Stops associated systemd service (user or system scope)
 - Stops all running containers if no arguments provided
 
 ```bash
-./stop-lxc.sh [container_name] [[container_name], ...]
+./stop-lxc.sh [--privileged] [container_name] [[container_name], ...]
 ```
 
 ### backup-lxc.sh
@@ -201,9 +222,10 @@ Configures SSH key-based authentication for containers:
 - Deploys public key to all containers
 - Configures `~/.ssh/config` for easy access
 - Works with stopped containers (direct rootfs access)
+- With `--privileged`, targets containers at `/var/lib/lxc/`
 
 ```bash
-sudo ./config-lxc-ssh.sh <username>
+sudo ./config-lxc-ssh.sh [--privileged] <username>
 ```
 
 After configuration, connect to containers with:
@@ -235,10 +257,23 @@ Self-updating script manager:
 | Unprivileged | `~/.local/share/lxc/<container>/` |
 | Privileged | `/var/lib/lxc/<container>/` |
 
+### Privileged vs Unprivileged
+
+| | Unprivileged | Privileged |
+|---|---|---|
+| Container path | `~/.local/share/lxc/<name>/` | `/var/lib/lxc/<name>/` |
+| Service template | `lxc-bg-start@.service` | `lxc-priv-bg-start@.service` |
+| Service location | `~/.config/systemd/user/` | `/etc/systemd/system/` |
+| systemctl scope | `systemctl --user` | `systemctl` |
+| Attach command | `lxc-unpriv-attach` | `lxc-attach` |
+| User namespace | Yes (subuid/subgid remapping) | No (UID 0 = host UID 0) |
+| Run as | Regular user | Root |
+
 ### Systemd Integration
 
-Containers are managed via systemd user services:
+Containers are managed via systemd services:
 
+**Unprivileged** (user services):
 ```bash
 # Service template location
 ~/.config/systemd/user/lxc-bg-start@.service
@@ -250,6 +285,20 @@ systemctl --user enable lxc-bg-start@mycontainer.service
 systemctl --user start lxc-bg-start@mycontainer.service
 systemctl --user stop lxc-bg-start@mycontainer.service
 systemctl --user status lxc-bg-start@mycontainer.service
+```
+
+**Privileged** (system services):
+```bash
+# Service template location
+/etc/systemd/system/lxc-priv-bg-start@.service
+
+# Enable auto-start for a container
+systemctl enable lxc-priv-bg-start@mycontainer.service
+
+# Manual service control
+systemctl start lxc-priv-bg-start@mycontainer.service
+systemctl stop lxc-priv-bg-start@mycontainer.service
+systemctl status lxc-priv-bg-start@mycontainer.service
 ```
 
 ### Cgroup Delegation for Kubernetes
