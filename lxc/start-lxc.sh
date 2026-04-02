@@ -144,6 +144,7 @@ check_k8s_delegation() {
 # ============================================================================
 
 readonly SWAP_MOUNT_ENTRY="lxc.mount.entry = /dev/null proc/swaps none bind,optional 0 0"
+readonly PROC_RW_MOUNT_AUTO="lxc.mount.auto = cgroup:mixed proc:rw sys:rw"
 
 # Check if a container's service has swap restricted via cgroup
 # Args: container_name
@@ -223,6 +224,57 @@ check_k8s_no_swap() {
 
     print_warning "⚠ Container '${name}' looks like a Kubernetes node but has incomplete swap restriction"
     print_warning "⚠ Kubernetes requires swap off. Use --no-swap to enforce cgroup limits and mask /proc/swaps"
+}
+
+# ============================================================================
+# /proc/sys Writability
+# ============================================================================
+
+# Check if a container's LXC config has proc:rw mount mode
+# Args: container_name
+# Returns: 0 if proc:rw is configured, 1 otherwise
+has_proc_rw() {
+    local name="$1"
+    local config="${LXC_PATH}/${name}/config"
+
+    [[ -f "$config" ]] && grep -qE '^lxc\.mount\.auto\s*=.*\bproc:rw\b' "$config"
+}
+
+# Add lxc.mount.auto with proc:rw to the container's LXC config
+# Overrides proc:mixed from common.conf so kubelet can write to /proc/sys
+# Args: container_name
+install_proc_rw() {
+    local name="$1"
+    local config="${LXC_PATH}/${name}/config"
+
+    if [[ ! -f "$config" ]]; then
+        print_warning "⚠ Container config not found: ${config}"
+        return 1
+    fi
+
+    if has_proc_rw "$name"; then
+        print_info "/proc/sys already writable for ${name}"
+        return 0
+    fi
+
+    {
+        echo ""
+        echo "# Mount /proc and /sys read-write — required for kubelet"
+        echo "$PROC_RW_MOUNT_AUTO"
+    } >> "$config"
+    print_success "✓ /proc/sys set to read-write for ${name}"
+}
+
+# Warn if a k8s container is missing proc:rw
+# Args: container_name
+check_k8s_proc_rw() {
+    local name="$1"
+
+    [[ "$name" != *k8s* ]] && return
+    has_proc_rw "$name" && return
+
+    print_warning "⚠ Container '${name}' looks like a Kubernetes node but /proc/sys is not writable"
+    print_warning "⚠ Kubelet requires writable /proc/sys. Use --k8s"
 }
 
 # ============================================================================
