@@ -34,7 +34,6 @@ get_script_list() {
     echo "backup-lxc.sh"
     echo "config-lxc-ssh.sh"
     echo "create-lxc.sh"
-    echo "create-priv-lxc.sh"
     echo "restart-lxc.sh"
     echo "restore-lxc.sh"
     echo "setup-lxc.sh"
@@ -45,7 +44,8 @@ get_script_list() {
 # List of obsolete scripts to clean up (renamed or removed from repository)
 # Add filenames here when scripts are renamed or deprecated
 OBSOLETE_SCRIPTS=(
-    "refresh-lxc.sh"  # renamed to restart-lxc.sh
+    "refresh-lxc.sh"      # renamed to restart-lxc.sh
+    "create-priv-lxc.sh"  # absorbed into create-lxc.sh --privileged
 )
 
 # Clean up obsolete scripts that have been renamed or removed from the repository
