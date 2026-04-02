@@ -311,6 +311,20 @@ if [[ ${#CONTAINERS[@]} -eq 0 ]]; then
     exit 64  # 64 - EX_USAGE (sysexits.h)
 fi
 
+# Pre-flight: verify the systemd service template exists (not needed for systemd-run path)
+if [[ "$DELEGATE_MODE" != "once" && "$SWAP_MODE" != "once" ]]; then
+    SERVICE_TEMPLATE="${DROPIN_BASE}/${SERVICE_PREFIX}@.service"
+    if [[ ! -f "$SERVICE_TEMPLATE" ]]; then
+        print_error "✖ Systemd service template not found: ${SERVICE_TEMPLATE}"
+        if [[ "$PRIVILEGED" == true ]]; then
+            print_error "  Run 'sudo setup-lxc.sh --privileged' to install it."
+        else
+            print_error "  Run 'sudo setup-lxc.sh $USER' to install it."
+        fi
+        exit 69  # EX_UNAVAILABLE — required service template not installed
+    fi
+fi
+
 # ============================================================================
 # Main Script
 # ============================================================================
@@ -387,7 +401,13 @@ echo ""
 if [[ ${#CONTAINERS[@]} -eq 1 ]]; then
     lxcName="${CONTAINERS[0]}"
 
-    print_info "Container started. Attaching in:"
+    if [[ "$any_failed" == true ]]; then
+        lxc-ls --fancy
+        echo ""
+        exit 1
+    fi
+
+    print_info "Attaching in:"
     x=3
     while [[ $x -gt 0 ]]; do
         echo "            $x..."
@@ -413,6 +433,7 @@ else
     echo ""
     if [[ "$any_failed" == true ]]; then
         print_warning "⚠ Some containers failed to start (see errors above)"
+        exit 1
     else
         print_success "✓ All containers started successfully"
     fi
