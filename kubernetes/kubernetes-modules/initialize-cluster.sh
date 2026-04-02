@@ -187,11 +187,12 @@ EOF
 }
 
 # ============================================================================
-# Control-Plane Initialization
+# Shared Preflight (control-plane and worker)
 # ============================================================================
 
-# Initialize a new control-plane node with kubeadm
-initialize_control_plane() {
+# Run kubeadm preflight checks common to both init and join
+# Ensures modprobe is available and container-specific requirements are met
+run_kubeadm_preflight() {
     # kubeadm preflight loads the "configs" kernel module via modprobe
     if ! command -v modprobe &>/dev/null; then
         print_warning "⚠ modprobe not found; kubeadm preflight requires it"
@@ -203,12 +204,21 @@ initialize_control_plane() {
         fi
     fi
 
-    # In containers, verify kernel config and /dev/kmsg are accessible
+    # In containers, verify kernel config, /dev/kmsg, and /proc/sys writability
     if [[ "${RUNNING_IN_CONTAINER:-false}" == true ]]; then
         ensure_kernel_config || return 1
         ensure_dev_kmsg || return 1
         ensure_proc_sys_writable || return 1
     fi
+}
+
+# ============================================================================
+# Control-Plane Initialization
+# ============================================================================
+
+# Initialize a new control-plane node with kubeadm
+initialize_control_plane() {
+    run_kubeadm_preflight || return 1
 
     local pod_cidr
     read -r -p "Enter pod network CIDR [192.168.0.0/16]: " pod_cidr </dev/tty
@@ -261,10 +271,7 @@ initialize_control_plane() {
 
 # Join this node to an existing cluster as a worker
 join_as_worker() {
-    # Container preflight — worker kubelet has the same /proc/sys requirement
-    if [[ "${RUNNING_IN_CONTAINER:-false}" == true ]]; then
-        ensure_proc_sys_writable || return 1
-    fi
+    run_kubeadm_preflight || return 1
 
     local join_cmd
     read -r -p "Enter the full 'kubeadm join' command: " join_cmd </dev/tty
