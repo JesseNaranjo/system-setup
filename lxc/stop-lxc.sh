@@ -72,10 +72,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Privileged mode requires root
-if [[ "$PRIVILEGED" == true && $EUID != 0 ]]; then
-    print_error "✖ --privileged requires root."
-    exit 1
+# Running as root implies --privileged (e.g., sudo ./stop-lxc.sh ...)
+if [[ "$PRIVILEGED" == false && $EUID == 0 ]]; then
+    PRIVILEGED=true
 fi
 
 if [[ ${#CONTAINERS[@]} -eq 0 ]]; then

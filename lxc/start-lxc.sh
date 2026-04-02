@@ -406,9 +406,13 @@ for arg in "$@"; do
     esac
 done
 
+# Running as root implies --privileged (e.g., sudo ./start-lxc.sh ...)
+if [[ "$PRIVILEGED" == false && $EUID == 0 ]]; then
+    PRIVILEGED=true
+fi
+
 # Derived globals — set once after parsing, used by all helper functions
 if [[ "$PRIVILEGED" == true ]]; then
-    [[ $EUID != 0 ]] && { print_error "✖ --privileged requires root."; exit 1; }
     LXC_PATH="/var/lib/lxc"
     SERVICE_PREFIX="lxc-priv-bg-start"
     SYSTEMCTL_CMD=(systemctl)
