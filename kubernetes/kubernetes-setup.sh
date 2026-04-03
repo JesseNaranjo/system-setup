@@ -5,8 +5,8 @@
 # Usage: sudo ./kubernetes-setup.sh
 #
 # This script orchestrates multiple focused configuration modules:
+# - Role selection (control-plane, worker, kubectl-only, skip)
 # - Kernel module loading (br_netfilter, overlay)
-# - Kubernetes and CRI-O APT repository configuration
 # - Kubernetes package installation (kubeadm, kubectl, kubelet, cri-o)
 # - Network configuration (IP forwarding, bridge netfilter)
 # - Swap disabling
@@ -15,6 +15,11 @@
 # - Cluster initialization and validation
 # - Certificate management
 # - KUBE_EDITOR configuration
+#
+# The role selector gates irrelevant steps:
+# - kubectl-only: Skips kernel modules and system configuration (steps 1, 3-8)
+# - skip: Skips package installation (step 2)
+# - control-plane / worker: Runs all steps
 #
 # The script automatically detects the environment and configures appropriately.
 # Linux only - Kubernetes is not supported on macOS natively.
@@ -46,19 +51,21 @@ OBSOLETE_SCRIPTS=(
     "install-update-helm.sh"
     "install-update-minikube.sh"
     "utils.sh"
+    "kubernetes-modules/configure-k8s-repos.sh"
 )
 
 # Step result tracking for cross-module dependency validation
 # When a step fails, dependent steps are skipped with a clear message
 STEP_KERNEL_MODULES_OK=false
-STEP_REPOS_OK=false
 STEP_PACKAGES_OK=false
 STEP_NETWORKING_OK=false
 STEP_SWAP_OK=false
 
+# Role selection for package installation (set by select_node_role)
+SELECTED_ROLE=""
+
 # List of module scripts to download/update (excludes kubernetes-setup.sh and utils-k8s.sh)
 get_script_list() {
-    echo "kubernetes-modules/configure-k8s-repos.sh"
     echo "kubernetes-modules/install-k8s-packages.sh"
     echo "kubernetes-modules/install-update-helm.sh"
     echo "kubernetes-modules/install-update-minikube.sh"
@@ -479,36 +486,32 @@ main() {
     # Show status overview
     show_status_overview
 
-    # Step 1: Configure kernel modules (must be before networking)
-    print_info "Step 1: Kernel Modules"
-    print_info "----------------------"
-    source "${SCRIPT_DIR}/kubernetes-modules/configure-kernel-modules.sh"
-    if main_configure_kernel_modules; then
-        STEP_KERNEL_MODULES_OK=true
-    else
-        print_error "✖ Kernel module configuration failed. Continuing..."
-    fi
-    echo ""
+    # Source the package module early — we need select_node_role() for step gating
+    source "${SCRIPT_DIR}/kubernetes-modules/install-k8s-packages.sh"
+    select_node_role
 
-    # Step 2: Configure APT repositories
-    print_info "Step 2: APT Repositories"
-    print_info "------------------------"
-    source "${SCRIPT_DIR}/kubernetes-modules/configure-k8s-repos.sh"
-    if main_configure_k8s_repos; then
-        STEP_REPOS_OK=true
+    # Step 1: Configure kernel modules (skip for kubectl-only)
+    if [[ "$SELECTED_ROLE" != "kubectl-only" ]]; then
+        print_info "Step 1: Kernel Modules"
+        print_info "----------------------"
+        source "${SCRIPT_DIR}/kubernetes-modules/configure-kernel-modules.sh"
+        if main_configure_kernel_modules; then
+            STEP_KERNEL_MODULES_OK=true
+        else
+            print_error "✖ Kernel module configuration failed. Continuing..."
+        fi
+        echo ""
     else
-        print_error "✖ Repository configuration failed. Continuing..."
+        print_info "Step 1: Skipping kernel modules (kubectl-only role)"
+        echo ""
     fi
-    echo ""
 
-    # Step 3: Install Kubernetes packages
-    print_info "Step 3: Package Installation"
-    print_info "----------------------------"
-    if check_step_prerequisites "Package Installation" "STEP_REPOS_OK"; then
-        source "${SCRIPT_DIR}/kubernetes-modules/install-k8s-packages.sh"
+    # Step 2: Package Installation (skip for skip role)
+    if [[ "$SELECTED_ROLE" != "skip" ]]; then
+        print_info "Step 2: Package Installation"
+        print_info "----------------------------"
         if main_install_k8s_packages; then
-            # Verify packages are actually available (check_and_install_packages always returns 0)
-            if [[ "$KUBEADM_INSTALLED" == true || "$KUBELET_INSTALLED" == true ]]; then
+            if [[ "$KUBEADM_INSTALLED" == true || "$KUBELET_INSTALLED" == true || "$SELECTED_ROLE" == "kubectl-only" ]]; then
                 STEP_PACKAGES_OK=true
             else
                 print_warning "⚠ No core Kubernetes packages available. Dependent steps will be skipped."
@@ -516,102 +519,117 @@ main() {
         else
             print_error "✖ Package installation failed. Continuing..."
         fi
+        echo ""
+    else
+        print_info "Step 2: Skipping package installation (skip role)"
+        # Packages may already be installed from a prior run — mark OK for dependent steps
+        if [[ "$KUBEADM_INSTALLED" == true || "$KUBELET_INSTALLED" == true ]]; then
+            STEP_PACKAGES_OK=true
+        fi
+        echo ""
     fi
-    echo ""
 
-    # Step 4: Configure networking (requires kernel modules from step 1)
-    print_info "Step 4: Network Configuration"
-    print_info "-----------------------------"
-    if check_step_prerequisites "Network Configuration" "STEP_KERNEL_MODULES_OK"; then
-        source "${SCRIPT_DIR}/kubernetes-modules/configure-networking.sh"
-        if main_configure_networking; then
-            STEP_NETWORKING_OK=true
+    # Steps 3-8: System configuration (skip for kubectl-only)
+    if [[ "$SELECTED_ROLE" != "kubectl-only" ]]; then
+
+        # Step 3: Configure networking (requires kernel modules from step 1)
+        print_info "Step 3: Network Configuration"
+        print_info "-----------------------------"
+        if check_step_prerequisites "Network Configuration" "STEP_KERNEL_MODULES_OK"; then
+            source "${SCRIPT_DIR}/kubernetes-modules/configure-networking.sh"
+            if main_configure_networking; then
+                STEP_NETWORKING_OK=true
+            else
+                print_error "✖ Network configuration failed. Continuing..."
+            fi
+        fi
+        echo ""
+
+        # Step 4: Configure swap
+        print_info "Step 4: Swap Configuration"
+        print_info "--------------------------"
+        source "${SCRIPT_DIR}/kubernetes-modules/configure-swap.sh"
+        if main_configure_swap; then
+            STEP_SWAP_OK=true
         else
-            print_error "✖ Network configuration failed. Continuing..."
+            print_error "✖ Swap configuration failed. Continuing..."
         fi
-    fi
-    echo ""
+        echo ""
 
-    # Step 5: Configure swap
-    print_info "Step 5: Swap Configuration"
-    print_info "--------------------------"
-    source "${SCRIPT_DIR}/kubernetes-modules/configure-swap.sh"
-    if main_configure_swap; then
-        STEP_SWAP_OK=true
-    else
-        print_error "✖ Swap configuration failed. Continuing..."
-    fi
-    echo ""
-
-    # Step 6: Configure CRI-O (if installed)
-    if [[ "$CRIO_INSTALLED" == true ]]; then
-        print_info "Step 6: CRI-O Configuration"
-        print_info "---------------------------"
-        if check_step_prerequisites "CRI-O Configuration" "STEP_PACKAGES_OK"; then
-            source "${SCRIPT_DIR}/kubernetes-modules/configure-crio.sh"
-            if ! main_configure_crio; then
-                print_error "✖ CRI-O configuration failed. Continuing..."
+        # Step 5: Configure CRI-O (if installed)
+        if [[ "$CRIO_INSTALLED" == true ]]; then
+            print_info "Step 5: CRI-O Configuration"
+            print_info "---------------------------"
+            if check_step_prerequisites "CRI-O Configuration" "STEP_PACKAGES_OK"; then
+                source "${SCRIPT_DIR}/kubernetes-modules/configure-crio.sh"
+                if ! main_configure_crio; then
+                    print_error "✖ CRI-O configuration failed. Continuing..."
+                fi
             fi
+            echo ""
+        else
+            print_info "Step 5: Skipping CRI-O configuration (not installed)"
+            echo ""
         fi
-        echo ""
-    else
-        print_info "Step 6: Skipping CRI-O configuration (not installed)"
-        echo ""
-    fi
 
-    # Step 7: Helm (optional)
-    if prompt_yes_no "            Would you like to install/update Helm?" "n"; then
-        source "${SCRIPT_DIR}/kubernetes-modules/install-update-helm.sh"
-        if ! main_install_update_helm; then
-            print_error "✖ Helm installation failed. Continuing..."
-        fi
-        echo ""
-    else
-        print_info "Skipping Helm installation"
-        echo ""
-    fi
-
-    # Step 8: Minikube (optional)
-    if prompt_yes_no "            Would you like to install/update Minikube?" "n"; then
-        source "${SCRIPT_DIR}/kubernetes-modules/install-update-minikube.sh"
-        if ! main_install_update_minikube; then
-            print_error "✖ Minikube installation failed. Continuing..."
-        fi
-        echo ""
-    else
-        print_info "Skipping Minikube installation"
-        echo ""
-    fi
-
-    # Step 9: Cluster initialization (optional, requires kubeadm)
-    if ! command -v kubeadm &>/dev/null; then
-        print_info "Step 9: Skipping cluster initialization (kubeadm not installed)"
-        echo ""
-    elif prompt_yes_no "            Would you like to initialize or join a cluster?" "n"; then
-        if check_step_prerequisites "Cluster Initialization" "STEP_PACKAGES_OK" "STEP_NETWORKING_OK" "STEP_SWAP_OK"; then
-            source "${SCRIPT_DIR}/kubernetes-modules/initialize-cluster.sh"
-            if ! main_initialize_cluster; then
-                print_error "✖ Cluster initialization failed. Continuing..."
+        # Step 6: Helm (optional)
+        if prompt_yes_no "            Would you like to install/update Helm?" "n"; then
+            source "${SCRIPT_DIR}/kubernetes-modules/install-update-helm.sh"
+            if ! main_install_update_helm; then
+                print_error "✖ Helm installation failed. Continuing..."
             fi
+            echo ""
+        else
+            print_info "Skipping Helm installation"
+            echo ""
         fi
-        echo ""
-    else
-        print_info "Skipping cluster initialization"
-        echo ""
-    fi
 
-    # Step 10: Validate cluster (if initialized)
+        # Step 7: Minikube (optional)
+        if prompt_yes_no "            Would you like to install/update Minikube?" "n"; then
+            source "${SCRIPT_DIR}/kubernetes-modules/install-update-minikube.sh"
+            if ! main_install_update_minikube; then
+                print_error "✖ Minikube installation failed. Continuing..."
+            fi
+            echo ""
+        else
+            print_info "Skipping Minikube installation"
+            echo ""
+        fi
+
+        # Step 8: Cluster initialization (optional, requires kubeadm)
+        if ! command -v kubeadm &>/dev/null; then
+            print_info "Step 8: Skipping cluster initialization (kubeadm not installed)"
+            echo ""
+        elif prompt_yes_no "            Would you like to initialize or join a cluster?" "n"; then
+            if check_step_prerequisites "Cluster Initialization" "STEP_PACKAGES_OK" "STEP_NETWORKING_OK" "STEP_SWAP_OK"; then
+                source "${SCRIPT_DIR}/kubernetes-modules/initialize-cluster.sh"
+                if ! main_initialize_cluster; then
+                    print_error "✖ Cluster initialization failed. Continuing..."
+                fi
+            fi
+            echo ""
+        else
+            print_info "Skipping cluster initialization"
+            echo ""
+        fi
+
+    else
+        print_info "Steps 3-8: Skipping system configuration (kubectl-only role)"
+        echo ""
+    fi  # end kubectl-only gate
+
+    # Step 9: Validate cluster (if initialized)
     if [[ -f /etc/kubernetes/admin.conf ]] && kubectl cluster-info &>/dev/null; then
-        print_info "Step 10: Cluster Validation"
-        print_info "---------------------------"
+        print_info "Step 9: Cluster Validation"
+        print_info "--------------------------"
         source "${SCRIPT_DIR}/kubernetes-modules/validate-cluster.sh"
         if ! main_validate_cluster; then
             print_error "✖ Cluster validation reported issues. Continuing..."
         fi
         echo ""
 
-        # Step 11: Certificate management (if cluster initialized)
-        print_info "Step 11: Certificate Management"
+        # Step 10: Certificate management (if cluster initialized)
+        print_info "Step 10: Certificate Management"
         print_info "-------------------------------"
         source "${SCRIPT_DIR}/kubernetes-modules/manage-certificates.sh"
         if ! main_manage_certificates; then
@@ -620,8 +638,8 @@ main() {
         echo ""
     fi
 
-    # Step 12: Configure KUBE_EDITOR
-    print_info "Step 12: KUBE_EDITOR Configuration"
+    # Step 11: Configure KUBE_EDITOR (always runs)
+    print_info "Step 11: KUBE_EDITOR Configuration"
     print_info "----------------------------------"
     source "${SCRIPT_DIR}/kubernetes-modules/configure-kube-editor.sh"
     if ! main_configure_kube_editor; then
