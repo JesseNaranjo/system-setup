@@ -194,14 +194,10 @@ EOF
 # Ensures modprobe is available and container-specific requirements are met
 run_kubeadm_preflight() {
     # kubeadm preflight loads the "configs" kernel module via modprobe
+    # kmod is installed as part of the role package set; this catches standalone execution
     if ! command -v modprobe &>/dev/null; then
-        print_warning "⚠ modprobe not found; kubeadm preflight requires it"
-        if prompt_yes_no "Install kmod (provides modprobe)?" "y"; then
-            apt install kmod || { print_error "✖ Failed to install kmod"; return 1; }
-            print_success "✓ kmod installed"
-        else
-            print_warning "⚠ Continuing without kmod — kubeadm preflight may fail"
-        fi
+        print_error "✖ modprobe not found (install kmod: apt install kmod)"
+        return 1
     fi
 
     # In containers, verify kernel config, /dev/kmsg, and /proc/sys writability
