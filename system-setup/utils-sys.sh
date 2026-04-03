@@ -447,9 +447,14 @@ get_removable_package_list() {
         # Linux packages to remove (apt)
         # These are typically unnecessary locale/i18n packages
         echo "Debconf i18n:debconf-i18n"
+        echo "GNU Privacy Guard:gnupg"
+        echo "GnuPG l10n:gnupg-l10n"
+        echo "GnuPG Network Cert Mgmt Svg:dirmngr"
+        echo "GnuPG S/MIME:gpgsm"
+        echo "GnuPG Utils:gnupg-utils"
+        echo "GPG Agent:gpg-agent"
         echo "GPG Error l10n:libgpg-error-l10n"
         echo "GPG WKS Client:gpg-wks-client"
-        echo "GnuPG Utils:gnupg-utils"
         echo "Kerberos Locales:krb5-locales"
         echo "Screen (GNU):screen"
         echo "Util-Linux Locales:util-linux-locales"
