@@ -25,14 +25,7 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source utilities
 # shellcheck source=utils-sys.sh
-if [[ -f "${SCRIPT_DIR}/utils-sys.sh" ]]; then
-    source "${SCRIPT_DIR}/utils-sys.sh"
-elif [[ -f "${SCRIPT_DIR}/utils.sh" ]]; then
-    source "${SCRIPT_DIR}/utils.sh"
-else
-    echo "ERROR: Cannot find utils-sys.sh or utils.sh in ${SCRIPT_DIR}" >&2
-    exit 1
-fi
+source "${SCRIPT_DIR}/utils-sys.sh"
 
 readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/system-setup"
 
@@ -40,6 +33,7 @@ readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setu
 # Add filenames here when scripts are renamed or deprecated
 OBSOLETE_SCRIPTS=(
     "apt-pkgs-helper.sh"
+    "utils.sh"
 )
 
 # List of module scripts to download/update (excludes system-setup.sh and utils-sys.sh)
@@ -551,16 +545,6 @@ main() {
     print_info "The script made only necessary changes to bring your configuration up to date."
     print_info "You may need to restart your terminal or source your shell configuration file for all changes to take effect."
     echo ""
-
-    # Transition reminder: backward-compat artifacts can be removed after 2026-04-01
-    if [[ "$(date +%Y%m%d)" -gt "20260401" ]] && [[ -e "${SCRIPT_DIR}/utils.sh" ]]; then
-        echo -e "${YELLOW}╭─── TRANSITION REMINDER ─────────────────────────────────────────────────────────────────────────────────────╮${NC}"
-        print_warning "⚠ The utils.sh backward-compatibility artifacts (symlink + source fallback) can now be removed."
-        print_warning "  1. Delete system-setup/utils.sh symlink"
-        print_warning "  2. Replace source fallback with direct: source \"\${SCRIPT_DIR}/utils-sys.sh\""
-        print_warning "  3. Add 'utils.sh' to OBSOLETE_SCRIPTS array"
-        echo -e "${YELLOW}╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯${NC}"
-    fi
 }
 
 # Run main function if script is executed directly

@@ -23,7 +23,6 @@ system-setup/
 ├── install-desktop.sh                         # TigerVNC + XRDP desktop setup
 ├── system-setup.sh                            # Main orchestrator
 ├── utils-sys.sh                               # Shared utilities and functions
-├── utils.sh -> utils-sys.sh                   # Backward-compat symlink
 └── system-modules/
     ├── configure-container-static-ip.sh       # Static IP for containers
     ├── migrate-to-systemd-networkd.sh         # ifupdown to systemd-networkd migration
