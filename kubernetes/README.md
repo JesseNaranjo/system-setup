@@ -14,7 +14,8 @@ The Kubernetes version is set via `K8S_VERSION` in `kubernetes-setup.sh` (curren
 The orchestrator will:
 1. Self-update from the remote repository (with diff/prompt before overwriting)
 2. Check and update all module scripts
-3. Walk through each configuration step interactively
+3. Ask which node role this machine will serve
+4. Walk through configuration steps based on the selected role
 
 ## Structure
 
@@ -31,8 +32,7 @@ The orchestrator will:
 | Module | Purpose |
 |--------|---------|
 | `configure-kernel-modules.sh` | Load and persist br_netfilter, overlay |
-| `configure-k8s-repos.sh` | Kubernetes and CRI-O APT repository configuration |
-| `install-k8s-packages.sh` | Install kubeadm, kubectl, kubelet, cri-o |
+| `install-k8s-packages.sh` | Role-based package installation (repos, GPG keys, packages) |
 | `configure-networking.sh` | Sysctl settings (IP forwarding, bridge netfilter) |
 | `configure-swap.sh` | Disable swap, clean fstab, mask swap.target |
 | `configure-crio.sh` | CRI-O runtime configuration and service management |
@@ -63,9 +63,10 @@ The following standalone scripts have been replaced by the orchestrator and its 
 | Old Script | Replaced By |
 |------------|-------------|
 | `_download-k8s-scripts.sh` | `kubernetes-setup.sh` (self-update) |
-| `update-k8s-repos.sh` | `kubernetes-modules/configure-k8s-repos.sh` |
+| `update-k8s-repos.sh` | `kubernetes-modules/install-k8s-packages.sh` |
 | `install-update-helm.sh` (root) | `kubernetes-modules/install-update-helm.sh` |
 | `install-update-minikube.sh` (root) | `kubernetes-modules/install-update-minikube.sh` |
+| `kubernetes-modules/configure-k8s-repos.sh` | Absorbed into `kubernetes-modules/install-k8s-packages.sh` |
 
 The orchestrator will prompt to delete these if found.
 
