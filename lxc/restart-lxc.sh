@@ -43,48 +43,50 @@ print_warning() {
     echo -e "${YELLOW}[ WARNING ]${NC} $1"
 }
 
-# ============================================================================
-# Main Script
-# ============================================================================
+main() {
+    local SCRIPT_DIR
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Get script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local CONTAINERS=()
 
-CONTAINERS=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -*)
+                print_error "✖ Unknown option: $1"
+                exit 64  # EX_USAGE
+                ;;
+            *)
+                CONTAINERS+=("$1")
+                shift
+                ;;
+        esac
+    done
 
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -*)
-            print_error "✖ Unknown option: $1"
-            exit 64  # EX_USAGE
-            ;;
-        *)
-            CONTAINERS+=("$1")
-            shift
-            ;;
-    esac
-done
+    local RUNNING
 
-if [[ ${#CONTAINERS[@]} -eq 0 ]]; then
-    # No LXCs specified, so restart all running LXCs
-    print_info "No containers specified, restarting all running containers..."
+    if [[ ${#CONTAINERS[@]} -eq 0 ]]; then
+        # No LXCs specified, so restart all running LXCs
+        print_info "No containers specified, restarting all running containers..."
 
-    RUNNING=( $(/usr/bin/lxc-ls --running) )
+        RUNNING=( $(/usr/bin/lxc-ls --running) )
 
-    if [[ ${#RUNNING[@]} -eq 0 ]]; then
-        print_warning "⚠ No running containers found"
-        exit 0
+        if [[ ${#RUNNING[@]} -eq 0 ]]; then
+            print_warning "⚠ No running containers found"
+            exit 0
+        fi
+    else
+        RUNNING=("${CONTAINERS[@]}")
     fi
-else
-    RUNNING=("${CONTAINERS[@]}")
-fi
 
-print_info "Restarting ${#RUNNING[@]} container(s): ${RUNNING[*]}"
-echo ""
+    print_info "Restarting ${#RUNNING[@]} container(s): ${RUNNING[*]}"
+    echo ""
 
-"${SCRIPT_DIR}/stop-lxc.sh" "${RUNNING[@]}"
-sleep 0.25
-"${SCRIPT_DIR}/start-lxc.sh" "${RUNNING[@]}"
+    "${SCRIPT_DIR}/stop-lxc.sh" "${RUNNING[@]}"
+    sleep 0.25
+    "${SCRIPT_DIR}/start-lxc.sh" "${RUNNING[@]}"
 
-echo ""
-print_success "Container restart sequence completed"
+    echo ""
+    print_success "Container restart sequence completed"
+}
+
+[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"

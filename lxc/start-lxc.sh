@@ -374,208 +374,212 @@ usage() {
     echo "  ${0##*/} --no-swap-once tst-k8s1"
 }
 
-# Parse options
-DELEGATE_MODE=""
-SWAP_MODE=""
-PROC_RW=false
-CONTAINERS=()
+main() {
+    # Parse options
+    DELEGATE_MODE=""
+    SWAP_MODE=""
+    PROC_RW=false
+    CONTAINERS=()
 
-for arg in "$@"; do
-    case "$arg" in
-        --k8s)
-            [[ -z "$DELEGATE_MODE" ]] && DELEGATE_MODE="persist"
-            [[ -z "$SWAP_MODE" ]] && SWAP_MODE="persist"
-            PROC_RW=true
-            ;;
-        --delegate)
-            DELEGATE_MODE="persist"
-            ;;
-        --delegate-once)
-            DELEGATE_MODE="once"
-            ;;
-        --no-swap)
-            SWAP_MODE="persist"
-            ;;
-        --no-swap-once)
-            SWAP_MODE="once"
-            ;;
-        --help|-h)
-            usage
-            exit 0
-            ;;
-        -*)
-            print_error "✖ Unknown option: $arg"
-            usage
-            exit 64
-            ;;
-        *)
-            CONTAINERS+=("$arg")
-            ;;
-    esac
-done
+    for arg in "$@"; do
+        case "$arg" in
+            --k8s)
+                [[ -z "$DELEGATE_MODE" ]] && DELEGATE_MODE="persist"
+                [[ -z "$SWAP_MODE" ]] && SWAP_MODE="persist"
+                PROC_RW=true
+                ;;
+            --delegate)
+                DELEGATE_MODE="persist"
+                ;;
+            --delegate-once)
+                DELEGATE_MODE="once"
+                ;;
+            --no-swap)
+                SWAP_MODE="persist"
+                ;;
+            --no-swap-once)
+                SWAP_MODE="once"
+                ;;
+            --help|-h)
+                usage
+                exit 0
+                ;;
+            -*)
+                print_error "✖ Unknown option: $arg"
+                usage
+                exit 64
+                ;;
+            *)
+                CONTAINERS+=("$arg")
+                ;;
+        esac
+    done
 
-# Derived globals — set once after parsing, used by all helper functions
-# Root = privileged (system-scope), non-root = unprivileged (user-scope)
-if [[ $EUID == 0 ]]; then
-    PRIVILEGED=true
-    LXC_PATH="/var/lib/lxc"
-    SERVICE_PREFIX="lxc-priv-bg-start"
-    SYSTEMCTL_CMD=(systemctl)
-    SYSTEMD_RUN_CMD=(systemd-run --scope)
-    ATTACH_CMD="lxc-attach"
-    DROPIN_BASE="/etc/systemd/system"
-else
-    PRIVILEGED=false
-    LXC_PATH="${HOME}/.local/share/lxc"
-    SERVICE_PREFIX="lxc-bg-start"
-    SYSTEMCTL_CMD=(systemctl --user)
-    SYSTEMD_RUN_CMD=(systemd-run --user --scope)
-    ATTACH_CMD="lxc-unpriv-attach"
-    DROPIN_BASE="${HOME}/.config/systemd/user"
-fi
-
-if [[ ${#CONTAINERS[@]} -eq 0 ]]; then
-    print_error "✖ Missing required container name argument"
-    echo ""
-    usage
-    exit 64  # 64 - EX_USAGE (sysexits.h)
-fi
-
-# Pre-flight: verify the systemd service template exists (not needed for systemd-run path)
-if [[ "$DELEGATE_MODE" != "once" && "$SWAP_MODE" != "once" ]]; then
-    SERVICE_TEMPLATE="${DROPIN_BASE}/${SERVICE_PREFIX}@.service"
-    if [[ ! -f "$SERVICE_TEMPLATE" ]]; then
-        print_error "✖ Systemd service template not found: ${SERVICE_TEMPLATE}"
-        if [[ "$PRIVILEGED" == true ]]; then
-            print_error "  Run 'sudo setup-lxc.sh --privileged' to install it."
-        else
-            print_error "  Run 'sudo setup-lxc.sh $USER' to install it."
-        fi
-        exit 69  # EX_UNAVAILABLE — required service template not installed
-    fi
-fi
-
-# ============================================================================
-# Main Script
-# ============================================================================
-
-print_info "Starting ${#CONTAINERS[@]} container(s)..."
-echo ""
-
-any_failed=false
-for lxcName in "${CONTAINERS[@]}"; do
-    # Install persistent settings BEFORE the running check — they apply on next restart
-    if [[ "$DELEGATE_MODE" == "persist" ]]; then
-        check_session_controllers || true
-        if ! has_delegation "$lxcName"; then
-            install_delegation_dropin "$lxcName"
-        else
-            print_info "Cgroup delegation already configured for ${lxcName}"
-        fi
-    fi
-
-    if [[ "$SWAP_MODE" == "persist" ]]; then
-        if ! has_no_swap "$lxcName"; then
-            install_no_swap_dropin "$lxcName"
-        else
-            print_info "Swap cgroup restriction already configured for ${lxcName}"
-        fi
-        mask_proc_swaps "$lxcName" \
-            || print_warning "⚠ Failed to mask /proc/swaps for ${lxcName}; configure manually"
-    fi
-
-    if [[ "$PROC_RW" == true ]]; then
-        install_proc_rw "$lxcName" \
-            || print_warning "⚠ Failed to set proc:rw for ${lxcName}; configure manually"
-        install_apparmor_unconfined "$lxcName" \
-            || print_warning "⚠ Failed to set AppArmor unconfined for ${lxcName}; configure manually"
-    fi
-
-    # Skip start if already running (persistent settings above still applied)
-    if lxc-info -n "${lxcName}" -s 2>/dev/null | grep -q "RUNNING"; then
-        print_success "⊙ Container ${lxcName} is already running (settings applied for next restart)"
-        continue
-    fi
-
-    # Start the container
-    if [[ "$DELEGATE_MODE" == "once" || "$SWAP_MODE" == "once" ]]; then
-        # systemd-run bypasses the service, so include ALL desired properties
-        # (both persisted and one-time) for this start
-        [[ "$DELEGATE_MODE" == "once" ]] && { check_session_controllers || true; }
-        run_props=()
-        [[ -n "$DELEGATE_MODE" ]] && run_props+=(-p "Delegate=${DELEGATE_CONTROLLERS}")
-        [[ -n "$SWAP_MODE" ]] && run_props+=(-p "MemorySwapMax=0")
-
-        print_info "Starting ${lxcName} with one-time properties: ${run_props[*]}..."
-        if "${SYSTEMD_RUN_CMD[@]}" "${run_props[@]}" -- lxc-start -n "$lxcName"; then
-            print_success "✓ Container started: ${lxcName}"
-        else
-            print_error "✖ Failed to start container: ${lxcName}"
-            any_failed=true
-        fi
+    # Derived globals — set once after parsing, used by all helper functions
+    # Root = privileged (system-scope), non-root = unprivileged (user-scope)
+    if [[ $EUID == 0 ]]; then
+        PRIVILEGED=true
+        LXC_PATH="/var/lib/lxc"
+        SERVICE_PREFIX="lxc-priv-bg-start"
+        SYSTEMCTL_CMD=(systemctl)
+        SYSTEMD_RUN_CMD=(systemd-run --scope)
+        ATTACH_CMD="lxc-attach"
+        DROPIN_BASE="/etc/systemd/system"
     else
-        # No one-time flags: start via service (drop-ins apply automatically)
-        # Warn about missing settings on k8s containers only when no explicit flags
-        if [[ -z "$DELEGATE_MODE" ]]; then
-            check_k8s_delegation "$lxcName"
-        fi
-        if [[ -z "$SWAP_MODE" ]]; then
-            check_k8s_no_swap "$lxcName"
-        fi
-        if [[ "$PROC_RW" != true ]]; then
-            check_k8s_proc_rw "$lxcName"
-            check_k8s_apparmor "$lxcName"
-        fi
-
-        print_info "Starting ${lxcName}..."
-        if "${SYSTEMCTL_CMD[@]}" start "${SERVICE_PREFIX}@${lxcName}.service"; then
-            print_success "✓ Service and Container started: ${lxcName}"
-        else
-            print_error "✖ Failed to start service/container: ${lxcName}"
-            any_failed=true
-        fi
+        PRIVILEGED=false
+        LXC_PATH="${HOME}/.local/share/lxc"
+        SERVICE_PREFIX="lxc-bg-start"
+        SYSTEMCTL_CMD=(systemctl --user)
+        SYSTEMD_RUN_CMD=(systemd-run --user --scope)
+        ATTACH_CMD="lxc-unpriv-attach"
+        DROPIN_BASE="${HOME}/.config/systemd/user"
     fi
-done
-echo ""
 
-# If only one container specified, attach to it
-if [[ ${#CONTAINERS[@]} -eq 1 ]]; then
-    lxcName="${CONTAINERS[0]}"
-
-    if [[ "$any_failed" == true ]]; then
-        lxc-ls --fancy
+    if [[ ${#CONTAINERS[@]} -eq 0 ]]; then
+        print_error "✖ Missing required container name argument"
         echo ""
-        exit 1
+        usage
+        exit 64  # 64 - EX_USAGE (sysexits.h)
     fi
 
-    print_info "Attaching in:"
-    x=3
-    while [[ $x -gt 0 ]]; do
-        echo "            $x..."
-        sleep 0.75
-        x=$((x - 1))
+    # Pre-flight: verify the systemd service template exists (not needed for systemd-run path)
+    if [[ "$DELEGATE_MODE" != "once" && "$SWAP_MODE" != "once" ]]; then
+        SERVICE_TEMPLATE="${DROPIN_BASE}/${SERVICE_PREFIX}@.service"
+        if [[ ! -f "$SERVICE_TEMPLATE" ]]; then
+            print_error "✖ Systemd service template not found: ${SERVICE_TEMPLATE}"
+            if [[ "$PRIVILEGED" == true ]]; then
+                print_error "  Run 'sudo setup-lxc.sh --privileged' to install it."
+            else
+                print_error "  Run 'sudo setup-lxc.sh $USER' to install it."
+            fi
+            exit 69  # EX_UNAVAILABLE — required service template not installed
+        fi
+    fi
+
+    # ============================================================================
+    # Main Script
+    # ============================================================================
+
+    print_info "Starting ${#CONTAINERS[@]} container(s)..."
+    echo ""
+
+    any_failed=false
+    for lxcName in "${CONTAINERS[@]}"; do
+        # Install persistent settings BEFORE the running check — they apply on next restart
+        if [[ "$DELEGATE_MODE" == "persist" ]]; then
+            check_session_controllers || true
+            if ! has_delegation "$lxcName"; then
+                install_delegation_dropin "$lxcName"
+            else
+                print_info "Cgroup delegation already configured for ${lxcName}"
+            fi
+        fi
+
+        if [[ "$SWAP_MODE" == "persist" ]]; then
+            if ! has_no_swap "$lxcName"; then
+                install_no_swap_dropin "$lxcName"
+            else
+                print_info "Swap cgroup restriction already configured for ${lxcName}"
+            fi
+            mask_proc_swaps "$lxcName" \
+                || print_warning "⚠ Failed to mask /proc/swaps for ${lxcName}; configure manually"
+        fi
+
+        if [[ "$PROC_RW" == true ]]; then
+            install_proc_rw "$lxcName" \
+                || print_warning "⚠ Failed to set proc:rw for ${lxcName}; configure manually"
+            install_apparmor_unconfined "$lxcName" \
+                || print_warning "⚠ Failed to set AppArmor unconfined for ${lxcName}; configure manually"
+        fi
+
+        # Skip start if already running (persistent settings above still applied)
+        if lxc-info -n "${lxcName}" -s 2>/dev/null | grep -q "RUNNING"; then
+            print_success "⊙ Container ${lxcName} is already running (settings applied for next restart)"
+            continue
+        fi
+
+        # Start the container
+        if [[ "$DELEGATE_MODE" == "once" || "$SWAP_MODE" == "once" ]]; then
+            # systemd-run bypasses the service, so include ALL desired properties
+            # (both persisted and one-time) for this start
+            [[ "$DELEGATE_MODE" == "once" ]] && { check_session_controllers || true; }
+            run_props=()
+            [[ -n "$DELEGATE_MODE" ]] && run_props+=(-p "Delegate=${DELEGATE_CONTROLLERS}")
+            [[ -n "$SWAP_MODE" ]] && run_props+=(-p "MemorySwapMax=0")
+
+            print_info "Starting ${lxcName} with one-time properties: ${run_props[*]}..."
+            if "${SYSTEMD_RUN_CMD[@]}" "${run_props[@]}" -- lxc-start -n "$lxcName"; then
+                print_success "✓ Container started: ${lxcName}"
+            else
+                print_error "✖ Failed to start container: ${lxcName}"
+                any_failed=true
+            fi
+        else
+            # No one-time flags: start via service (drop-ins apply automatically)
+            # Warn about missing settings on k8s containers only when no explicit flags
+            if [[ -z "$DELEGATE_MODE" ]]; then
+                check_k8s_delegation "$lxcName"
+            fi
+            if [[ -z "$SWAP_MODE" ]]; then
+                check_k8s_no_swap "$lxcName"
+            fi
+            if [[ "$PROC_RW" != true ]]; then
+                check_k8s_proc_rw "$lxcName"
+                check_k8s_apparmor "$lxcName"
+            fi
+
+            print_info "Starting ${lxcName}..."
+            if "${SYSTEMCTL_CMD[@]}" start "${SERVICE_PREFIX}@${lxcName}.service"; then
+                print_success "✓ Service and Container started: ${lxcName}"
+            else
+                print_error "✖ Failed to start service/container: ${lxcName}"
+                any_failed=true
+            fi
+        fi
     done
     echo ""
 
-    lxc-ls --fancy
-    echo ""
+    # If only one container specified, attach to it
+    if [[ ${#CONTAINERS[@]} -eq 1 ]]; then
+        lxcName="${CONTAINERS[0]}"
 
-    # lxc-attach / lxc-unpriv-attach reuse the calling environment in the container:
-    # - All env variables are passed through, so by default the container thinks
-    #   that it's running as the user that attached into the LXC
-    # - Even though inside the container you may be root, the env variables are
-    #   not setup correctly (for example, check $HOME without the --set-var argument)
-    print_info "Attaching to ${lxcName} as root (use 'exit' or Ctrl+D to detach)..."
-    echo ""
-    "$ATTACH_CMD" --name "${lxcName}" --set-var HOME=/root -- /bin/bash -l
-else
-    # Multiple containers, just show status
-    lxc-ls --fancy
-    echo ""
-    if [[ "$any_failed" == true ]]; then
-        print_warning "⚠ Some containers failed to start (see errors above)"
-        exit 1
+        if [[ "$any_failed" == true ]]; then
+            lxc-ls --fancy
+            echo ""
+            exit 1
+        fi
+
+        print_info "Attaching in:"
+        x=3
+        while [[ $x -gt 0 ]]; do
+            echo "            $x..."
+            sleep 0.75
+            x=$((x - 1))
+        done
+        echo ""
+
+        lxc-ls --fancy
+        echo ""
+
+        # lxc-attach / lxc-unpriv-attach reuse the calling environment in the container:
+        # - All env variables are passed through, so by default the container thinks
+        #   that it's running as the user that attached into the LXC
+        # - Even though inside the container you may be root, the env variables are
+        #   not setup correctly (for example, check $HOME without the --set-var argument)
+        print_info "Attaching to ${lxcName} as root (use 'exit' or Ctrl+D to detach)..."
+        echo ""
+        "$ATTACH_CMD" --name "${lxcName}" --set-var HOME=/root -- /bin/bash -l
     else
-        print_success "✓ All containers started successfully"
+        # Multiple containers, just show status
+        lxc-ls --fancy
+        echo ""
+        if [[ "$any_failed" == true ]]; then
+            print_warning "⚠ Some containers failed to start (see errors above)"
+            exit 1
+        else
+            print_success "✓ All containers started successfully"
+        fi
     fi
-fi
+}
+
+[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"
