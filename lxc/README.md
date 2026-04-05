@@ -8,9 +8,9 @@ This directory contains scripts for managing LXC containers on Linux systems. Th
 |--------|-------------|---------------|
 | `setup-lxc.sh` | Configure LXC for a user or privileged mode | Yes (always) |
 | `create-lxc.sh` | Create a new container (auto-detects distro) | With `--privileged` |
-| `start-lxc.sh` | Start container(s) via systemd service | With `--privileged` |
-| `stop-lxc.sh` | Stop container(s) gracefully | With `--privileged` |
-| `restart-lxc.sh` | Restart container(s) | With `--privileged` |
+| `start-lxc.sh` | Start container(s) via systemd service | Yes (sudo) |
+| `stop-lxc.sh` | Stop container(s) gracefully | Yes (sudo) |
+| `restart-lxc.sh` | Restart container(s) | Yes (sudo) |
 | `backup-lxc.sh` | Backup container to compressed archive | Yes (sudo) |
 | `restore-lxc.sh` | Restore container from backup | Yes (sudo) |
 | `config-lxc-ssh.sh` | Configure SSH keys for container access | Yes (always) |
@@ -41,7 +41,7 @@ sudo ./setup-lxc.sh --privileged
 sudo ./create-lxc.sh --privileged mycontainer
 
 # 3. Start the container
-sudo ./start-lxc.sh --privileged mycontainer
+sudo ./start-lxc.sh mycontainer
 ```
 
 ### Daily Operations
@@ -127,7 +127,7 @@ sudo ./create-lxc.sh --privileged mycontainer      # Privileged container
 
 Starts containers using systemd services:
 
-- Uses `lxc-bg-start@.service` (or `lxc-priv-bg-start@.service` with `--privileged`) for proper lifecycle management
+- Uses `lxc-bg-start@.service` (or `lxc-priv-bg-start@.service` when run as root) for proper lifecycle management
 - Auto-attaches to the container when starting a single container
 - Shows container status after starting multiple containers
 - Supports cgroup delegation and swap restriction flags for Kubernetes containers
@@ -141,7 +141,6 @@ Starts containers using systemd services:
 
 | Flag | Persists | Effect |
 |------|----------|--------|
-| `--privileged` | — | Operate on system-scope (privileged) containers. Requires root. |
 | `--k8s` | Yes | Applies all Kubernetes settings: delegation + swap restriction + `/proc/sys` writability + AppArmor unconfined |
 | `--delegate` | Yes | Creates systemd drop-in with `Delegate=cpuset cpu io memory pids` |
 | `--delegate-once` | No | One-time cgroup delegation via `systemd-run` |
@@ -152,7 +151,7 @@ Flags are combinable. For full Kubernetes support, use `--k8s`:
 
 ```bash
 # Full k8s setup (recommended)
-sudo ./start-lxc.sh --privileged --k8s tst-k8s1
+sudo ./start-lxc.sh --k8s tst-k8s1
 
 # Equivalent granular flags
 ./start-lxc.sh --delegate --no-swap tst-k8s1
@@ -161,7 +160,7 @@ sudo ./start-lxc.sh --privileged --k8s tst-k8s1
 ./start-lxc.sh --no-swap-once tst-k8s1
 
 # Apply settings to an already-running container (takes effect on next restart)
-./start-lxc.sh --privileged --k8s tst-k8s1
+sudo ./start-lxc.sh --k8s tst-k8s1
 ```
 
 **What `--no-swap` does:**
@@ -182,7 +181,7 @@ Stops containers gracefully:
 - Stops all running containers if no arguments provided
 
 ```bash
-./stop-lxc.sh [--privileged] [container_name] [[container_name], ...]
+./stop-lxc.sh [container_name] [[container_name], ...]
 ```
 
 ### backup-lxc.sh
