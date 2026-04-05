@@ -328,16 +328,20 @@ update_modules() {
 # Main Orchestration
 # ============================================================================
 
-# Detect download command (curl or wget) for update functionality
-if detect_download_cmd; then
-    # Only run self-update if not already updated in this session
-    if [[ ${scriptUpdated:-0} -eq 0 ]]; then
-        self_update "$@"
+main() {
+    # Detect download command (curl or wget) for update functionality
+    if detect_download_cmd; then
+        # Only run self-update if not already updated in this session
+        if [[ ${scriptUpdated:-0} -eq 0 ]]; then
+            self_update "$@"
+        fi
+
+        # Always check for module updates (not skipped by scriptUpdated) if download cmd available
+        update_modules
+
+        # Clean up any obsolete scripts
+        cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
     fi
+}
 
-    # Always check for module updates (not skipped by scriptUpdated) if download cmd available
-    update_modules
-
-    # Clean up any obsolete scripts
-    cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
-fi
+[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"

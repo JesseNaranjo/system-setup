@@ -53,77 +53,85 @@ print_error() {
 # Main Script
 # ============================================================================
 
-CONTAINERS=()
+main() {
+    local CONTAINERS=()
 
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -*)
-            print_error "✖ Unknown option: $1"
-            exit 64  # EX_USAGE
-            ;;
-        *)
-            CONTAINERS+=("$1")
-            shift
-            ;;
-    esac
-done
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -*)
+                print_error "✖ Unknown option: $1"
+                exit 64  # EX_USAGE
+                ;;
+            *)
+                CONTAINERS+=("$1")
+                shift
+                ;;
+        esac
+    done
 
-# Root = privileged (system-scope), non-root = unprivileged (user-scope)
-if [[ $EUID == 0 ]]; then
-    PRIVILEGED=true
-else
-    PRIVILEGED=false
-fi
-
-if [[ ${#CONTAINERS[@]} -eq 0 ]]; then
-    # No LXCs specified, so stop all running LXCs
-    print_info "No containers specified, stopping all running containers..."
-
-    RUNNING=( $(/usr/bin/lxc-ls --running) )
-
-    if [[ ${#RUNNING[@]} -eq 0 ]]; then
-        print_warning "⚠ No running containers found"
-        exit 0
-    fi
-else
-    RUNNING=("${CONTAINERS[@]}")
-fi
-
-print_info "Stopping ${#RUNNING[@]} container(s)..."
-echo ""
-
-for lxcName in "${RUNNING[@]}"; do
-    print_info "Stopping ${lxcName}..."
-
-    # Stop the container
-    if lxc-stop --name "${lxcName}"; then
-        print_success "✓ Container stopped: ${lxcName}"
+    # Root = privileged (system-scope), non-root = unprivileged (user-scope)
+    local PRIVILEGED
+    if [[ $EUID == 0 ]]; then
+        PRIVILEGED=true
     else
-        print_error "✖ Failed to stop container: ${lxcName}"
+        PRIVILEGED=false
     fi
-    sleep 0.5
 
-    # Stop the systemd service
-    if [[ "$PRIVILEGED" == true ]]; then
-        SERVICE="lxc-priv-bg-start@${lxcName}.service"
-        if systemctl stop "$SERVICE" 2>/dev/null; then
-            print_success "✓ Service stopped: ${SERVICE}"
-        else
-            print_warning "⚠ Service may not be running: ${SERVICE}"
+    local RUNNING
+    if [[ ${#CONTAINERS[@]} -eq 0 ]]; then
+        # No LXCs specified, so stop all running LXCs
+        print_info "No containers specified, stopping all running containers..."
+
+        RUNNING=( $(/usr/bin/lxc-ls --running) )
+
+        if [[ ${#RUNNING[@]} -eq 0 ]]; then
+            print_warning "⚠ No running containers found"
+            exit 0
         fi
     else
-        SERVICE="lxc-bg-start@${lxcName}.service"
-        if systemctl --user stop "$SERVICE" 2>/dev/null; then
-            print_success "✓ Service stopped: ${SERVICE}"
-        else
-            print_warning "⚠ Service may not be running: ${SERVICE}"
-        fi
+        RUNNING=("${CONTAINERS[@]}")
     fi
-    sleep 0.25
-done
 
-echo ""
-lxc-ls --fancy
+    print_info "Stopping ${#RUNNING[@]} container(s)..."
+    echo ""
 
-echo ""
-print_success "Container shutdown sequence completed"
+    local lxcName
+    for lxcName in "${RUNNING[@]}"; do
+        print_info "Stopping ${lxcName}..."
+
+        # Stop the container
+        if lxc-stop --name "${lxcName}"; then
+            print_success "✓ Container stopped: ${lxcName}"
+        else
+            print_error "✖ Failed to stop container: ${lxcName}"
+        fi
+        sleep 0.5
+
+        # Stop the systemd service
+        local SERVICE
+        if [[ "$PRIVILEGED" == true ]]; then
+            SERVICE="lxc-priv-bg-start@${lxcName}.service"
+            if systemctl stop "$SERVICE" 2>/dev/null; then
+                print_success "✓ Service stopped: ${SERVICE}"
+            else
+                print_warning "⚠ Service may not be running: ${SERVICE}"
+            fi
+        else
+            SERVICE="lxc-bg-start@${lxcName}.service"
+            if systemctl --user stop "$SERVICE" 2>/dev/null; then
+                print_success "✓ Service stopped: ${SERVICE}"
+            else
+                print_warning "⚠ Service may not be running: ${SERVICE}"
+            fi
+        fi
+        sleep 0.25
+    done
+
+    echo ""
+    lxc-ls --fancy
+
+    echo ""
+    print_success "Container shutdown sequence completed"
+}
+
+[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"
