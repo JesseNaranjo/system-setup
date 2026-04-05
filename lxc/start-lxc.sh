@@ -78,8 +78,19 @@ print_error() {
 has_delegation() {
     local name="$1"
     local service="${SERVICE_PREFIX}@${name}.service"
+    local controllers
+    controllers="$("${SYSTEMCTL_CMD[@]}" show "$service" \
+        -p DelegateControllers --value 2>/dev/null)"
 
-    "${SYSTEMCTL_CMD[@]}" show "$service" -p Delegate 2>/dev/null | grep -qP "^Delegate=.*cpuset.*"
+    # cpuset explicitly listed in delegated controllers
+    [[ "$controllers" == *cpuset* ]] && return 0
+    # Empty controller list: check if all controllers
+    # are delegated (Delegate=yes with no filter)
+    [[ -z "$controllers" ]] && \
+        [[ "$("${SYSTEMCTL_CMD[@]}" show "$service" \
+            -p Delegate --value 2>/dev/null)" == "yes" ]] \
+        && return 0
+    return 1
 }
 
 # Check if the user session has all required cgroup controllers available
