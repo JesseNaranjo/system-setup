@@ -382,7 +382,7 @@ update_claude() {
         "frontend-design@claude-plugins-official": true,
         "learning-output-style@claude-plugins-official": false,
         "microsoft-docs@claude-plugins-official": true,
-        "playwright@claude-plugins-official": true,
+        "mongodb@claude-plugins-official": true,
         "superpowers@claude-plugins-official": true,
         "typescript-lsp@claude-plugins-official": true
     },
