@@ -15,6 +15,8 @@ fi
 # Source utilities
 # shellcheck source=utils-k8s.sh
 source "${SCRIPT_DIR}/utils-k8s.sh"
+# shellcheck source=kubernetes-modules/configure-kernel-modules.sh
+source "${SCRIPT_DIR}/kubernetes-modules/configure-kernel-modules.sh"
 
 # ============================================================================
 # Pre-Start Configuration
@@ -54,6 +56,21 @@ ensure_ip_forwarding() {
     else
         print_success "- IP forwarding already enabled"
     fi
+}
+
+ensure_dev_kmsg() {
+    # Only relevant in containers — bare-metal hosts have a real /dev/kmsg device
+    if [[ "${RUNNING_IN_CONTAINER:-false}" != true ]]; then
+        return 0
+    fi
+
+    if [[ -e /dev/kmsg ]]; then
+        print_success "- /dev/kmsg exists"
+        return 0
+    fi
+
+    # Reuse the provisioning function to install tmpfiles.d config and create symlink
+    configure_dev_kmsg
 }
 
 # ============================================================================
@@ -106,6 +123,7 @@ main() {
 
     ensure_swap_off || return 1
     ensure_ip_forwarding || return 1
+    ensure_dev_kmsg || return 1
     start_services || return 1
     show_status
 
