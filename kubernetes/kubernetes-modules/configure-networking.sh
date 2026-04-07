@@ -144,5 +144,6 @@ main_configure_networking() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
     main_configure_networking "$@"
 fi

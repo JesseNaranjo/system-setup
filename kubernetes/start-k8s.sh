@@ -87,6 +87,7 @@ show_status() {
 # ============================================================================
 
 main() {
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
     detect_environment || { print_error "✖ Failed to detect environment"; return 1; }
 
     if [[ "$DETECTED_OS" != "linux" ]]; then

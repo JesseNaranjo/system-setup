@@ -354,5 +354,6 @@ main_install_k8s_packages() {
 
 # Run main function if script is executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
     main_install_k8s_packages "$@"
 fi
