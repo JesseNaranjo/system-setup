@@ -27,8 +27,6 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=utils-sys.sh
 source "${SCRIPT_DIR}/utils-sys.sh"
 
-readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/system-setup"
-
 # List of obsolete scripts to clean up (renamed or removed from repository)
 # Add filenames here when scripts are renamed or deprecated
 OBSOLETE_SCRIPTS=(
@@ -50,185 +48,6 @@ get_script_list() {
     echo "system-modules/system-configuration-swap.sh"
     echo "system-modules/system-configuration-timezone.sh"
     echo "system-modules/system-configuration.sh"
-}
-
-# ============================================================================
-# Self-Update Functionality
-# ============================================================================
-
-# Detect available download command (curl or wget)
-# Sets global DOWNLOAD_CMD variable
-detect_download_cmd() {
-    if command -v curl &>/dev/null; then
-        DOWNLOAD_CMD="curl"
-        return 0
-    elif command -v wget &>/dev/null; then
-        DOWNLOAD_CMD="wget"
-        return 0
-    else
-        DOWNLOAD_CMD=""
-        # Display large error message if neither curl nor wget is available
-        print_warning_box \
-            "UPDATES NOT AVAILABLE" \
-            "" \
-            "Neither 'curl' nor 'wget' is installed on this system." \
-            "Self-updating functionality requires one of these tools." \
-            "" \
-            "To enable self-updating, please install one of the following:" \
-            "  - curl  (recommended)" \
-            "  - wget" \
-            "" \
-            "Installation commands:" \
-            "  macOS:    brew install curl" \
-            "  Debian:   apt install curl" \
-            "  RHEL:     yum install curl" \
-            "" \
-            "Continuing with local version of the scripts..."
-        return 1
-    fi
-}
-
-# Download a script file from the remote repository
-# Args: $1 = script filename (relative path), $2 = output file path
-# Returns: 0 on success, 1 on failure
-download_script() {
-    local script_file="$1"
-    local output_file="$2"
-    local http_status=""
-
-    print_info "Fetching ${script_file}..."
-    echo "            ▶ ${REMOTE_BASE}/${script_file}..."
-
-    if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-        http_status=$(curl -H 'Cache-Control: no-cache, no-store' -o "${output_file}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${script_file}" 2>/dev/null || echo "000")
-        if [[ "$http_status" == "200" ]]; then
-            # Validate that we got a script, not an error page
-            # Check first 10 lines for shebang to handle files with leading comments/blank lines
-            if head -n 10 "${output_file}" | grep -q "^#!/"; then
-                return 0
-            else
-                print_error "✖ Invalid content received (not a script)"
-                return 1
-            fi
-        elif [[ "$http_status" == "429" ]]; then
-            print_error "✖ Rate limited by GitHub (HTTP 429)"
-            return 1
-        elif [[ "$http_status" != "000" ]]; then
-            print_error "✖ HTTP ${http_status} error"
-            return 1
-        else
-            print_error "✖ Download failed"
-            return 1
-        fi
-    elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
-        if wget --no-cache --no-cookies -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null; then
-            # Validate that we got a script, not an error page
-            # Check first 10 lines for shebang to handle files with leading comments/blank lines
-            if head -n 10 "${output_file}" | grep -q "^#!/"; then
-                return 0
-            else
-                print_error "✖ Invalid content received (not a script)"
-                return 1
-            fi
-        else
-            print_error "✖ Download failed"
-            return 1
-        fi
-    fi
-
-    return 1
-}
-
-# Check for updates to system-setup.sh and utils-sys.sh
-# Will restart system-setup.sh if either file is updated
-self_update() {
-    local setup_updated=false
-    local utils_updated=false
-    local any_updated=false
-
-    # Check system-setup.sh
-    local SETUP_FILE="system-setup.sh"
-    local LOCAL_SETUP="${SCRIPT_DIR}/${SETUP_FILE}"
-    local TEMP_SETUP="$(make_temp_file)"
-
-    if download_script "${SETUP_FILE}" "${TEMP_SETUP}"; then
-        if diff -u "${LOCAL_SETUP}" "${TEMP_SETUP}" > /dev/null 2>&1; then
-            print_success "- ${SETUP_FILE} is already up-to-date"
-            rm -f "${TEMP_SETUP}"
-            echo ""
-        else
-            echo ""
-            echo -e "${CYAN}╭────────────────────────────────────────────────── Δ detected in ${SETUP_FILE} ──────────────────────────────────────────────────╮${NC}"
-            diff -u --color "${LOCAL_SETUP}" "${TEMP_SETUP}" || true
-            echo -e "${CYAN}╰───────────────────────────────────────────────────────── ${SETUP_FILE} ─────────────────────────────────────────────────────────╯${NC}"
-            echo ""
-
-            if prompt_yes_no "→ Overwrite ${SETUP_FILE} with updated version?" "y"; then
-                echo ""
-                chmod +x "${TEMP_SETUP}"
-                mv -f "${TEMP_SETUP}" "${LOCAL_SETUP}"
-                print_success "✓ Updated ${SETUP_FILE}"
-                setup_updated=true
-                any_updated=true
-            else
-                print_warning "⚠ Skipped ${SETUP_FILE} update"
-                rm -f "${TEMP_SETUP}"
-            fi
-            echo ""
-        fi
-    else
-        rm -f "${TEMP_SETUP}"
-        echo ""
-    fi
-
-    # Check utils-sys.sh
-    local UTILS_FILE="utils-sys.sh"
-    local LOCAL_UTILS="${SCRIPT_DIR}/${UTILS_FILE}"
-    local TEMP_UTILS="$(make_temp_file)"
-
-    if download_script "${UTILS_FILE}" "${TEMP_UTILS}"; then
-        if diff -u "${LOCAL_UTILS}" "${TEMP_UTILS}" > /dev/null 2>&1; then
-            print_success "- ${UTILS_FILE} is already up-to-date"
-            rm -f "${TEMP_UTILS}"
-            echo ""
-        else
-            echo ""
-            echo -e "${CYAN}╭────────────────────────────────────────────────── Δ detected in ${UTILS_FILE} ──────────────────────────────────────────────────╮${NC}"
-            diff -u --color "${LOCAL_UTILS}" "${TEMP_UTILS}" || true
-            echo -e "${CYAN}╰───────────────────────────────────────────────────────── ${UTILS_FILE} ─────────────────────────────────────────────────────────╯${NC}"
-            echo ""
-
-            if prompt_yes_no "→ Overwrite ${UTILS_FILE} with updated version?" "y"; then
-                echo ""
-                mv -f "${TEMP_UTILS}" "${LOCAL_UTILS}"
-                print_success "✓ Updated ${UTILS_FILE}"
-                utils_updated=true
-                any_updated=true
-            else
-                print_warning "⚠ Skipped ${UTILS_FILE} update"
-                rm -f "${TEMP_UTILS}"
-            fi
-            echo ""
-        fi
-    else
-        rm -f "${TEMP_UTILS}"
-        echo ""
-    fi
-
-    # Restart if either file was updated
-    if [[ "$any_updated" == true ]]; then
-        if [[ "$setup_updated" == true && "$utils_updated" == true ]]; then
-            print_success "✓ Both ${SETUP_FILE} and ${UTILS_FILE} were updated - restarting..."
-        elif [[ "$setup_updated" == true ]]; then
-            print_success "✓ ${SETUP_FILE} was updated - restarting..."
-        else
-            print_success "✓ ${UTILS_FILE} was updated - restarting..."
-        fi
-        echo ""
-        export scriptUpdated=1
-        exec "${LOCAL_SETUP}" "$@"
-        exit 0
-    fi
 }
 
 # Update all module scripts (system-modules/*)
@@ -324,7 +143,7 @@ main() {
     }
     trap cleanup EXIT
 
-    # Save original args for self_update restart
+    # Save original args for check_for_updates restart
     local -a original_args=("$@")
 
     # Argument parsing
@@ -360,18 +179,10 @@ main() {
         esac
     done
 
-    # Detect download command (curl or wget) for update functionality
     if [[ "$SKIP_UPDATE" != true ]]; then
-        if detect_download_cmd; then
-            # Only run self-update if not already updated in this session
-            if [[ ${scriptUpdated:-0} -eq 0 ]]; then
-                self_update "${original_args[@]+"${original_args[@]}"}"
-            fi
-
-            # Always check for module updates (not skipped by scriptUpdated) if download cmd available
+        check_for_updates "${BASH_SOURCE[0]}" "${original_args[@]+"${original_args[@]}"}"
+        if [[ -n "$DOWNLOAD_CMD" ]]; then
             update_modules
-
-            # Clean up any obsolete scripts
             cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
         fi
     fi
