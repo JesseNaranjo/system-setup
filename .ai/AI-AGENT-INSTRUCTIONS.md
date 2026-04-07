@@ -402,15 +402,15 @@ Personal system configuration repository containing bash scripts and documentati
 | Directory | Type | Description |
 |-----------|------|-------------|
 | `system-setup/` | Modular | Main system configuration suite (the core of the repository) |
-| `lxc/` | Standalone | LXC container management scripts |
+| `lxc/` | Modular Standalone | LXC container management scripts |
 | `kubernetes/` | Modular | Kubernetes cluster setup and configuration suite |
 | `github/` | Standalone | GitHub CLI automation scripts |
-| `llm/` | Standalone | Ollama/LLM management scripts |
+| `llm/` | Modular Standalone | Ollama/LLM management scripts |
 | `utils/` | Standalone | Cross-platform utility scripts |
 | `configs/` | Documentation | Configuration documentation (markdown) |
 | `walkthroughs/` | Documentation | Step-by-step guides (markdown) |
 
-This repository uses two distinct script architectures. Choose based on context:
+This repository uses several script architectures. Choose based on context:
 
 ### 1. Modular Scripts (system-setup/)
 
@@ -428,7 +428,7 @@ This repository uses two distinct script architectures. Choose based on context:
 - Modules can be run standalone for testing but are designed to be sourced
 - Global state shared via variables in `utils-sys.sh`
 
-### 2. Standalone Scripts (github/, lxc/, llm/)
+### 2. Standalone Scripts (github/)
 
 **When to use:** Self-contained scripts that MUST work when downloaded individually.
 
@@ -443,7 +443,22 @@ This repository uses two distinct script architectures. Choose based on context:
 - Include `prompt_yes_no` if user interaction needed
 - Can be copied/downloaded and run immediately
 
-### 3. Lightweight Scripts (utils/)
+### 3. Modular Standalone Scripts (lxc/, llm/)
+
+**When to use:** Scripts managed by a `_download-*-scripts.sh` updater that share utilities within their directory.
+
+**Structure:**
+- Shared utilities: `utils-lxc.sh` / `utils-llm.sh` (colors, prompts, self-update functions)
+- Each script sources its directory's utils file
+- Managed by `_download-*-scripts.sh` updaters
+- Self-update when run directly via `check_for_updates()`
+
+**Key characteristics:**
+- Require `utils-*.sh` in the same directory (downloaded by `_download-*-scripts.sh`)
+- Source guard pattern: only self-update when executed directly, not when sourced
+- Share output functions, prompts, and download infrastructure via utils
+
+### 4. Lightweight Scripts (utils/)
 
 **When to use:** Simple automation tasks that don't need user interaction, complex output, or shared utilities.
 
@@ -477,7 +492,7 @@ done
 | Scenario | Architecture | Reason |
 |----------|-------------|--------|
 | New feature for system-setup | Modular | Add to existing module or create new one |
-| New utility script in lxc/, llm/, etc. | Standalone | Must work when downloaded individually |
+| New utility script in lxc/, llm/ | Modular Standalone | Source utils-*.sh, self-update via check_for_updates |
 | Shared helper used by multiple modules | Add to utils-sys.sh | Centralized maintenance |
 | One-off automation script | Standalone | Simpler, no dependencies |
 | Simple system task (start/stop services) | Standalone | Source utils for shared functions, run independently |
@@ -2191,6 +2206,17 @@ self_update() {
     echo ""
 }
 ```
+
+### check_for_updates Pattern (per-directory utils)
+
+Used by individual scripts and modules in lxc/, llm/, kubernetes/, and system-setup/. Checks for updates to both the utils file and the calling script, then exec-restarts if updated.
+
+```bash
+# Called at the start of main() or inside source guard
+check_for_updates "${BASH_SOURCE[0]}" "$@"
+```
+
+Flow: detect download cmd → download utils → diff/prompt → download caller → diff/prompt → exec restart if updated. Uses per-directory env var guards (`LXC_SCRIPTS_UPDATED`, `LLM_SCRIPTS_UPDATED`, `K8S_SCRIPTS_UPDATED`, `SYS_SCRIPTS_UPDATED`) to prevent infinite restart loops.
 
 ### Module Update Function
 ```bash
