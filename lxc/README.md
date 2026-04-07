@@ -48,8 +48,11 @@ sudo ./start-lxc.sh mycontainer
 ### Daily Operations
 
 ```bash
-# Start a container (auto-attaches if single container)
+# Start a container
 ./start-lxc.sh mycontainer
+
+# Start and attach to a container shell
+./start-lxc.sh mycontainer --attach
 
 # Start multiple containers
 ./start-lxc.sh web db cache
@@ -129,8 +132,8 @@ sudo ./create-lxc.sh --privileged mycontainer      # Privileged container
 Starts containers using systemd services:
 
 - Uses `lxc-bg-start@.service` (or `lxc-priv-bg-start@.service` when run as root) for proper lifecycle management
-- Auto-attaches to the container when starting a single container
-- Shows container status after starting multiple containers
+- Use `--attach` to enter the container shell after starting (single container only)
+- Shows container status after starting
 - Supports cgroup delegation and swap restriction flags for Kubernetes containers
 - Persistent settings are applied even if the container is already running (take effect on next restart)
 
@@ -142,6 +145,7 @@ Starts containers using systemd services:
 
 | Flag | Persists | Effect |
 |------|----------|--------|
+| `--attach` | N/A | Attach to the container shell after starting (single container only) |
 | `--k8s` | Yes | Applies all Kubernetes settings: delegation + swap restriction + `/proc/sys` writability + AppArmor unconfined |
 | `--delegate` | Yes | Creates systemd drop-in with `Delegate=cpuset cpu io memory pids` |
 | `--delegate-once` | No | One-time cgroup delegation via `systemd-run` |
@@ -151,6 +155,9 @@ Starts containers using systemd services:
 Flags are combinable. For full Kubernetes support, use `--k8s`:
 
 ```bash
+# Start and attach
+./start-lxc.sh --attach mycontainer
+
 # Full k8s setup (recommended)
 sudo ./start-lxc.sh --k8s tst-k8s1
 
