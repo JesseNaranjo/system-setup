@@ -2,24 +2,34 @@
 
 set -euo pipefail
 
-# Configuration
-readonly SCREEN_DOTFILE=".screenrc-ollama"
-
-# Check if screen is installed
-if ! command -v screen &> /dev/null; then
-    echo "Error: GNU screen is not installed" >&2
-    exit 1
+if [[ -z "${SCRIPT_DIR:-}" ]]; then
+    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 fi
 
-# Check if ollama is installed
-if ! command -v ollama &> /dev/null; then
-    echo "Error: ollama is not installed" >&2
-    exit 1
-fi
+# shellcheck source=utils-llm.sh
+source "${SCRIPT_DIR}/utils-llm.sh"
 
-# Create or overwrite screen configuration
-if [[ ! -f "$SCREEN_DOTFILE" || "${1:-}" == '--overwrite' ]]; then
-    cat <<'EOF' > "$SCREEN_DOTFILE"
+main() {
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
+
+    # Configuration
+    readonly SCREEN_DOTFILE=".screenrc-ollama"
+
+    # Check if screen is installed
+    if ! command -v screen &> /dev/null; then
+        echo "Error: GNU screen is not installed" >&2
+        exit 1
+    fi
+
+    # Check if ollama is installed
+    if ! command -v ollama &> /dev/null; then
+        echo "Error: ollama is not installed" >&2
+        exit 1
+    fi
+
+    # Create or overwrite screen configuration
+    if [[ ! -f "$SCREEN_DOTFILE" || "${1:-}" == '--overwrite' ]]; then
+        cat <<'EOF' > "$SCREEN_DOTFILE"
 # GNU Screen configuration for Ollama local server
 startup_message off
 defscrollback 10000
@@ -57,8 +67,11 @@ stuff "clear; ollama ps; ollama list | { IFS= read -r header; print -r \$header;
 # Move to bottom-left shell for user input
 focus down
 EOF
-    echo "Created screen configuration: $SCREEN_DOTFILE"
-fi
+        echo "Created screen configuration: $SCREEN_DOTFILE"
+    fi
 
-# Launch screen session
-exec screen -Uamc "$SCREEN_DOTFILE" -T "${TERM:-screen-256color}"
+    # Launch screen session
+    exec screen -Uamc "$SCREEN_DOTFILE" -T "${TERM:-screen-256color}"
+}
+
+[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"
