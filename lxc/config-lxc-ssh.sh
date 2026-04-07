@@ -26,13 +26,12 @@
 
 set -euo pipefail
 
-# Colors for output
-readonly BLUE='\033[0;34m'
-readonly GRAY='\033[0;90m'
-readonly GREEN='\033[0;32m'
-readonly RED='\033[0;31m'
-readonly YELLOW='\033[1;33m'
-readonly NC='\033[0m' # No Color
+if [[ -z "${SCRIPT_DIR:-}" ]]; then
+    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+
+# shellcheck source=utils-lxc.sh
+source "${SCRIPT_DIR}/utils-lxc.sh"
 
 # Global variables
 BACKED_UP_FILES=""
@@ -42,55 +41,6 @@ TARGET_USER_HOME=""
 SSH_KEY_NAME="id_local-lxc-access"
 CONTAINERS_CONFIGURED=0
 CONTAINERS_SKIPPED=0
-
-# Print colored output
-print_info() {
-    echo -e "${BLUE}[ INFO    ]${NC} $1"
-}
-
-print_success() {
-    echo -e "${GREEN}[ SUCCESS ]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[ WARNING ]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ ERROR   ]${NC} $1"
-}
-
-print_backup() {
-    echo -e "${GRAY}[ BACKUP  ] $1${NC}"
-}
-
-# Prompt user for yes/no confirmation
-# Usage: prompt_yes_no "message" [default]
-#   default: "y" or "n" (optional, defaults to "n")
-# Returns: 0 for yes, 1 for no
-prompt_yes_no() {
-    local prompt_message="$1"
-    local default="${2:-n}"
-    local prompt_suffix
-    local user_reply
-
-    # Set the prompt suffix based on default
-    if [[ "${default,,}" == "y" ]]; then
-        prompt_suffix="(Y/n)"
-    else
-        prompt_suffix="(y/N)"
-    fi
-
-    # Read from /dev/tty to work correctly in while-read loops
-    read -p "$prompt_message $prompt_suffix: " -r user_reply </dev/tty
-
-    # If user just pressed Enter (empty reply), use default
-    if [[ -z "$user_reply" ]]; then
-        [[ "${default,,}" == "y" ]]
-    else
-        [[ $user_reply =~ ^[Yy]$ ]]
-    fi
-}
 
 # Backup file if it exists (only once per session)
 backup_file() {
@@ -407,6 +357,8 @@ configure_ssh_config() {
 
 # Main function
 main() {
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
+
     echo ""
     echo "╔══════════════════════════════════════════════════════════════════════════════╗"
     echo "║                                                                              ║"

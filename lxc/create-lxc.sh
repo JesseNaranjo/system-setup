@@ -20,54 +20,12 @@
 
 set -euo pipefail
 
-# Colors for output
-readonly BLUE='\033[0;34m'
-readonly GREEN='\033[0;32m'
-readonly RED='\033[0;31m'
-readonly YELLOW='\033[1;33m'
-readonly NC='\033[0m' # No Color
+if [[ -z "${SCRIPT_DIR:-}" ]]; then
+    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
 
-# Print colored output
-print_info() {
-    echo -e "${BLUE}[ INFO    ]${NC} $1"
-}
-
-print_success() {
-    echo -e "${GREEN}[ SUCCESS ]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[ WARNING ]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ ERROR   ]${NC} $1"
-}
-
-# Prompt user for yes/no confirmation
-# Usage: prompt_yes_no "message" [default]
-#   default: "y" or "n" (optional, defaults to "n")
-# Returns: 0 for yes, 1 for no
-prompt_yes_no() {
-    local prompt_message="$1"
-    local default="${2:-n}"
-    local prompt_suffix
-    local user_reply
-
-    if [[ "${default,,}" == "y" ]]; then
-        prompt_suffix="(Y/n)"
-    else
-        prompt_suffix="(y/N)"
-    fi
-
-    read -p "$prompt_message $prompt_suffix: " -r user_reply </dev/tty
-
-    if [[ -z "$user_reply" ]]; then
-        [[ "${default,,}" == "y" ]]
-    else
-        [[ $user_reply =~ ^[Yy]$ ]]
-    fi
-}
+# shellcheck source=utils-lxc.sh
+source "${SCRIPT_DIR}/utils-lxc.sh"
 
 # ============================================================================
 # Input Validation
@@ -99,6 +57,8 @@ show_usage() {
 # ============================================================================
 
 main() {
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
+
     local PRIVILEGED=false
     local CONTAINER_NAME=""
     local DISTRIBUTION=""
@@ -202,9 +162,6 @@ main() {
     echo "            Architecture: ${ARCHITECTURE:-<will prompt>}"
     [[ "$PRIVILEGED" == true ]] && echo "            Mode: privileged"
     echo ""
-
-    # Get the directory where this script is located
-    local SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
     # Check if container already exists
     local CONTAINER_EXISTS=false
