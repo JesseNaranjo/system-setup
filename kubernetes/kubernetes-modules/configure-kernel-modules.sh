@@ -16,6 +16,8 @@ source "${SCRIPT_DIR}/utils-k8s.sh"
 
 readonly REQUIRED_MODULES=("br_netfilter" "overlay")
 readonly MODULES_CONF="/etc/modules-load.d/k8s.conf"
+readonly KMSG_TMPFILES_CONF="/etc/tmpfiles.d/kmsg.conf"
+readonly KMSG_TMPFILES_ENTRY="L /dev/kmsg - - - - /dev/null"
 
 # ============================================================================
 # Module Loading
@@ -83,6 +85,34 @@ persist_modules() {
 }
 
 # ============================================================================
+# Container Device Nodes
+# ============================================================================
+
+# Install tmpfiles.d config to create /dev/kmsg -> /dev/null at boot
+# kubelet's OOM watcher requires /dev/kmsg; LXC containers lack it by default.
+# Symlinks to /dev/null (not /dev/console) to avoid journald infinite loop.
+configure_dev_kmsg() {
+    if [[ -f "$KMSG_TMPFILES_CONF" ]] \
+        && grep_file -q "^L /dev/kmsg .* /dev/null$" "$KMSG_TMPFILES_CONF"; then
+        print_success "- ${KMSG_TMPFILES_CONF} already configured"
+        return 0
+    fi
+
+    print_info "Creating ${KMSG_TMPFILES_CONF} for boot-time /dev/kmsg symlink..."
+    backup_file "$KMSG_TMPFILES_CONF"
+    printf '%s\n' "$KMSG_TMPFILES_ENTRY" > "$KMSG_TMPFILES_CONF"
+    chmod 644 "$KMSG_TMPFILES_CONF"
+    print_success "- /dev/kmsg persistence configured via tmpfiles.d"
+
+    # Create the symlink immediately (don't wait for next boot)
+    if [[ ! -e /dev/kmsg ]]; then
+        systemd-tmpfiles --create --prefix=/dev/kmsg 2>/dev/null \
+            || ln -sf /dev/null /dev/kmsg
+        print_success "- /dev/kmsg symlink created"
+    fi
+}
+
+# ============================================================================
 # Entry Point
 # ============================================================================
 
@@ -106,6 +136,7 @@ main_configure_kernel_modules() {
             print_warning "⚠ Some kernel modules are not available. Kubernetes networking may not work correctly"
         fi
         persist_modules || return 1
+        configure_dev_kmsg || return 1
         print_success "Kernel module configuration complete (container mode)"
         return 0
     fi
