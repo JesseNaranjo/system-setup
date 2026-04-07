@@ -79,18 +79,6 @@ ensure_kernel_config() {
     return 1
 }
 
-# Ensure /dev/kmsg exists in the container
-# kubelet's OOM watcher requires /dev/kmsg; LXC containers lack it by default
-ensure_dev_kmsg() {
-    if [[ -e /dev/kmsg ]]; then
-        print_success "- /dev/kmsg already exists"
-        return 0
-    fi
-
-    ln -s /dev/console /dev/kmsg
-    print_success "✓ Created /dev/kmsg symlink to /dev/console"
-}
-
 # Verify /proc/sys is writable for kubelet (privileged containers only)
 # In unprivileged containers, KubeletInUserNamespace handles read-only /proc/sys.
 # In privileged containers (no user namespace), kubelet must write kernel tunables.
@@ -154,7 +142,7 @@ ensure_proc_sys_writable() {
 # Args: pod_cidr, config_path
 # When running in a container, includes KubeletConfiguration with:
 #   failSwapOn: false — /proc/swaps reflects host swap, cannot be disabled from inside
-#   KubeletInUserNamespace: true — tolerates read-only /proc/sys and missing /dev/kmsg
+#   KubeletInUserNamespace: true — tolerates read-only /proc/sys in user namespace containers
 generate_kubeadm_config() {
     local pod_cidr="$1"
     local config_path="$2"
@@ -200,10 +188,9 @@ run_kubeadm_preflight() {
         return 1
     fi
 
-    # In containers, verify kernel config, /dev/kmsg, and /proc/sys writability
+    # In containers, verify kernel config and /proc/sys writability
     if [[ "${RUNNING_IN_CONTAINER:-false}" == true ]]; then
         ensure_kernel_config || return 1
-        ensure_dev_kmsg || return 1
         ensure_proc_sys_writable || return 1
     fi
 }
