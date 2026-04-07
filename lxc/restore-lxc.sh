@@ -262,7 +262,7 @@ main() {
     if prompt_yes_no "Start the container now?" "n"; then
         print_info "Starting container..."
         if [[ -x "${SCRIPT_DIR}/start-lxc.sh" ]]; then
-            "${SCRIPT_DIR}/start-lxc.sh" "$CONTAINER_NAME"
+            "${SCRIPT_DIR}/start-lxc.sh" --attach "$CONTAINER_NAME"
         else
             lxc-start --name "$CONTAINER_NAME"
             print_success "✓ Container '${CONTAINER_NAME}' started"
