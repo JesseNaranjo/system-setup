@@ -31,7 +31,7 @@ The orchestrator will:
 
 | Module | Purpose |
 |--------|---------|
-| `configure-kernel-modules.sh` | Load and persist br_netfilter, overlay |
+| `configure-kernel-modules.sh` | Load and persist br_netfilter, overlay; configure /dev/kmsg for containers |
 | `install-k8s-packages.sh` | Role-based package installation (repos, GPG keys, packages) |
 | `configure-networking.sh` | Sysctl settings (IP forwarding, bridge netfilter) |
 | `configure-swap.sh` | Disable swap, clean fstab, mask swap.target |
@@ -82,7 +82,7 @@ The orchestrator will prompt to delete these if found.
 sudo ./start-k8s.sh
 ```
 - Sources `utils-k8s.sh` for shared utilities
-- Idempotent pre-checks (swap state, IP forwarding)
+- Idempotent pre-checks (swap state, IP forwarding, /dev/kmsg in containers)
 - Enables and starts kubelet and crio services
 - Shows service and cluster status after starting
 - Requires root privileges
@@ -159,6 +159,12 @@ net.bridge.bridge-nf-call-ip6tables = 1
 
 **Swap**: Disabled in `/etc/fstab` and via `systemctl mask swap.target`
 
+**Device nodes** (`/etc/tmpfiles.d/kmsg.conf`, containers only):
+```
+L /dev/kmsg - - - - /dev/null
+```
+kubelet requires `/dev/kmsg` which LXC containers lack. Symlinks to `/dev/null` (not `/dev/console`) to avoid a journald infinite loop. Created at boot by `systemd-tmpfiles-setup-dev.service`.
+
 ## Other Packages
 
 - Helm - https://helm.sh/docs/intro/install/
@@ -230,6 +236,10 @@ sudo ./start-lxc.sh --privileged --k8s tst-k8s1
 ```
 
 The `initialize-cluster.sh` preflight check will detect read-only `/proc/sys` and fail early with guidance.
+
+### 4. /dev/kmsg (automatic)
+
+kubelet's OOM watcher requires `/dev/kmsg`, which LXC containers don't provide. The orchestrator's Step 1 (Kernel Modules) installs a `tmpfiles.d` config that creates `/dev/kmsg -> /dev/null` at every boot. `start-k8s.sh` also verifies this before starting services. No manual action is required.
 
 See the [`lxc/`](../lxc/) directory for container management scripts.
 
