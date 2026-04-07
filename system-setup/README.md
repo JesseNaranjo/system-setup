@@ -78,7 +78,9 @@ Main orchestrator that coordinates all configuration modules.
 
 ### utils-sys.sh
 
-Shared utility library providing common functionality across all modules.
+Shared utility library providing common functionality across all modules. Includes self-update functions (`detect_download_cmd`, `download_script`, `check_for_updates`) that allow modules to update themselves when run directly.
+
+Modules self-update when run directly (not when sourced by the orchestrator).
 
 **Global Variables:**
 - `DETECTED_OS`: "linux", "macos", or "unknown"

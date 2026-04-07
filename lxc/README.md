@@ -14,6 +14,7 @@ This directory contains scripts for managing LXC containers on Linux systems. Th
 | `backup-lxc.sh` | Backup container to compressed archive | Yes (sudo) |
 | `restore-lxc.sh` | Restore container from backup | Yes (sudo) |
 | `config-lxc-ssh.sh` | Configure SSH keys for container access | Yes (always) |
+| `utils-lxc.sh` | Shared utilities for LXC scripts (output functions, self-update) | No |
 | `_download-lxc-scripts.sh` | Self-updating script manager | No |
 
 ## Quick Start
@@ -250,6 +251,12 @@ Self-updating script manager:
 ```bash
 ./_download-lxc-scripts.sh
 ```
+
+## Self-Update
+
+Individual scripts self-update when run directly via `check_for_updates()`. This checks for updates to both `utils-lxc.sh` and the calling script, showing diffs and prompting before overwriting. Scripts that are sourced (not executed directly) skip the update check.
+
+`utils-lxc.sh` must be present in the same directory as the scripts. It is downloaded automatically by `_download-lxc-scripts.sh`.
 
 ## Architecture
 

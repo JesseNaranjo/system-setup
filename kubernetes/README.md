@@ -22,7 +22,7 @@ The orchestrator will:
 | Component | Purpose |
 |-----------|---------|
 | `kubernetes-setup.sh` | Orchestrator script |
-| `utils-k8s.sh` | Shared utilities (fork of system-setup/utils-sys.sh) |
+| `utils-k8s.sh` | Shared utilities (fork of system-setup/utils-sys.sh, includes self-update functions) |
 | `kubernetes-modules/` | Feature modules (sourced by orchestrator) |
 | `start-k8s.sh` | Start Kubernetes services (standalone) |
 | `stop-k8s.sh` | Stop Kubernetes services (standalone) |
@@ -44,6 +44,8 @@ The orchestrator will:
 | `configure-kube-editor.sh` | KUBE_EDITOR environment variable |
 
 Each module can also be run standalone: `sudo ./kubernetes-modules/<module>.sh`
+
+Individual scripts and modules self-update when run directly via `check_for_updates()` in `utils-k8s.sh`. When sourced by the orchestrator, the update check is skipped (the orchestrator handles updates itself).
 
 ## Adding New Modules
 

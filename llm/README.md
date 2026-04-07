@@ -8,6 +8,7 @@ This directory contains scripts for managing Ollama, a local LLM (Large Language
 |--------|-------------|----------|
 | `ollama-screen.sh` | Launch Ollama in a local screen session | Local development |
 | `ollama-remote.sh` | Launch Ollama as a network-accessible server | Remote/API access |
+| `utils-llm.sh` | Shared utilities for LLM scripts (output functions, self-update) | Shared infrastructure |
 | `_download-ollama-scripts.sh` | Self-updating script manager | Keep scripts current |
 
 ## Quick Start
@@ -102,6 +103,10 @@ Self-updating script manager that keeps Ollama scripts current:
 - Shows diffs before overwriting local files
 - Prompts for confirmation on each change
 - Cleans up obsolete/renamed scripts
+
+## Self-Update
+
+Ollama scripts use a `main()` function with source guard pattern. Individual scripts self-update when run directly via `check_for_updates()`, which checks for updates to both `utils-llm.sh` and the calling script, showing diffs and prompting before overwriting.
 
 ## Screen Navigation
 
