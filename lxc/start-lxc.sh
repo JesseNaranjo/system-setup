@@ -368,6 +368,7 @@ main() {
     SWAP_MODE=""
     PROC_RW=false
     CONTAINERS=()
+    ATTACH=false
 
     for arg in "$@"; do
         case "$arg" in
@@ -387,6 +388,9 @@ main() {
                 ;;
             --no-swap-once)
                 SWAP_MODE="once"
+                ;;
+            --attach)
+                ATTACH=true
                 ;;
             --help|-h)
                 usage
@@ -428,6 +432,13 @@ main() {
         echo ""
         usage
         exit 64  # 64 - EX_USAGE (sysexits.h)
+    fi
+
+    if [[ "$ATTACH" == true && ${#CONTAINERS[@]} -gt 1 ]]; then
+        print_error "✖ --attach can only be used with a single container"
+        echo ""
+        usage
+        exit 64
     fi
 
     # Pre-flight: verify the systemd service template exists (not needed for systemd-run path)
