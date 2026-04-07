@@ -336,11 +336,12 @@ check_k8s_apparmor() {
 # ============================================================================
 
 usage() {
-    echo "Usage: ${0##*/} [--k8s] [--delegate|--delegate-once] [--no-swap|--no-swap-once] <container_name> [...]"
+    echo "Usage: ${0##*/} [--k8s] [--delegate|--delegate-once] [--no-swap|--no-swap-once] [--attach] <container_name> [...]"
     echo ""
     echo "Run as root (sudo) for privileged containers, or as a regular user for unprivileged."
     echo ""
     echo "Options:"
+    echo "  --attach          Attach to the container shell after starting (single container only)"
     echo "  --k8s             Apply all Kubernetes settings: --delegate + --no-swap + proc:rw + AppArmor"
     echo "  --delegate        Persist cgroup delegation in service drop-in"
     echo "  --delegate-once   Start with one-time cgroup delegation (no persist)"
@@ -353,6 +354,7 @@ usage() {
     echo ""
     echo "Examples:"
     echo "  ${0##*/} mycontainer"
+    echo "  ${0##*/} mycontainer --attach"
     echo "  sudo ${0##*/} --k8s tst-k8s1"
     echo "  ${0##*/} --delegate --no-swap tst-k8s1"
     echo "  ${0##*/} --no-swap-once tst-k8s1"
