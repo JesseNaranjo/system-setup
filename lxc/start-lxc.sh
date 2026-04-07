@@ -5,6 +5,7 @@
 # Usage: ./start-lxc.sh [options] <container_name> [[container_name], ...]
 #
 # Options:
+#   --attach          Attach to the container after starting (single container only)
 #   --delegate        Persist cgroup delegation in a systemd drop-in for the
 #                     container's service, then start normally. Survives restarts.
 #   --delegate-once   Start with cgroup delegation via systemd-run instead of
@@ -14,8 +15,9 @@
 #   --no-swap-once    Start with one-time MemorySwapMax=0 (cgroup only, does
 #                     not mask /proc/swaps).
 #   --k8s             Apply all Kubernetes container settings at once:
-#                     cgroup delegation + swap restriction + /proc/sys writability.
-#                     Equivalent to --delegate --no-swap, plus proc:rw.
+#                     cgroup delegation + swap restriction + /proc/sys writability
+#                     + AppArmor unconfined. Equivalent to --delegate --no-swap,
+#                     plus proc:rw and AppArmor.
 #
 # If a container name contains 'k8s', the script checks whether cgroup
 # delegation, swap restriction, and /proc/sys writability are configured
@@ -26,19 +28,18 @@
 # unprivileged (user-scope) containers at ~/.local/share/lxc.
 #
 # This script starts one or more LXC containers using systemd services.
-# If only one container is specified,
-# it will automatically attach to the container after startup with a 3-second
-# countdown.
+# Use --attach to enter the container shell after startup (single container only).
 #
 # Examples:
-#   ./start-lxc.sh mycontainer              # Start and attach to one container
-#   ./start-lxc.sh web db cache             # Start multiple containers
-#   ./start-lxc.sh --delegate tst-k8s1      # Persist delegation, then start
-#   ./start-lxc.sh --delegate-once tst-k8s1 # One-time delegation, no persist
-#   ./start-lxc.sh --no-swap tst-k8s1       # Persist swap restriction + mask
+#   ./start-lxc.sh mycontainer                    # Start one container
+#   ./start-lxc.sh mycontainer --attach           # Start and attach
+#   ./start-lxc.sh web db cache                   # Start multiple containers
+#   ./start-lxc.sh --delegate tst-k8s1            # Persist delegation, then start
+#   ./start-lxc.sh --delegate-once tst-k8s1       # One-time delegation, no persist
+#   ./start-lxc.sh --no-swap tst-k8s1             # Persist swap restriction + mask
 #   ./start-lxc.sh --delegate --no-swap tst-k8s1  # Full k8s setup (granular)
-#   sudo ./start-lxc.sh --k8s tst-k8s1           # Full k8s setup (privileged)
-#   ./start-lxc.sh --k8s tst-k8s1                # Full k8s setup (unprivileged)
+#   sudo ./start-lxc.sh --k8s tst-k8s1            # Full k8s setup (privileged)
+#   ./start-lxc.sh --k8s tst-k8s1                 # Full k8s setup (unprivileged)
 
 set -euo pipefail
 
