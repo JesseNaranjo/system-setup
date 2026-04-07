@@ -538,8 +538,7 @@ main() {
     done
     echo ""
 
-    # If only one container specified, attach to it
-    if [[ ${#CONTAINERS[@]} -eq 1 ]]; then
+    if [[ "$ATTACH" == true ]]; then
         lxcName="${CONTAINERS[0]}"
 
         if [[ "$any_failed" == true ]]; then
@@ -569,7 +568,6 @@ main() {
         echo ""
         "$ATTACH_CMD" --name "${lxcName}" --set-var HOME=/root -- /bin/bash -l
     else
-        # Multiple containers, just show status
         lxc-ls --fancy
         echo ""
         if [[ "$any_failed" == true ]]; then
