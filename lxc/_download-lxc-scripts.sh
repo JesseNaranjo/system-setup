@@ -17,20 +17,14 @@
 
 set -euo pipefail
 
-# Colors for output
-readonly BLUE='\033[0;34m'
-readonly CYAN='\033[0;36m'
-readonly GRAY='\033[0;90m'
-readonly GREEN='\033[0;32m'
-readonly RED='\033[0;31m'
-readonly YELLOW='\033[1;33m'
-readonly NC='\033[0m' # No Color
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Remote repository configuration
-readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/lxc"
+# shellcheck source=utils-lxc.sh
+source "${SCRIPT_DIR}/utils-lxc.sh"
 
 # List of script files to download/update (excludes _download-lxc-scripts.sh)
 get_script_list() {
+    echo "utils-lxc.sh"
     echo "backup-lxc.sh"
     echo "config-lxc-ssh.sh"
     echo "create-lxc.sh"
@@ -47,205 +41,6 @@ OBSOLETE_SCRIPTS=(
     "refresh-lxc.sh"      # renamed to restart-lxc.sh
     "create-priv-lxc.sh"  # absorbed into create-lxc.sh --privileged
 )
-
-# Clean up obsolete scripts that have been renamed or removed from the repository
-# Usage: cleanup_obsolete_scripts "script1.sh" "script2.sh" ...
-# Args: List of obsolete script filenames to remove
-cleanup_obsolete_scripts() {
-    # Safely handle empty argument list
-    for obsolete_script in "${@+"$@"}"; do
-        if [[ -f "${obsolete_script}" ]]; then
-            echo -e "${RED}[ CLEANUP ]${NC} Found obsolete script: ${obsolete_script}"
-            if prompt_yes_no "            → Delete ${obsolete_script}?" "n"; then
-                rm -f "${obsolete_script}"
-                print_success "✓ Deleted ${obsolete_script}"
-            else
-                print_warning "⚠ Kept ${obsolete_script}"
-            fi
-        fi
-    done
-}
-
-# Print colored output
-print_info() {
-    echo -e "${BLUE}[ INFO    ]${NC} $1"
-}
-
-print_success() {
-    echo -e "${GREEN}[ SUCCESS ]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[ WARNING ]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ ERROR   ]${NC} $1"
-}
-
-# Prompt user for yes/no confirmation
-# Usage: prompt_yes_no "message" [default]
-#   default: "y" or "n" (optional, defaults to "n")
-# Returns: 0 for yes, 1 for no
-prompt_yes_no() {
-    local prompt_message="$1"
-    local default="${2:-n}"
-    local prompt_suffix
-    local user_reply
-
-    # Set the prompt suffix based on default
-    if [[ "${default,,}" == "y" ]]; then
-        prompt_suffix="(Y/n)"
-    else
-        prompt_suffix="(y/N)"
-    fi
-
-    # Read from /dev/tty to work correctly in while-read loops
-    read -p "$prompt_message $prompt_suffix: " -r user_reply </dev/tty
-
-    # If user just pressed Enter (empty reply), use default
-    if [[ -z "$user_reply" ]]; then
-        [[ "${default,,}" == "y" ]]
-    else
-        [[ $user_reply =~ ^[Yy]$ ]]
-    fi
-}
-
-# ============================================================================
-# Self-Update Functionality
-# ============================================================================
-
-# Detect available download command (curl or wget)
-# Sets global DOWNLOAD_CMD variable
-detect_download_cmd() {
-    if command -v curl &>/dev/null; then
-        DOWNLOAD_CMD="curl"
-        return 0
-    elif command -v wget &>/dev/null; then
-        DOWNLOAD_CMD="wget"
-        return 0
-    else
-        DOWNLOAD_CMD=""
-        # Display large error message if neither curl nor wget is available
-        echo ""
-        echo -e "            ${YELLOW}╔═════════════════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║                        ⚠️   UPDATES NOT AVAILABLE  ⚠️                         ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        Neither 'curl' nor 'wget' is installed on this system.               ║${NC}"
-        echo -e "            ${YELLOW}║        Self-updating functionality requires one of these tools.             ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        To enable self-updating, please install one of the following:        ║${NC}"
-        echo -e "            ${YELLOW}║          • curl  (recommended)                                              ║${NC}"
-        echo -e "            ${YELLOW}║          • wget                                                             ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        Installation commands:                                               ║${NC}"
-        echo -e "            ${YELLOW}║          macOS:    brew install curl                                        ║${NC}"
-        echo -e "            ${YELLOW}║          Debian:   apt install curl                                         ║${NC}"
-        echo -e "            ${YELLOW}║          RHEL:     yum install curl                                         ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}║        Continuing with local version of the scripts...                      ║${NC}"
-        echo -e "            ${YELLOW}║                                                                             ║${NC}"
-        echo -e "            ${YELLOW}╚═════════════════════════════════════════════════════════════════════════════╝${NC}"
-        echo ""
-        return 1
-    fi
-}
-
-# Download a script file from the remote repository
-# Args: $1 = script filename (relative path), $2 = output file path
-# Returns: 0 on success, 1 on failure
-download_script() {
-    local script_file="$1"
-    local output_file="$2"
-    local http_status=""
-
-    print_info "Fetching ${script_file}..."
-    echo "            ▶ ${REMOTE_BASE}/${script_file}..."
-
-    if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-        http_status=$(curl -H 'Cache-Control: no-cache, no-store' -o "${output_file}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${script_file}" 2>/dev/null || echo "000")
-        if [[ "$http_status" == "200" ]]; then
-            # Validate that we got a script, not an error page
-            # Check first 10 lines for shebang to handle files with leading comments/blank lines
-            if head -n 10 "${output_file}" | grep -q "^#!/"; then
-                return 0
-            else
-                print_error "✖ Invalid content received (not a script)"
-                return 1
-            fi
-        elif [[ "$http_status" == "429" ]]; then
-            print_error "✖ Rate limited by GitHub (HTTP 429)"
-            return 1
-        elif [[ "$http_status" != "000" ]]; then
-            print_error "✖ HTTP ${http_status} error"
-            return 1
-        else
-            print_error "✖ Download failed"
-            return 1
-        fi
-    elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
-        if wget --no-cache --no-cookies -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null; then
-            # Validate that we got a script, not an error page
-            # Check first 10 lines for shebang to handle files with leading comments/blank lines
-            if head -n 10 "${output_file}" | grep -q "^#!/"; then
-                return 0
-            else
-                print_error "✖ Invalid content received (not a script)"
-                return 1
-            fi
-        else
-            print_error "✖ Download failed"
-            return 1
-        fi
-    fi
-
-    return 1
-}
-
-# Check for updates to _download-lxc-scripts.sh itself
-# This function only updates the main script and will restart if updated
-self_update() {
-    local SCRIPT_FILE="_download-lxc-scripts.sh"
-    local LOCAL_SCRIPT="${BASH_SOURCE[0]}"
-    local TEMP_SCRIPT_FILE="$(mktemp)"
-
-    if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
-        rm -f "${TEMP_SCRIPT_FILE}"
-        echo ""
-        return 1
-    fi
-
-    # Compare and handle differences
-    if diff -u "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
-        print_success "- ${SCRIPT_FILE} is already up-to-date"
-        rm -f "${TEMP_SCRIPT_FILE}"
-        echo ""
-        return 0
-    fi
-
-    # Show diff
-    echo ""
-    echo -e "${CYAN}╭────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
-    diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" || true
-    echo -e "${CYAN}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
-    echo ""
-
-    if prompt_yes_no "→ Overwrite and restart with updated ${SCRIPT_FILE}?" "y"; then
-        echo ""
-        chmod +x "${TEMP_SCRIPT_FILE}"
-        mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"
-        print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
-        echo ""
-        export scriptUpdated=1
-        exec "${LOCAL_SCRIPT}" "$@"
-        exit 0
-    else
-        print_warning "⚠ Skipped ${SCRIPT_FILE} update - continuing with local version"
-        rm -f "${TEMP_SCRIPT_FILE}"
-    fi
-    echo ""
-}
 
 # Update all script files (managed scripts)
 # Downloads each script and prompts user to replace if different
@@ -329,17 +124,9 @@ update_modules() {
 # ============================================================================
 
 main() {
-    # Detect download command (curl or wget) for update functionality
-    if detect_download_cmd; then
-        # Only run self-update if not already updated in this session
-        if [[ ${scriptUpdated:-0} -eq 0 ]]; then
-            self_update "$@"
-        fi
-
-        # Always check for module updates (not skipped by scriptUpdated) if download cmd available
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
+    if [[ -n "$DOWNLOAD_CMD" ]]; then
         update_modules
-
-        # Clean up any obsolete scripts
         cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
     fi
 }
