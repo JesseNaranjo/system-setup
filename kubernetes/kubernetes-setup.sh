@@ -41,7 +41,6 @@ cleanup_temp_files() {
 }
 trap cleanup_temp_files EXIT
 
-readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/kubernetes"
 readonly K8S_VERSION="v1.35"
 
 # List of obsolete scripts to clean up (renamed or removed from repository)
@@ -79,183 +78,6 @@ get_script_list() {
     echo "kubernetes-modules/configure-kube-editor.sh"
     echo "start-k8s.sh"
     echo "stop-k8s.sh"
-}
-
-# ============================================================================
-# Self-Update Functionality
-# ============================================================================
-
-# Detect available download command (curl or wget)
-# Sets global DOWNLOAD_CMD variable
-detect_download_cmd() {
-    if command -v curl &>/dev/null; then
-        DOWNLOAD_CMD="curl"
-        return 0
-    elif command -v wget &>/dev/null; then
-        DOWNLOAD_CMD="wget"
-        return 0
-    else
-        DOWNLOAD_CMD=""
-        print_warning_box \
-            "            UPDATES NOT AVAILABLE" \
-            "" \
-            "Neither 'curl' nor 'wget' is installed on this system." \
-            "Self-updating functionality requires one of these tools." \
-            "" \
-            "To enable self-updating, please install one of the following:" \
-            "  • curl  (recommended)" \
-            "  • wget" \
-            "" \
-            "Installation commands:" \
-            "  Debian:   apt install curl" \
-            "  RHEL:     yum install curl" \
-            "" \
-            "Continuing with local version of the scripts..."
-        return 1
-    fi
-}
-
-# Download a script file from the remote repository
-# Args: $1 = script filename (relative path), $2 = output file path
-# Returns: 0 on success, 1 on failure
-download_script() {
-    local script_file="$1"
-    local output_file="$2"
-    local http_status=""
-
-    print_info "Fetching ${script_file}..."
-    echo "            ▶ ${REMOTE_BASE}/${script_file}..."
-
-    if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-        http_status=$(curl -H 'Cache-Control: no-cache, no-store' -o "${output_file}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${script_file}" 2>/dev/null || echo "000")
-        if [[ "$http_status" == "200" ]]; then
-            # Validate that we got a script, not an error page
-            # Check first 10 lines for shebang to handle files with leading comments/blank lines
-            if head -n 10 "${output_file}" | grep -q "^#!/"; then
-                return 0
-            else
-                print_error "✖ Invalid content received (not a script)"
-                return 1
-            fi
-        elif [[ "$http_status" == "429" ]]; then
-            print_error "✖ Rate limited by GitHub (HTTP 429)"
-            return 1
-        elif [[ "$http_status" != "000" ]]; then
-            print_error "✖ HTTP ${http_status} error"
-            return 1
-        else
-            print_error "✖ Download failed"
-            return 1
-        fi
-    elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
-        if wget --no-cache --no-cookies -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null; then
-            # Validate that we got a script, not an error page
-            # Check first 10 lines for shebang to handle files with leading comments/blank lines
-            if head -n 10 "${output_file}" | grep -q "^#!/"; then
-                return 0
-            else
-                print_error "✖ Invalid content received (not a script)"
-                return 1
-            fi
-        else
-            print_error "✖ Download failed"
-            return 1
-        fi
-    fi
-
-    return 1
-}
-
-# Check for updates to kubernetes-setup.sh and utils-k8s.sh
-# Will restart kubernetes-setup.sh if either file is updated
-self_update() {
-    local setup_updated=false
-    local utils_updated=false
-    local any_updated=false
-
-    # Check kubernetes-setup.sh
-    local SETUP_FILE="kubernetes-setup.sh"
-    local LOCAL_SETUP="${SCRIPT_DIR}/${SETUP_FILE}"
-    local TEMP_SETUP="$(make_temp_file)"
-
-    if download_script "${SETUP_FILE}" "${TEMP_SETUP}"; then
-        if diff -u "${LOCAL_SETUP}" "${TEMP_SETUP}" > /dev/null 2>&1; then
-            print_success "- ${SETUP_FILE} is already up-to-date"
-            rm -f "${TEMP_SETUP}"
-            echo ""
-        else
-            echo ""
-            echo -e "${CYAN}╭────────────────────────────────────────────────── Δ detected in ${SETUP_FILE} ──────────────────────────────────────────────────╮${NC}"
-            diff -u --color "${LOCAL_SETUP}" "${TEMP_SETUP}" || true
-            echo -e "${CYAN}╰───────────────────────────────────────────────────────── ${SETUP_FILE} ─────────────────────────────────────────────────────────╯${NC}"
-            echo ""
-
-            if prompt_yes_no "→ Overwrite ${SETUP_FILE} with updated version?" "y"; then
-                echo ""
-                chmod +x "${TEMP_SETUP}"
-                mv -f "${TEMP_SETUP}" "${LOCAL_SETUP}"
-                print_success "✓ Updated ${SETUP_FILE}"
-                setup_updated=true
-                any_updated=true
-            else
-                print_warning "⚠ Skipped ${SETUP_FILE} update"
-                rm -f "${TEMP_SETUP}"
-            fi
-            echo ""
-        fi
-    else
-        rm -f "${TEMP_SETUP}"
-        echo ""
-    fi
-
-    # Check utils-k8s.sh
-    local UTILS_FILE="utils-k8s.sh"
-    local LOCAL_UTILS="${SCRIPT_DIR}/${UTILS_FILE}"
-    local TEMP_UTILS="$(make_temp_file)"
-
-    if download_script "${UTILS_FILE}" "${TEMP_UTILS}"; then
-        if diff -u "${LOCAL_UTILS}" "${TEMP_UTILS}" > /dev/null 2>&1; then
-            print_success "- ${UTILS_FILE} is already up-to-date"
-            rm -f "${TEMP_UTILS}"
-            echo ""
-        else
-            echo ""
-            echo -e "${CYAN}╭────────────────────────────────────────────────── Δ detected in ${UTILS_FILE} ──────────────────────────────────────────────────╮${NC}"
-            diff -u --color "${LOCAL_UTILS}" "${TEMP_UTILS}" || true
-            echo -e "${CYAN}╰───────────────────────────────────────────────────────── ${UTILS_FILE} ─────────────────────────────────────────────────────────╯${NC}"
-            echo ""
-
-            if prompt_yes_no "→ Overwrite ${UTILS_FILE} with updated version?" "y"; then
-                echo ""
-                mv -f "${TEMP_UTILS}" "${LOCAL_UTILS}"
-                print_success "✓ Updated ${UTILS_FILE}"
-                utils_updated=true
-                any_updated=true
-            else
-                print_warning "⚠ Skipped ${UTILS_FILE} update"
-                rm -f "${TEMP_UTILS}"
-            fi
-            echo ""
-        fi
-    else
-        rm -f "${TEMP_UTILS}"
-        echo ""
-    fi
-
-    # Restart if either file was updated
-    if [[ "$any_updated" == true ]]; then
-        if [[ "$setup_updated" == true && "$utils_updated" == true ]]; then
-            print_success "✓ Both ${SETUP_FILE} and ${UTILS_FILE} were updated - restarting..."
-        elif [[ "$setup_updated" == true ]]; then
-            print_success "✓ ${SETUP_FILE} was updated - restarting..."
-        else
-            print_success "✓ ${UTILS_FILE} was updated - restarting..."
-        fi
-        echo ""
-        export scriptUpdated=1
-        exec "${LOCAL_SETUP}" "$@"
-        exit 0
-    fi
 }
 
 # Update all module scripts (kubernetes-modules/*)
@@ -437,18 +259,12 @@ check_step_prerequisites() {
 }
 
 main() {
-    # Detect download command (curl or wget) for update functionality
-    if detect_download_cmd; then
-        # Only run self-update if not already updated in this session
-        if [[ ${scriptUpdated:-0} -eq 0 ]]; then
-            self_update "$@"
+    if [[ "${SKIP_UPDATE:-false}" != true ]]; then
+        check_for_updates "${BASH_SOURCE[0]}" "$@"
+        if [[ -n "$DOWNLOAD_CMD" ]]; then
+            update_modules
+            cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
         fi
-
-        # Always check for module updates (not skipped by scriptUpdated) if download cmd available
-        update_modules
-
-        # Clean up any obsolete scripts
-        cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
     fi
 
     print_info "Kubernetes Setup and Configuration Script (Idempotent Mode)"
