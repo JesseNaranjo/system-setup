@@ -251,7 +251,7 @@ main() {
     ((CURRENT_STEP++)) || true
     print_info "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Starting container..."
     if [[ -f "$SCRIPT_DIR/start-lxc.sh" ]]; then
-        "$SCRIPT_DIR/start-lxc.sh" ${START_FLAGS[@]+"${START_FLAGS[@]}"} "$CONTAINER_NAME"
+        "$SCRIPT_DIR/start-lxc.sh" --attach ${START_FLAGS[@]+"${START_FLAGS[@]}"} "$CONTAINER_NAME"
     else
         if [[ ${#START_FLAGS[@]} -gt 0 ]]; then
             print_warning "⚠ start-lxc.sh not found — cannot apply ${START_FLAGS[*]}; configure manually"
