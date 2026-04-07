@@ -380,6 +380,7 @@ run_diagnostics() {
 # ============================================================================
 
 main() {
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
     # Detect OS and package manager
     detect_os
     detect_package_manager

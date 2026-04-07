@@ -448,6 +448,7 @@ purge_unnecessary_packages() {
 # ============================================================================
 
 main_install_desktop() {
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
     detect_environment
 
     if [[ "$DETECTED_OS" != "linux" ]]; then

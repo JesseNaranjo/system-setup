@@ -224,5 +224,6 @@ main_configure_container_static_ip() {
 
 # Run main function if script is executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
     main_configure_container_static_ip "$@"
 fi
