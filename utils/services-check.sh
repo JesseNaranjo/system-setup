@@ -480,8 +480,8 @@ main() {
     }
     trap cleanup EXIT
 
-    # Self-update check (skip in watch mode for faster startup)
-    if [[ "$watch_mode" == false ]] && detect_download_cmd && [[ ${scriptUpdated:-0} -eq 0 ]]; then
+    # Self-update check
+    if detect_download_cmd && [[ ${scriptUpdated:-0} -eq 0 ]]; then
         self_update "${original_args[@]}" || true
         echo ""
     fi
