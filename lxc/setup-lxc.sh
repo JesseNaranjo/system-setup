@@ -599,7 +599,7 @@ if [[ "$PRIVILEGED" == true ]]; then
     echo "  3. Enable auto-start:  systemctl enable lxc-priv-bg-start@mycontainer"
 else
     echo "  - User:              $LIMITED_USER"
-    echo "  - Subuid/Subgid:     $ID_NO-$((ID_NO + 65535))"
+    echo "  - Subuid/Subgid:     $ID_NO-$((ID_NO + 65536))"
     echo "  - Network Bridge:    $BRIDGE_LINK"
     echo "  - LXC Config:        $LIMITED_USER_CONFIG_LXC/default.conf"
     echo "  - Systemd Service:   $LIMITED_USER_CONFIG_SYSTEMD_USER/lxc-bg-start@.service"
