@@ -34,12 +34,14 @@ fi
 source "${SCRIPT_DIR}/utils-lxc.sh"
 
 # Global variables
-BACKED_UP_FILES=""
+BACKED_UP_FILES=()
 PRIVILEGED=false
 TARGET_USER=""
 TARGET_USER_HOME=""
+LXC_ROOT_PATH=""
 SSH_KEY_NAME="id_local-lxc-access"
-CONTAINERS_CONFIGURED=0
+CONTAINERS_NEWLY_CONFIGURED=0
+CONTAINERS_ALREADY_CONFIGURED=0
 CONTAINERS_SKIPPED=0
 
 # Backup file if it exists (only once per session)
@@ -47,9 +49,10 @@ backup_file() {
     local file="$1"
 
     # Check if already backed up in this session
-    if [[ "$BACKED_UP_FILES" == *"$file"* ]]; then
-        return 0
-    fi
+    local backed_up
+    for backed_up in "${BACKED_UP_FILES[@]}"; do
+        [[ "$backed_up" == "$file" ]] && return 0
+    done
 
     if [[ -f "$file" ]]; then
         local backup="${file}.backup.$(date +%Y%m%d_%H%M%S).bak"
@@ -59,11 +62,12 @@ backup_file() {
 
         # Preserve ownership (requires appropriate permissions)
         # Get the owner and group of the original file
-        local owner=$(stat -c "%u:%g" "$file")
+        local owner
+        owner=$(stat -c "%u:%g" "$file")
         chown "$owner" "$backup" 2>/dev/null || true
 
         print_backup "- Created backup: $backup"
-        BACKED_UP_FILES="${BACKED_UP_FILES} ${file}"
+        BACKED_UP_FILES+=("$file")
     fi
 }
 
@@ -157,21 +161,15 @@ generate_ssh_keypair() {
 # Get list of all LXC containers for the user
 get_all_containers() {
     local containers=()
-    local lxc_path
-    if [[ "$PRIVILEGED" == true ]]; then
-        lxc_path="/var/lib/lxc"
-    else
-        lxc_path="${TARGET_USER_HOME}/.local/share/lxc"
-    fi
 
     # Check if LXC directory exists
-    if [[ ! -d "$lxc_path" ]]; then
+    if [[ ! -d "$LXC_ROOT_PATH" ]]; then
         echo "${containers[@]}"
         return 0
     fi
 
     # Find all directories containing a config file
-    for container_dir in "$lxc_path"/*; do
+    for container_dir in "$LXC_ROOT_PATH"/*; do
         if [[ -d "$container_dir" && -f "$container_dir/config" ]]; then
             local container_name=$(basename "$container_dir")
             containers+=("$container_name")
@@ -202,13 +200,7 @@ configure_container_ssh() {
     print_info "Configuring container: $container"
 
     # Get container's rootfs path
-    local lxc_path
-    if [[ "$PRIVILEGED" == true ]]; then
-        lxc_path="/var/lib/lxc"
-    else
-        lxc_path="${TARGET_USER_HOME}/.local/share/lxc"
-    fi
-    local config_path="${lxc_path}/${container}/config"
+    local config_path="${LXC_ROOT_PATH}/${container}/config"
     if [[ ! -f "$config_path" ]]; then
         print_warning "⚠ Container config not found: $config_path - skipping"
         ((CONTAINERS_SKIPPED++)) || true
@@ -261,10 +253,10 @@ configure_container_ssh() {
     # Setup authorized_keys file
     local authorized_keys="${container_ssh_dir}/authorized_keys"
 
-    # Check if key is already in authorized_keys
-    if [[ -f "$authorized_keys" ]] && grep -qF "$public_key_content" "$authorized_keys"; then
-        print_success "- SSH key already configured in container: $container"
-    else
+    local is_new=false
+
+    # Only append if key is not already present in authorized_keys
+    if [[ ! -f "$authorized_keys" ]] || ! grep -qF "$public_key_content" "$authorized_keys"; then
         # Backup existing authorized_keys if it exists (only if we're modifying it)
         if [[ -f "$authorized_keys" ]]; then
             backup_file "$authorized_keys"
@@ -272,6 +264,7 @@ configure_container_ssh() {
 
         print_info "Adding SSH key to container: $container"
         echo "$public_key_content" >> "$authorized_keys"
+        is_new=true
     fi
 
     # Set proper permissions
@@ -279,8 +272,13 @@ configure_container_ssh() {
     chmod 600 "$authorized_keys"
     chown -R "${user_uid}:${user_gid}" "$container_ssh_dir"
 
-    print_success "✓ Container $container configured successfully"
-    ((CONTAINERS_CONFIGURED++)) || true
+    if [[ "$is_new" == true ]]; then
+        print_success "✓ Container $container configured successfully"
+        ((CONTAINERS_NEWLY_CONFIGURED++)) || true
+    else
+        print_success "- Container $container already configured"
+        ((CONTAINERS_ALREADY_CONFIGURED++)) || true
+    fi
 }
 
 # Check if SSH config already has an entry for this key
@@ -404,6 +402,13 @@ main() {
     validate_user "$username"
     echo ""
 
+    # Resolve LXC root directory for current mode and target user
+    if [[ "$PRIVILEGED" == true ]]; then
+        LXC_ROOT_PATH="/var/lib/lxc"
+    else
+        LXC_ROOT_PATH="${TARGET_USER_HOME}/.local/share/lxc"
+    fi
+
     # Check if LXC is installed
     if ! command -v lxc-ls &>/dev/null; then
         print_error "✖ LXC is not installed on this system"
@@ -444,12 +449,22 @@ main() {
     echo "║                              Configuration Summary                           ║"
     echo "╚══════════════════════════════════════════════════════════════════════════════╝"
     echo ""
-    print_info "Containers configured: $CONTAINERS_CONFIGURED"
-    print_warning "⚠ Containers skipped: $CONTAINERS_SKIPPED"
+    print_info "Containers newly configured: $CONTAINERS_NEWLY_CONFIGURED"
+    print_info "Containers already configured: $CONTAINERS_ALREADY_CONFIGURED"
+    if (( CONTAINERS_SKIPPED > 0 )); then
+        print_warning "⚠ Containers skipped: $CONTAINERS_SKIPPED"
+    else
+        print_info "Containers skipped: $CONTAINERS_SKIPPED"
+    fi
+    print_info "Files backed up: ${#BACKED_UP_FILES[@]}"
     echo ""
 
-    if [[ $CONTAINERS_CONFIGURED -gt 0 ]]; then
-        print_success "SSH key deployment complete!"
+    if (( CONTAINERS_NEWLY_CONFIGURED + CONTAINERS_ALREADY_CONFIGURED > 0 )); then
+        if (( CONTAINERS_NEWLY_CONFIGURED > 0 )); then
+            print_success "SSH key deployment complete!"
+        else
+            print_success "All SSH keys already deployed"
+        fi
         echo ""
 
         # Check if SSH config is already configured
