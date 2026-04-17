@@ -127,9 +127,9 @@ configure_tmux() {
     # Configure each setting individually
     # Base settings
     add_config_if_needed "tmux" "$config_file" "set -g base-index" "1" "1-indexed windows"
-    add_config_if_needed "tmux" "$config_file" "set -g pane-base-index" "1" "1-indexed panes"
     add_config_if_needed "tmux" "$config_file" "set -g default-terminal" '"tmux-256color"' "terminal type"
     add_config_if_needed "tmux" "$config_file" "set -g focus-events" "on" "terminal-level focus tracking forwarded to apps running in tmux"
+    add_config_if_needed "tmux" "$config_file" "set -g pane-base-index" "1" "1-indexed panes"
 
     # Behavior
     add_config_if_needed "tmux" "$config_file" "set -g history-limit" "50000" "scrollback history"
