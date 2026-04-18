@@ -6,9 +6,9 @@ Cross-platform utility scripts for system maintenance, file synchronization, and
 
 | Script | Platform | Purpose |
 |--------|----------|---------|
-| `tools-update.sh` | Linux | Updates developer tools (nvm/Node.js, .NET, Claude CLI/plugins) and fixes container MTU |
 | `rsync-two-way.sh` | Linux/macOS | Two-way file synchronization using rsync |
 | `monitor-battery.sh` | Linux | Monitors battery percentage at regular intervals |
+| `dig-all.sh` | Linux/macOS | Queries all common DNS record types for one or more domains, with optional resolver override |
 | `services-check.sh` | Linux/macOS | Checks local service availability (installation + port health) |
 | `disable-kvm-module.sh` | Linux | Disables the KVM kernel module |
 | `reset-macOS-display-settings.sh` | macOS | Resets macOS display configuration |
@@ -19,8 +19,14 @@ Cross-platform utility scripts for system maintenance, file synchronization, and
 ## Usage
 
 ```bash
-# Update developer tools (run from any directory)
-./tools-update.sh
+# Query all DNS record types for a domain
+./dig-all.sh example.com
+
+# Query multiple domains (adds summary table)
+./dig-all.sh example.com google.com anthropic.com
+
+# Use a specific resolver
+./dig-all.sh --resolver 1.1.1.1 example.com
 
 # Check all installed services
 ./services-check.sh
