@@ -27,3 +27,23 @@ readonly NC='\033[0m'
 readonly RECORD_TYPES=(A AAAA CNAME MX NS SOA TXT SRV CAA PTR DNSKEY DS NAPTR SPF TLSA SSHFP)
 
 declare -gA COUNTS_BY_TYPE=()
+
+# ============================================================================
+# Standard Output Functions
+# ============================================================================
+
+print_info() {
+    echo -e "${BLUE}[ INFO    ]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[ SUCCESS ]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[ WARNING ]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ ERROR   ]${NC} $1"
+}
