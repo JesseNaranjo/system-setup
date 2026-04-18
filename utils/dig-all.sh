@@ -53,22 +53,17 @@ print_error() {
 # ============================================================================
 
 show_usage() {
-    cat <<EOF
-${GREEN}dig-all.sh${NC} - Query all common DNS record types for one or more domains
-
-${BLUE}Usage:${NC}
-  ./dig-all.sh [--resolver SERVER] [-h|--help] [domain ...]
-
-${BLUE}Options:${NC}
-  --resolver SERVER  Query SERVER instead of the system default (forwarded
-                     to dig as @SERVER).
-  -h, --help         Show this help and exit.
-
-${BLUE}Examples:${NC}
-  ./dig-all.sh example.com
-  ./dig-all.sh --resolver 1.1.1.1 example.com
-  ./dig-all.sh example.com google.com anthropic.com
-EOF
+    printf "${GREEN}dig-all.sh${NC} - Query all common DNS record types for one or more domains\n\n"
+    printf "${BLUE}Usage:${NC}\n"
+    printf "  ./dig-all.sh [--resolver SERVER] [-h|--help] [domain ...]\n\n"
+    printf "${BLUE}Options:${NC}\n"
+    printf "  --resolver SERVER  Query SERVER instead of the system default (forwarded\n"
+    printf "                     to dig as @SERVER).\n"
+    printf "  -h, --help         Show this help and exit.\n\n"
+    printf "${BLUE}Examples:${NC}\n"
+    printf "  ./dig-all.sh example.com\n"
+    printf "  ./dig-all.sh --resolver 1.1.1.1 example.com\n"
+    printf "  ./dig-all.sh example.com google.com anthropic.com\n"
 }
 
 # ============================================================================
@@ -183,3 +178,68 @@ render_summary_table() {
         echo ""
     done
 }
+
+# ============================================================================
+# Main
+# ============================================================================
+
+main() {
+    local resolver=""
+    local domains=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                show_usage
+                exit 0
+                ;;
+            --resolver)
+                if [[ $# -lt 2 ]] || [[ "$2" == -* ]]; then
+                    print_error "✖ --resolver requires a non-flag argument"
+                    show_usage >&2
+                    exit 1
+                fi
+                resolver="$2"
+                shift
+                ;;
+            --)
+                shift
+                while [[ $# -gt 0 ]]; do
+                    domains+=("$1")
+                    shift
+                done
+                break
+                ;;
+            -*)
+                print_error "✖ Unknown option: $1"
+                show_usage >&2
+                exit 1
+                ;;
+            *)
+                domains+=("$1")
+                ;;
+        esac
+        shift
+    done
+
+    if [[ ${#domains[@]} -eq 0 ]]; then
+        show_usage
+        exit 0
+    fi
+
+    detect_dig
+    [[ -n "$resolver" ]] && validate_resolver "$resolver"
+
+    local domain
+    for domain in "${domains[@]}"; do
+        query_domain "$domain" "$resolver"
+    done
+
+    if [[ ${#domains[@]} -ge 2 ]]; then
+        render_summary_table "${domains[@]}"
+    fi
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
