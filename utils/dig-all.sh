@@ -150,3 +150,36 @@ query_domain() {
         print_warning "No records found for ${domain}"
     fi
 }
+
+# ============================================================================
+# Summary Rendering
+# ============================================================================
+
+render_summary_table() {
+    local domains=("$@")
+    local domain type count
+    local max_domain_len=6  # len("domain")
+    for domain in "${domains[@]}"; do
+        [[ ${#domain} -gt $max_domain_len ]] && max_domain_len=${#domain}
+    done
+
+    echo ""
+    printf "${BLUE}%-${max_domain_len}s${NC}" "domain"
+    for type in "${RECORD_TYPES[@]}"; do
+        printf " ${BLUE}%6s${NC}" "$type"
+    done
+    echo ""
+
+    for domain in "${domains[@]}"; do
+        printf "%-${max_domain_len}s" "$domain"
+        for type in "${RECORD_TYPES[@]}"; do
+            count="${COUNTS_BY_TYPE["${domain}|${type}"]:-0}"
+            if [[ "$count" -eq 0 ]]; then
+                printf " ${GRAY}%6s${NC}" "-"
+            else
+                printf " %6s" "$count"
+            fi
+        done
+        echo ""
+    done
+}
