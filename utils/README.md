@@ -22,11 +22,11 @@ Cross-platform utility scripts for system maintenance, file synchronization, and
 # Query all DNS record types for a domain
 ./dig-all.sh example.com
 
-# Query multiple domains (adds summary table)
-./dig-all.sh example.com google.com anthropic.com
-
 # Use a specific resolver
 ./dig-all.sh --resolver 1.1.1.1 example.com
+
+# Query multiple domains (adds summary table)
+./dig-all.sh example.com google.com anthropic.com
 
 # Check all installed services
 ./services-check.sh
