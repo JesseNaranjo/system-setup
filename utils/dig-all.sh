@@ -70,3 +70,32 @@ ${BLUE}Examples:${NC}
   ./dig-all.sh example.com google.com anthropic.com
 EOF
 }
+
+# ============================================================================
+# Prerequisite Detection
+# ============================================================================
+
+detect_dig() {
+    command -v dig &>/dev/null && return 0
+    print_error "✖ 'dig' not found."
+    case "$OSTYPE" in
+        linux-gnu*)
+            if command -v apt &>/dev/null; then
+                echo "Install with: sudo apt install dnsutils" >&2
+            elif command -v dnf &>/dev/null; then
+                echo "Install with: sudo dnf install bind-utils" >&2
+            elif command -v pacman &>/dev/null; then
+                echo "Install with: sudo pacman -S bind" >&2
+            else
+                echo "Install your distribution's DNS utilities package." >&2
+            fi
+            ;;
+        darwin*)
+            echo "Install with: brew install bind" >&2
+            ;;
+        *)
+            echo "Install the DNS utilities package for your platform." >&2
+            ;;
+    esac
+    exit 1
+}
