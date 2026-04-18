@@ -47,3 +47,26 @@ print_warning() {
 print_error() {
     echo -e "${RED}[ ERROR   ]${NC} $1"
 }
+
+# ============================================================================
+# Usage
+# ============================================================================
+
+show_usage() {
+    cat <<EOF
+${GREEN}dig-all.sh${NC} - Query all common DNS record types for one or more domains
+
+${BLUE}Usage:${NC}
+  ./dig-all.sh [--resolver SERVER] [-h|--help] [domain ...]
+
+${BLUE}Options:${NC}
+  --resolver SERVER  Query SERVER instead of the system default (forwarded
+                     to dig as @SERVER).
+  -h, --help         Show this help and exit.
+
+${BLUE}Examples:${NC}
+  ./dig-all.sh example.com
+  ./dig-all.sh --resolver 1.1.1.1 example.com
+  ./dig-all.sh example.com google.com anthropic.com
+EOF
+}
