@@ -111,3 +111,42 @@ validate_resolver() {
         exit 1
     fi
 }
+
+# ============================================================================
+# Query Logic
+# ============================================================================
+
+# Queries every RECORD_TYPES entry for $1 via dig, populates
+# COUNTS_BY_TYPE["${domain}|${type}"] with the answer count, and prints
+# the per-type detail block only when answers exist. Prints a warning
+# if every type returned zero answers for the domain.
+#
+# Args: $1 = domain, $2 = resolver (empty string for system default)
+query_domain() {
+    local domain="$1"
+    local resolver="$2"
+    local type answers count total=0
+    local resolver_arg=()
+    [[ -n "$resolver" ]] && resolver_arg=("@$resolver")
+
+    echo ""
+    echo -e "${CYAN}── ${domain} ──${NC}"
+
+    for type in "${RECORD_TYPES[@]}"; do
+        answers="$(dig +noall +answer +nocomments +additional \
+            "${resolver_arg[@]}" "$type" "$domain" 2>/dev/null || true)"
+        if [[ -n "$answers" ]]; then
+            count=$(printf '%s\n' "$answers" | grep -c .)
+            echo -e "${BLUE}[ ${type} ]${NC}"
+            printf '%s\n' "$answers"
+        else
+            count=0
+        fi
+        COUNTS_BY_TYPE["${domain}|${type}"]="$count"
+        total=$((total + count))
+    done
+
+    if [[ $total -eq 0 ]]; then
+        print_warning "No records found for ${domain}"
+    fi
+}
