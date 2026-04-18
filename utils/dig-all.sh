@@ -15,3 +15,15 @@
 #   -h, --help         Show this help and exit.
 
 set -euo pipefail
+
+readonly BLUE='\033[0;34m'
+readonly CYAN='\033[0;36m'
+readonly GRAY='\033[0;90m'
+readonly GREEN='\033[0;32m'
+readonly RED='\033[0;31m'
+readonly YELLOW='\033[1;33m'
+readonly NC='\033[0m'
+
+readonly RECORD_TYPES=(A AAAA CNAME MX NS SOA TXT SRV CAA PTR DNSKEY DS NAPTR SPF TLSA SSHFP)
+
+declare -gA COUNTS_BY_TYPE=()
