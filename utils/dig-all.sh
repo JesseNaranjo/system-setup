@@ -99,3 +99,15 @@ detect_dig() {
     esac
     exit 1
 }
+
+# ============================================================================
+# Validation
+# ============================================================================
+
+validate_resolver() {
+    local server="$1"
+    if [[ ! "$server" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]*$ ]]; then
+        print_error "✖ Invalid resolver: '$server'"
+        exit 1
+    fi
+}
