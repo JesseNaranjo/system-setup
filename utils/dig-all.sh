@@ -53,17 +53,17 @@ print_error() {
 # ============================================================================
 
 show_usage() {
-    printf "${GREEN}dig-all.sh${NC} - Query all common DNS record types for one or more domains\n\n"
-    printf "${BLUE}Usage:${NC}\n"
-    printf "  ./dig-all.sh [--resolver SERVER] [-h|--help] [domain ...]\n\n"
-    printf "${BLUE}Options:${NC}\n"
-    printf "  --resolver SERVER  Query SERVER instead of the system default (forwarded\n"
-    printf "                     to dig as @SERVER).\n"
-    printf "  -h, --help         Show this help and exit.\n\n"
-    printf "${BLUE}Examples:${NC}\n"
-    printf "  ./dig-all.sh example.com\n"
-    printf "  ./dig-all.sh --resolver 1.1.1.1 example.com\n"
-    printf "  ./dig-all.sh example.com google.com anthropic.com\n"
+    printf '%b\n\n' "${GREEN}dig-all.sh${NC} - Query all common DNS record types for one or more domains"
+    printf '%b\n' "${BLUE}Usage:${NC}"
+    printf '  ./dig-all.sh [--resolver SERVER] [-h|--help] [domain ...]\n\n'
+    printf '%b\n' "${BLUE}Options:${NC}"
+    printf '  --resolver SERVER  Query SERVER instead of the system default (forwarded\n'
+    printf '                     to dig as @SERVER).\n'
+    printf '  -h, --help         Show this help and exit.\n\n'
+    printf '%b\n' "${BLUE}Examples:${NC}"
+    printf '  ./dig-all.sh example.com\n'
+    printf '  ./dig-all.sh --resolver 1.1.1.1 example.com\n'
+    printf '  ./dig-all.sh example.com google.com anthropic.com\n'
 }
 
 # ============================================================================
