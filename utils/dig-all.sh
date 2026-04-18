@@ -162,7 +162,7 @@ query_domain() {
     done
 
     if [[ $total -eq 0 ]]; then
-        print_warning "No records found for ${domain}"
+        print_warning "⚠ No records found for ${domain}"
     fi
 }
 
