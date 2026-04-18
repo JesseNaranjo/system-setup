@@ -26,6 +26,26 @@ readonly NC='\033[0m'
 
 readonly RECORD_TYPES=(A AAAA CNAME MX NS SOA TXT SRV CAA PTR DNSKEY DS NAPTR SPF TLSA SSHFP)
 
+declare -A RECORD_DESCRIPTIONS=(
+    [A]="IPv4 address"
+    [AAAA]="IPv6 address"
+    [CNAME]="alias to another name"
+    [MX]="mail server"
+    [NS]="authoritative nameservers"
+    [SOA]="zone authority info"
+    [TXT]="arbitrary text (SPF, DKIM, verification)"
+    [SRV]="service location (host:port)"
+    [CAA]="allowed cert authorities"
+    [PTR]="reverse DNS (IP → name)"
+    [DNSKEY]="DNSSEC public key"
+    [DS]="DNSSEC delegation signer"
+    [NAPTR]="service-pointer rewriting (ENUM, SIP)"
+    [SPF]="sender policy (legacy; use TXT)"
+    [TLSA]="TLS cert pinning (DANE)"
+    [SSHFP]="SSH host key fingerprint"
+)
+readonly RECORD_DESCRIPTIONS
+
 declare -gA COUNTS_BY_TYPE=()
 
 # ============================================================================
@@ -132,7 +152,7 @@ query_domain() {
             "${resolver_arg[@]}" "$type" "$domain" 2>/dev/null || true)"
         if [[ -n "$answers" ]]; then
             count=$(printf '%s\n' "$answers" | grep -c .)
-            echo -e "${BLUE}[ ${type} ]${NC}"
+            echo -e "${BLUE}[ ${type} — ${RECORD_DESCRIPTIONS[$type]} ]${NC}"
             printf '%s\n' "$answers"
         else
             count=0
