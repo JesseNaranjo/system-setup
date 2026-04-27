@@ -432,11 +432,22 @@ watch_services() {
     local interval="$1"
     shift
     local filters=("$@")
+    local resize=0
 
-    trap 'echo ""; exit 0' INT TERM
+    trap 'echo ""; exit 130' INT
+    trap 'echo ""; exit 143' TERM
+    trap 'resize=1' WINCH
 
+    clear
     while true; do
-        clear
+        if (( resize )); then
+            clear
+            resize=0
+        else
+            tput cup 0 0
+            tput ed
+        fi
+
         echo "Services ($(date '+%Y-%m-%d %H:%M:%S'))"
         echo ""
         run_checks "${filters[@]}" || true
