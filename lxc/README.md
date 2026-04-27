@@ -11,6 +11,7 @@ This directory contains scripts for managing LXC containers on Linux systems. Th
 | `start-lxc.sh` | Start container(s) via systemd service | Yes (sudo) |
 | `stop-lxc.sh` | Stop container(s) gracefully | Yes (sudo) |
 | `restart-lxc.sh` | Restart container(s) | Yes (sudo) |
+| `watch-lxc.sh` | Live status display refreshed every 5s | No |
 | `backup-lxc.sh` | Backup container to compressed archive | Yes (sudo) |
 | `restore-lxc.sh` | Restore container from backup | Yes (sudo) |
 | `config-lxc-ssh.sh` | Configure SSH keys for container access | Yes (always) |
@@ -190,6 +191,28 @@ Stops containers gracefully:
 
 ```bash
 ./stop-lxc.sh [container_name] [[container_name], ...]
+```
+
+### watch-lxc.sh
+
+A live status display that refreshes every 5 seconds. Each frame shows the
+output of `lxc-ls --fancy` followed by `df -h /` for the host root filesystem.
+Press Ctrl+C to stop.
+
+**Behavior:**
+- Output reflects the EUID's container scope: run with `sudo` for privileged
+  (system-scope) containers, run as your user for unprivileged ones.
+- Forces a full screen clear on terminal resize so column widths re-render
+  cleanly.
+- Uses `tput` cursor positioning (no flicker, no scrollback loss on exit).
+- Rejects all CLI arguments (`EX_USAGE` 64).
+- Exits with `EX_UNAVAILABLE` 69 if `/usr/bin/lxc-ls` is not installed.
+
+**Usage:**
+
+```bash
+./watch-lxc.sh              # Watch unprivileged containers
+sudo ./watch-lxc.sh         # Watch privileged containers
 ```
 
 ### backup-lxc.sh

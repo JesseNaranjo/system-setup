@@ -33,6 +33,7 @@ get_script_list() {
     echo "setup-lxc.sh"
     echo "start-lxc.sh"
     echo "stop-lxc.sh"
+    echo "watch-lxc.sh"
 }
 
 # List of obsolete scripts to clean up (renamed or removed from repository)
