@@ -399,8 +399,8 @@ get_package_list() {
     if [[ "$DETECTED_OS" == "macos" ]]; then
         # macOS packages (brew)
         echo "7-zip:sevenzip"
-        echo "AWK:awk"
         echo "Apple Containers:container"
+        echo "AWK:awk"
         echo "Bash:bash"
         echo "CA Certificates:ca-certificates"
         echo "cURL:curl"
@@ -413,6 +413,7 @@ get_package_list() {
         echo "Ollama:ollama"
         echo "OrbStack:orbstack"
         echo "ShellCheck:shellcheck"
+        echo "SOcket CAT:socat"
         echo "tmux (terminal multiplexer):tmux"
         echo "UTM:utm"
     else
@@ -430,6 +431,7 @@ get_package_list() {
         echo "Nano Editor:nano"
         echo "OpenSSH Server:openssh-server"
         echo "ShellCheck:shellcheck"
+        echo "SOcket CAT:socat"
         echo "sudo:sudo"
         echo "tmux (terminal multiplexer):tmux"
         echo "UDisks:udisks2"
