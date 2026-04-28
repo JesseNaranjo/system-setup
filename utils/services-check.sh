@@ -46,6 +46,7 @@ readonly SERVICES=(
     "PostgreSQL:postgres:5432:postgresql"
     "Prometheus:prometheus:9090:prometheus"
     "RabbitMQ:rabbitmq-server:5672:rabbitmq-server"
+    "RabbitMQ-WebUI:rabbitmq-server:15672:rabbitmq-server"
     "Redis:redis-server:6379:redis-server"
     "Valkey:valkey-server:6379:valkey-server"
 )
