@@ -59,7 +59,7 @@ update_modules() {
     # Check each script for updates
     while IFS= read -r script_path; do
         local SCRIPT_FILE="$script_path"
-        local LOCAL_SCRIPT="${SCRIPT_FILE}"
+        local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
         local TEMP_SCRIPT_FILE
         TEMP_SCRIPT_FILE=$(mktemp "$(dirname "${LOCAL_SCRIPT}")/~$(basename "${LOCAL_SCRIPT}").tmp.XXXXXX")
         TEMP_FILES+=("$TEMP_SCRIPT_FILE")
