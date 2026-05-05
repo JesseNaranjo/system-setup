@@ -50,6 +50,73 @@ HEADER_ADDED_FILES=()
 CREATED_CONFIG_FILES=()
 TEMP_FILES=()
 
+# cleanup runs on normal exit, SIGINT, SIGTERM. Hoisted to file scope so the
+# trap is wired the moment the script is loaded — a top-level guard that exits
+# before main still reaps tracked temps.
+cleanup() {
+    local f
+    for f in "${TEMP_FILES[@]+"${TEMP_FILES[@]}"}"; do
+        rm -f "$f" 2>/dev/null
+    done
+}
+trap cleanup EXIT
+
+# Defense-in-depth: at startup, reap any same-FS temp files (e.g., from a
+# prior SIGKILL / power-loss / interrupted self-update) older than a normal
+# run window. The EXIT trap above handles in-flight cleanup; this function
+# handles what the trap couldn't fire for. TTY-aware so cron/ssh -T runs
+# don't block on the prompt.
+sweep_stale_temps() {
+    local pattern="$1"
+    local stale_files=()
+    while IFS= read -r -d '' f; do
+        stale_files+=("$f")
+    done < <(find "$SCRIPT_DIR" -maxdepth 1 -name "$pattern" -type f -mmin +10 -print0 2>/dev/null)
+
+    [[ ${#stale_files[@]} -eq 0 ]] && return 0
+
+    print_warning "⚠ Found ${#stale_files[@]} stale temp file(s) from a prior interrupted run:"
+    for f in "${stale_files[@]}"; do
+        print_warning "  - $f"
+    done
+
+    # `[[ -r /dev/tty ]]` only checks file permissions; under setsid the device
+    # is world-readable but `open(2)` fails with ENXIO, so a subsequent
+    # `read </dev/tty` aborts under set -e. Probe with a no-op stdin redirect
+    # to detect actual openability.
+    if { : </dev/tty; } 2>/dev/null; then
+        # `|| true` swallows EOF (Ctrl+D) so set -e doesn't abort mid-cleanup.
+        read -p "Press any key to delete and continue, Ctrl+C to abort: " -n 1 -r </dev/tty || true
+        echo ""
+    else
+        print_warning "⚠ Non-interactive context — deleting and continuing without prompt."
+    fi
+
+    for f in "${stale_files[@]}"; do
+        rm -f "$f"
+    done
+    print_success "✓ Cleaned up ${#stale_files[@]} stale temp file(s)"
+}
+
+# Render a unified diff between two files inside a labeled box. Pages through
+# `less -RFX` when stdout is a TTY (ANSI preserved, exits if one screen, no
+# alt-screen so output stays in scrollback); falls back to inline diff when
+# piped. `--color=always` forces color even when piped.
+show_diff_box() {
+    local local_file="$1"
+    local temp_file="$2"
+    local label="$3"
+    echo ""
+    echo -e "${CYAN}╭────────────────────── Δ detected in ${label} ──────────────────────╮${NC}"
+    if [[ -t 1 ]] && command -v less &>/dev/null; then
+        diff -u --color=always "${local_file}" "${temp_file}" | less -RFX || true
+    else
+        diff -u --color=always "${local_file}" "${temp_file}" || true
+    fi
+    echo -e "${CYAN}╰─────────────────────────── ${label} ──────────────────────────────╯${NC}"
+    echo ""
+}
+
 # Package installation tracking flags
 # Set by: track_special_packages() called from install-k8s-packages.sh
 # Read by: other modules to determine what to configure
@@ -89,7 +156,7 @@ print_debug() {
 }
 
 print_error() {
-    echo -e "${RED}[ ERROR   ]${NC} $1"
+    echo -e "${RED}[ ERROR   ]${NC} $1" >&2
 }
 
 print_info() {
@@ -150,6 +217,10 @@ prompt_yes_no() {
     local default="${2:-n}"
     local prompt_suffix
     local user_reply
+
+    # Non-TTY context (cron, systemd, ssh -T, CI): signal "no" rather than fall
+    # through to the empty-reply branch and silently auto-accept the default.
+    [[ -r /dev/tty ]] || return 1
 
     # Set the prompt suffix based on default
     if [[ "${default,,}" == "y" ]]; then
@@ -560,14 +631,6 @@ get_file_permissions() {
     fi
 }
 
-# Create a tracked temp file that will be cleaned up on exit
-make_temp_file() {
-    local tmp
-    tmp=$(mktemp)
-    TEMP_FILES+=("$tmp")
-    echo "$tmp"
-}
-
 # Check if a filesystem has enough free space
 # Usage: check_disk_space "/var" 4096  (checks /var has 4096 MB free)
 # Returns: 0 if enough space, 1 if not (prints error)
@@ -785,7 +848,9 @@ update_config_line() {
             backup_file "$file"
             add_change_header "$file" "$config_type"
 
-            local temp_file=$(make_temp_file)
+            local temp_file
+            temp_file=$(mktemp)
+            TEMP_FILES+=("$temp_file")
             local original_perms=$(get_file_permissions "$file")
 
             # Use awk to find the line, comment it, and append the new line at the end of the file
@@ -892,7 +957,8 @@ normalize_trailing_newlines() {
     local original_perms
     original_perms=$(get_file_permissions "$file")
     local temp_file
-    temp_file=$(make_temp_file)
+    temp_file=$(mktemp)
+    TEMP_FILES+=("$temp_file")
 
     # Remove all trailing blank lines (last content line keeps its newline)
     sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$file" > "$temp_file"
@@ -1005,34 +1071,41 @@ download_script() {
     echo "            ▶ ${REMOTE_BASE}/${script_file}..."
 
     if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-        http_status=$(curl -H 'Cache-Control: no-cache, no-store' -o "${output_file}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${script_file}" 2>/dev/null || echo "000")
-        if [[ "$http_status" == "200" ]]; then
-            if head -n 10 "${output_file}" | grep -q "^#!/"; then
-                return 0
-            else
-                print_error "✖ Invalid content received (not a script)"
-                return 1
-            fi
-        elif [[ "$http_status" == "429" ]]; then
-            print_error "✖ Rate limited by GitHub (HTTP 429)"
-            return 1
-        elif [[ "$http_status" != "000" ]]; then
-            print_error "✖ HTTP ${http_status} error"
-            return 1
-        else
-            print_error "✖ Download failed"
+        # Drop -f so 4xx/5xx populate http_status cleanly; --max-time 15 prevents
+        # multi-minute hangs against sinkholed networks. Empty status => transport
+        # failure (DNS/timeout/connect) — set explicit "000" sentinel.
+        http_status=$(curl -H 'Cache-Control: no-cache, no-store' \
+            --max-time 15 \
+            -o "${output_file}" -w "%{http_code}" -sSL \
+            "${REMOTE_BASE}/${script_file}" 2>/dev/null || true)
+        [[ -z "$http_status" ]] && http_status="000"
+        case "$http_status" in
+            200)
+                if head -n 10 "${output_file}" | grep -q "^#!/"; then
+                    return 0
+                else
+                    print_error "✖ Invalid content received (not a script)"
+                    return 1
+                fi
+                ;;
+            429) print_error "✖ Rate limited by GitHub (HTTP 429)"; return 1 ;;
+            000) print_error "✖ Download failed (network/timeout)"; return 1 ;;
+            *)   print_error "✖ HTTP ${http_status} error"; return 1 ;;
+        esac
+    elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
+        local wget_exit=0
+        wget --no-cache --no-cookies \
+            --timeout=15 \
+            -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null \
+            || wget_exit=$?
+        if [[ "$wget_exit" -ne 0 ]]; then
+            print_error "✖ Download failed (wget exit ${wget_exit})"
             return 1
         fi
-    elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
-        if wget --no-cache --no-cookies -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null; then
-            if head -n 10 "${output_file}" | grep -q "^#!/"; then
-                return 0
-            else
-                print_error "✖ Invalid content received (not a script)"
-                return 1
-            fi
+        if head -n 10 "${output_file}" | grep -q "^#!/"; then
+            return 0
         else
-            print_error "✖ Download failed"
+            print_error "✖ Invalid content received (not a script)"
             return 1
         fi
     fi
@@ -1061,18 +1134,21 @@ check_for_updates() {
 
     print_info "Checking for updates..."
 
-    # Check utils file
-    temp_file=$(mktemp)
+    # Check utils file. Template adjacent to destination so `mv` is atomic
+    # rename(2) (same FS), not copy+unlink. ~name.tmp.XXXXXX matches the sweep
+    # glob and is unambiguous enough that no user spontaneously creates it.
+    temp_file=$(mktemp "${_UTILS_DIR}/~${utils_basename}.tmp.XXXXXX")
+    TEMP_FILES+=("$temp_file")
     if download_script "$utils_basename" "$temp_file"; then
         if ! diff -q "${_UTILS_DIR}/${utils_basename}" "$temp_file" > /dev/null 2>&1; then
-            echo ""
-            echo -e "${CYAN}╭────────────────────── Δ detected in ${utils_basename} ──────────────────────╮${NC}"
-            diff -u --color "${_UTILS_DIR}/${utils_basename}" "$temp_file" || true
-            echo -e "${CYAN}╰─────────────────────────── ${utils_basename} ──────────────────────────────╯${NC}"
-            echo ""
+            show_diff_box "${_UTILS_DIR}/${utils_basename}" "$temp_file" "$utils_basename"
             if prompt_yes_no "→ Update ${utils_basename}?" "y"; then
                 chmod +x "$temp_file"
-                mv -f "$temp_file" "${_UTILS_DIR}/${utils_basename}"
+                if ! mv -f "$temp_file" "${_UTILS_DIR}/${utils_basename}"; then
+                    rm -f "$temp_file"
+                    print_error "✖ Failed to install update — keeping local version"
+                    return 1
+                fi
                 print_success "✓ Updated ${utils_basename}"
                 any_updated=true
             else
@@ -1088,17 +1164,18 @@ check_for_updates() {
     fi
 
     # Check calling script
-    temp_file=$(mktemp)
+    temp_file=$(mktemp "${caller_script%/*}/~${caller_script##*/}.tmp.XXXXXX")
+    TEMP_FILES+=("$temp_file")
     if download_script "$caller_relpath" "$temp_file"; then
         if ! diff -q "$caller_script" "$temp_file" > /dev/null 2>&1; then
-            echo ""
-            echo -e "${CYAN}╭────────────────────── Δ detected in ${caller_relpath} ──────────────────────╮${NC}"
-            diff -u --color "$caller_script" "$temp_file" || true
-            echo -e "${CYAN}╰─────────────────────────── ${caller_relpath} ──────────────────────────────╯${NC}"
-            echo ""
+            show_diff_box "$caller_script" "$temp_file" "$caller_relpath"
             if prompt_yes_no "→ Update ${caller_relpath}?" "y"; then
                 chmod +x "$temp_file"
-                mv -f "$temp_file" "$caller_script"
+                if ! mv -f "$temp_file" "$caller_script"; then
+                    rm -f "$temp_file"
+                    print_error "✖ Failed to install update — keeping local version"
+                    return 1
+                fi
                 print_success "✓ Updated ${caller_relpath}"
                 any_updated=true
             else
