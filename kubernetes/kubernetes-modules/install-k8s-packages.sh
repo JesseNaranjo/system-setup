@@ -130,7 +130,7 @@ setup_apt_repo() {
         || { print_error "✖ Failed to create /etc/apt/keyrings"; return 1; }
 
     print_info "Downloading ${name} GPG key..."
-    curl -fsSL "${repo_url}Release.key" | gpg --dearmor --yes -o "$keyring_path" \
+    curl -fsSL --max-time 15 "${repo_url}Release.key" | gpg --dearmor --yes -o "$keyring_path" \
         || { print_error "✖ Failed to download/import ${name} GPG key"; return 1; }
     print_success "✓ ${name} GPG key installed: $keyring_path"
 
@@ -293,7 +293,7 @@ install_role_packages() {
             print_success "  ✓ ${display_name} (installed)"
             track_special_packages "$package_name"
         else
-            print_warning "  ✖ ${display_name} (not installed)"
+            print_warning "  ⚠ ${display_name} (not installed)"
             missing+=("$package_name")
         fi
     done < <(get_role_packages "$role")

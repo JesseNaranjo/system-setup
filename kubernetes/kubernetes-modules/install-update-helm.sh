@@ -36,7 +36,7 @@ main_install_update_helm() {
     install_script_path="$(mktemp)" || { print_error "✖ Failed to create temp file"; return 1; }
 
     print_info "Downloading Helm install script to ${install_script_path}..."
-    if ! curl -fsSL -o "${install_script_path}" "${HELM_INSTALL_URL}"; then
+    if ! curl -fsSL --max-time 15 -o "${install_script_path}" "${HELM_INSTALL_URL}"; then
         rm -f "${install_script_path}"
         print_error "✖ Failed to download Helm install script"
         return 1

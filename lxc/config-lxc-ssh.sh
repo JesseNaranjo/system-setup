@@ -146,7 +146,11 @@ generate_ssh_keypair() {
     # Generate new key pair
     print_info "Generating SSH key pair: $private_key"
     ssh-keygen -t rsa -b 4096 -f "$private_key" -N "" -C "${TARGET_USER}@lxc-containers"
-    mv -f "${private_key}.pub" "$public_key"
+    if ! mv -f "${private_key}.pub" "$public_key"; then
+        rm -f "${private_key}.pub"
+        print_error "✖ Failed to install public key — keeping local version"
+        return 1
+    fi
 
     # Set proper ownership and permissions
     chown "${TARGET_USER}:${TARGET_USER}" "$private_key" "$public_key"

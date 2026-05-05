@@ -130,7 +130,7 @@ main_install_update_minikube() {
 
     print_info "Detected package manager: ${DETECTED_PKG_MANAGER}"
     print_info "Downloading minikube for ${arch} to ${pkg_path}..."
-    if ! curl -fsSL -o "${pkg_path}" "${pkg_url}"; then
+    if ! curl -fsSL --max-time 15 -o "${pkg_path}" "${pkg_url}"; then
         rm -f "${pkg_path}"
         print_error "✖ Failed to download minikube from ${pkg_url}"
         return 1
