@@ -67,11 +67,18 @@ update_modules() {
     while IFS= read -r script_path; do
         local SCRIPT_FILE="$script_path"
         local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
-        local TEMP_SCRIPT_FILE="$(make_temp_file)"
 
-        # Ensure the local directory exists
+        # Ensure the local directory exists (so the adjacent mktemp template below resolves)
         local script_dir="$(dirname "$LOCAL_SCRIPT")"
         mkdir -p "$script_dir"
+
+        # Path-aware atomic-rename temp: mktemp adjacent to LOCAL_SCRIPT (which may
+        # contain a subdir like system-modules/...). Inline TEMP_FILES+=() so the
+        # cleanup trap reaches the parent's array (a $(make_temp_file) wrapper would
+        # land the +=() in a subshell and leak).
+        local TEMP_SCRIPT_FILE
+        TEMP_SCRIPT_FILE=$(mktemp "$(dirname "${LOCAL_SCRIPT}")/~$(basename "${LOCAL_SCRIPT}").tmp.XXXXXX")
+        TEMP_FILES+=("$TEMP_SCRIPT_FILE")
 
         if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
             echo "            (skipping ${SCRIPT_FILE})"
@@ -93,16 +100,18 @@ update_modules() {
             rm -f "${TEMP_SCRIPT_FILE}"
             echo ""
         else
-            echo ""
-            echo -e "${CYAN}╭────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
-            diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" || true
-            echo -e "${CYAN}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
-            echo ""
+            show_diff_box "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" "${SCRIPT_FILE}"
 
             if prompt_yes_no "→ Overwrite local ${SCRIPT_FILE} with remote copy?" "y"; then
                 echo ""
                 chmod +x "${TEMP_SCRIPT_FILE}"
-                mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"
+                if ! mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"; then
+                    rm -f "${TEMP_SCRIPT_FILE}"
+                    print_error "✖ Failed to install update for ${SCRIPT_FILE} — keeping local version"
+                    ((failed_count++)) || true
+                    echo ""
+                    continue
+                fi
                 print_success "✓ Replaced ${SCRIPT_FILE}"
                 ((updated_count++)) || true
             else
@@ -136,12 +145,13 @@ update_modules() {
 # ============================================================================
 
 main() {
-    cleanup() {
-        for f in "${TEMP_FILES[@]+"${TEMP_FILES[@]}"}"; do
-            rm -f "$f" 2>/dev/null
-        done
-    }
-    trap cleanup EXIT
+    # Defense-in-depth: reap any same-FS atomic-rename temp files left over from a
+    # prior interrupted self-update (SIGKILL, power-loss, exec'd-away). The EXIT
+    # trap installed at file scope by utils-sys.sh handles in-flight cleanup;
+    # this sweep handles what the trap couldn't fire for. The catch-all glob
+    # covers both this script's atomic-rename temps (~system-setup.sh.tmp.???,
+    # ~<module>.sh.tmp.???) and utils-sys.sh's (~utils-sys.sh.tmp.???).
+    sweep_stale_temps '~*.tmp.??????'
 
     # Save original args for check_for_updates restart
     local -a original_args=("$@")
