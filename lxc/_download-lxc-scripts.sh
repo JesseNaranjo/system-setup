@@ -60,7 +60,9 @@ update_modules() {
     while IFS= read -r script_path; do
         local SCRIPT_FILE="$script_path"
         local LOCAL_SCRIPT="${SCRIPT_FILE}"
-        local TEMP_SCRIPT_FILE="$(mktemp)"
+        local TEMP_SCRIPT_FILE
+        TEMP_SCRIPT_FILE=$(mktemp "$(dirname "${LOCAL_SCRIPT}")/~$(basename "${LOCAL_SCRIPT}").tmp.XXXXXX")
+        TEMP_FILES+=("$TEMP_SCRIPT_FILE")
 
         if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
             echo "            (skipping ${SCRIPT_FILE})"
@@ -82,16 +84,18 @@ update_modules() {
             rm -f "${TEMP_SCRIPT_FILE}"
             echo ""
         else
-            echo ""
-            echo -e "${CYAN}╭────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
-            diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" || true
-            echo -e "${CYAN}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
-            echo ""
+            show_diff_box "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" "${SCRIPT_FILE}"
 
             if prompt_yes_no "→ Overwrite local ${SCRIPT_FILE} with remote copy?" "y"; then
                 echo ""
                 chmod +x "${TEMP_SCRIPT_FILE}"
-                mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"
+                if ! mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"; then
+                    rm -f "${TEMP_SCRIPT_FILE}"
+                    print_error "✖ Failed to install update — keeping local version"
+                    ((failed_count++)) || true
+                    echo ""
+                    continue
+                fi
                 print_success "✓ Replaced ${SCRIPT_FILE}"
                 ((updated_count++)) || true
             else
@@ -125,6 +129,7 @@ update_modules() {
 # ============================================================================
 
 main() {
+    sweep_stale_temps '~*.tmp.??????'
     check_for_updates "${BASH_SOURCE[0]}" "$@"
     if [[ -n "$DOWNLOAD_CMD" ]]; then
         update_modules
