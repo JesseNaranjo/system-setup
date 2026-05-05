@@ -59,7 +59,7 @@ print_warning() {
 }
 
 print_error() {
-    echo -e "${RED}[ ERROR   ]${NC} $1"
+    echo -e "${RED}[ ERROR   ]${NC} $1" >&2
 }
 
 print_dry_run() {
@@ -98,7 +98,83 @@ TOTAL_ISSUES_FAILED=0
 
 # Self-update configuration
 readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/github"
+readonly SCRIPT_FILE="gh_org_delete_issues.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 DOWNLOAD_CMD=""
+
+# Pattern F — file-scope TEMP_FILES + cleanup + trap.
+# cleanup runs on normal exit, SIGINT, SIGTERM. Hoisted to file scope so the
+# trap is wired the moment the script is loaded — a top-level guard that exits
+# before main still reaps tracked temps.
+TEMP_FILES=()
+
+cleanup() {
+    local f
+    for f in "${TEMP_FILES[@]+"${TEMP_FILES[@]}"}"; do
+        rm -f "$f" 2>/dev/null
+    done
+}
+trap cleanup EXIT
+
+# Pattern H — show_diff_box helper. Replaces the inline 5-line diff block.
+# `--color=always` forces ANSI codes regardless of stdout's TTY status —
+# required because the pager pipe below would otherwise see auto→no-color.
+# `less -RFX` when interactive: -R passes ANSI through, -F exits if content
+# fits one screen (so short diffs render inline), -X skips alt-screen handoff
+# so output stays in scrollback. Falls back to bare `diff` when stdout isn't
+# a TTY (CI, pipelines) or `less` is missing.
+show_diff_box() {
+    local local_file="$1"
+    local temp_file="$2"
+    local label="$3"
+    echo ""
+    echo -e "${CYAN}╭────────────────────── Δ detected in ${label} ──────────────────────╮${NC}"
+    if [[ -t 1 ]] && command -v less &>/dev/null; then
+        diff -u --color=always "${local_file}" "${temp_file}" | less -RFX || true
+    else
+        diff -u --color=always "${local_file}" "${temp_file}" || true
+    fi
+    echo -e "${CYAN}╰─────────────────────────── ${label} ──────────────────────────────╯${NC}"
+    echo ""
+}
+
+# Pattern G — sweep_stale_temps. Defense-in-depth: at startup, reap any
+# same-FS temp files (e.g., from a prior SIGKILL / power-loss / interrupted
+# self-update) older than a normal run window. The EXIT trap above handles
+# in-flight cleanup; this function handles what the trap couldn't fire for.
+# TTY-aware so cron/ssh -T runs don't block on the prompt.
+sweep_stale_temps() {
+    local pattern="$1"
+    local stale_files=()
+    while IFS= read -r -d '' f; do
+        stale_files+=("$f")
+    done < <(find "$SCRIPT_DIR" -maxdepth 1 -name "$pattern" -type f -mmin +10 -print0 2>/dev/null)
+
+    [[ ${#stale_files[@]} -eq 0 ]] && return 0
+
+    print_warning "⚠ Found ${#stale_files[@]} stale temp file(s) from a prior interrupted run:"
+    for f in "${stale_files[@]}"; do
+        print_warning "  - $f"
+    done
+
+    # `[[ -r /dev/tty ]]` only checks file permissions; under setsid the device
+    # is world-readable but `open(2)` fails with ENXIO, so a subsequent
+    # `read </dev/tty` aborts under set -e. Probe with a no-op stdin redirect
+    # to detect actual openability.
+    if { : </dev/tty; } 2>/dev/null; then
+        # `|| true` swallows EOF (Ctrl+D) so set -e doesn't abort mid-cleanup.
+        read -p "Press any key to delete and continue, Ctrl+C to abort: " -n 1 -r </dev/tty || true
+        echo ""
+    else
+        print_warning "⚠ Non-interactive context — deleting and continuing without prompt."
+    fi
+
+    for f in "${stale_files[@]}"; do
+        rm -f "$f"
+    done
+    print_success "✓ Cleaned up ${#stale_files[@]} stale temp file(s)"
+}
 
 # Parse command line options
 while [[ $# -gt 0 ]]; do
@@ -168,38 +244,44 @@ download_script() {
     echo "            ▶ ${REMOTE_BASE}/${script_file}..."
 
     if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-        http_status=$(curl -H 'Cache-Control: no-cache, no-store' -o "${output_file}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${script_file}" 2>/dev/null || echo "000")
-        if [[ "$http_status" == "200" ]]; then
-            # Validate that we got a script, not an error page
-            # Check first 10 lines for shebang to handle files with leading comments/blank lines
-            if head -n 10 "${output_file}" | grep -q "^#!/"; then
-                return 0
-            else
-                print_error "✖ Invalid content received (not a script)"
-                return 1
-            fi
-        elif [[ "$http_status" == "429" ]]; then
-            print_error "✖ Rate limited by GitHub (HTTP 429)"
-            return 1
-        elif [[ "$http_status" != "000" ]]; then
-            print_error "✖ HTTP ${http_status} error"
-            return 1
+        # Drop -f so 4xx/5xx responses populate http_status cleanly (with -f
+        # curl writes nothing to stdout on HTTP errors → empty status concatenated
+        # with the literal "000" fallback yielded "404000" instead of "404").
+        # `--max-time 15` caps end-to-end wall time so a flaky/sinkholed network
+        # can't hang the script for 5+ minutes; "000" is set ONLY when http_status
+        # is empty (genuine transport failure / timeout).
+        http_status=$(curl -H 'Cache-Control: no-cache, no-store' \
+            --max-time 15 \
+            -o "${output_file}" -w "%{http_code}" -sSL \
+            "${REMOTE_BASE}/${script_file}" 2>/dev/null || true)
+        [[ -z "$http_status" ]] && http_status="000"
+        case "$http_status" in
+            200) ;;
+            429) print_error "✖ Rate limited by GitHub (HTTP 429)"; return 1 ;;
+            000) print_error "✖ Download failed (network/timeout)"; return 1 ;;
+            *)   print_error "✖ HTTP ${http_status} error"; return 1 ;;
+        esac
+        # Validate that we got a script, not an error page
+        # Check first 10 lines for shebang to handle files with leading comments/blank lines
+        if head -n 10 "${output_file}" | grep -q "^#!/"; then
+            return 0
         else
-            print_error "✖ Download failed"
+            print_error "✖ Invalid content received (not a script)"
             return 1
         fi
     elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
-        if wget --no-cache --no-cookies -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null; then
-            # Validate that we got a script, not an error page
-            # Check first 10 lines for shebang to handle files with leading comments/blank lines
-            if head -n 10 "${output_file}" | grep -q "^#!/"; then
-                return 0
-            else
-                print_error "✖ Invalid content received (not a script)"
-                return 1
-            fi
+        local wget_exit=0
+        wget --no-cache --no-cookies \
+            --timeout=15 \
+            -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null \
+            || wget_exit=$?
+        [[ "$wget_exit" -ne 0 ]] && { print_error "✖ Download failed (wget exit ${wget_exit})"; return 1; }
+        # Validate that we got a script, not an error page
+        # Check first 10 lines for shebang to handle files with leading comments/blank lines
+        if head -n 10 "${output_file}" | grep -q "^#!/"; then
+            return 0
         else
-            print_error "✖ Download failed"
+            print_error "✖ Invalid content received (not a script)"
             return 1
         fi
     fi
@@ -209,10 +291,13 @@ download_script() {
 
 # Check for script updates and restart if updated
 self_update() {
-    local SCRIPT_FILE="gh_org_delete_issues.sh"
-    local SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
-    local TEMP_SCRIPT_FILE="$(mktemp)"
+    local TEMP_SCRIPT_FILE
+    # Pattern E — same-FS template + TEMP_FILES bookkeeping. Adjacent to
+    # destination so `mv -f` below is atomic rename(2), not cross-FS copy+unlink.
+    # The ~filename.tmp.XXXXXX naming convention makes the sweep glob unambiguous.
+    TEMP_SCRIPT_FILE=$(mktemp "${SCRIPT_DIR}/~${SCRIPT_FILE}.tmp.XXXXXX")
+    TEMP_FILES+=("$TEMP_SCRIPT_FILE")
 
     if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
         rm -f "${TEMP_SCRIPT_FILE}"
@@ -227,18 +312,26 @@ self_update() {
         return 0
     fi
 
-    # Show diff
-    echo ""
-    echo -e "${CYAN}╭────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
-    diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" || true
-    echo -e "${CYAN}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
-    echo ""
+    # Pattern H-call — show diff via shared helper (paged when interactive,
+    # color preserved through pipe via --color=always).
+    show_diff_box "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" "${SCRIPT_FILE}"
 
-    read -p "→ Overwrite and restart with updated ${SCRIPT_FILE}? [Y/n] " -n 1 -r
+    # Pattern B' — bare-`read` self-update guard. Without this, a failed
+    # `read </dev/tty` under set -e in cron / ssh -T / CI leaves $REPLY empty,
+    # the `[[ -z $REPLY ]]` branch matches, and the update silently auto-applies.
+    # `return 0` because the script can continue with the unchanged local version.
+    [[ -r /dev/tty ]] || { print_info "Non-interactive — skipping self-update"; return 0; }
+    read -p "→ Overwrite and restart with updated ${SCRIPT_FILE}? [Y/n] " -n 1 -r </dev/tty
     if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
         echo ""
         chmod +x "${TEMP_SCRIPT_FILE}"
-        mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"
+        # Pattern D — mv -f failure handler. SCRIPT_DIR could be read-only
+        # (chmod -w) or out of inodes; preserve the local script and report.
+        if ! mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"; then
+            rm -f "${TEMP_SCRIPT_FILE}"
+            print_error "✖ Failed to install update — keeping local version"
+            return 1
+        fi
         print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
         echo ""
         export scriptUpdated=1
@@ -428,6 +521,11 @@ lock_issue() {
 
 # Main execution function
 main() {
+    # Defense-in-depth: reap stale ~*.tmp.?????? temps from prior interrupted
+    # runs (SIGKILL, power-loss) before doing anything else. Catch-all glob
+    # covers all atomic-rename templates this script may produce.
+    sweep_stale_temps '~*.tmp.??????'
+
     # Check for updates if download tool available
     if detect_download_cmd && [[ ${scriptUpdated:-0} -eq 0 ]]; then
         self_update "$@"
