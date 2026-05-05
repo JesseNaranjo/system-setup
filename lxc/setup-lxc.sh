@@ -213,7 +213,7 @@ EOF
     # Offer to bring up the bridge now
     echo ""
 
-    if prompt_yes_no "Would you like to bring up the br0 bridge now?"; then
+    if prompt_yes_no "Would you like to bring up the br0 bridge now?" "n"; then
         print_info "Bringing up br0 bridge..."
         if ifup br0 2>/dev/null; then
             print_success "✓ br0 bridge is now active"
@@ -244,7 +244,7 @@ if ! check_bridge_utils; then
     print_info "- Bridge-utils is required for br0 networking"
     echo ""
 
-    if prompt_yes_no "Would you like to install bridge-utils now?"; then
+    if prompt_yes_no "Would you like to install bridge-utils now?" "y"; then
         print_info "Installing bridge-utils..."
         if apt-get update && apt-get install -y bridge-utils; then
             print_success "✓ bridge-utils installed successfully"
@@ -281,7 +281,7 @@ if [[ "$SKIP_BRIDGE_SETUP" == "false" ]]; then
             echo "Detected network interface: $SINGLE_INTERFACE"
             echo ""
 
-            if prompt_yes_no "Would you like to setup br0 bridge on $SINGLE_INTERFACE?"; then
+            if prompt_yes_no "Would you like to setup br0 bridge on $SINGLE_INTERFACE?" "n"; then
                 setup_br0_bridge "$SINGLE_INTERFACE"
                 BRIDGE_LINK="br0"
             else
@@ -295,7 +295,7 @@ if [[ "$SKIP_BRIDGE_SETUP" == "false" ]]; then
             done
             echo ""
 
-            if prompt_yes_no "Would you like to setup br0 bridge?"; then
+            if prompt_yes_no "Would you like to setup br0 bridge?" "n"; then
                 echo ""
                 echo "Enter the interface(s) to bridge (space-separated, e.g., 'eth0' or 'eth0 eth1'):"
                 read -r SELECTED_INTERFACES
