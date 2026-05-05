@@ -85,7 +85,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 TEMP_FILES=()
 
-# cleanup runs on normal exit, SIGINT, SIGTERM. Defined at file scope so the
+# cleanup runs on normal exit, SIGINT, SIGTERM. Hoisted to file scope so the
 # trap is wired the moment the script is loaded — a top-level guard that exits
 # before main still reaps tracked temps.
 cleanup() {
@@ -137,6 +137,11 @@ sweep_stale_temps() {
 # Diff Display
 # ============================================================================
 
+# Render a unified diff between two files inside a labeled box. Pages through
+# `less -RFX` when stdout is a TTY (-R passes ANSI through, -F exits if content
+# fits one screen, -X skips alt-screen so output stays in scrollback); falls
+# back to inline `diff` when piped or `less` is missing. `--color=always`
+# forces ANSI even when piped.
 show_diff_box() {
     local local_file="$1"
     local temp_file="$2"
@@ -231,12 +236,13 @@ download_script() {
                     return 0
                 else
                     print_error "✖ Invalid content received (not a script)"
+                    rm -f "${output_file}"
                     return 1
                 fi
                 ;;
-            429) print_error "✖ Rate limited by GitHub (HTTP 429)"; return 1 ;;
-            000) print_error "✖ Download failed (network/timeout)"; return 1 ;;
-            *)   print_error "✖ HTTP ${http_status} error"; return 1 ;;
+            429) print_error "✖ Rate limited by GitHub (HTTP 429)"; rm -f "${output_file}"; return 1 ;;
+            000) print_error "✖ Download failed (network/timeout)"; rm -f "${output_file}"; return 1 ;;
+            *)   print_error "✖ HTTP ${http_status} error"; rm -f "${output_file}"; return 1 ;;
         esac
     elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
         local wget_exit=0
@@ -244,13 +250,14 @@ download_script() {
             --timeout=15 \
             -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null \
             || wget_exit=$?
-        [[ "$wget_exit" -ne 0 ]] && { print_error "✖ Download failed (wget exit ${wget_exit})"; return 1; }
+        [[ "$wget_exit" -ne 0 ]] && { print_error "✖ Download failed (wget exit ${wget_exit})"; rm -f "${output_file}"; return 1; }
         # Validate that we got a script, not an error page
         # Check first 10 lines for shebang to handle files with leading comments/blank lines
         if head -n 10 "${output_file}" | grep -q "^#!/"; then
             return 0
         else
             print_error "✖ Invalid content received (not a script)"
+            rm -f "${output_file}"
             return 1
         fi
     fi
@@ -261,8 +268,6 @@ download_script() {
 # Check for script updates and restart if updated
 self_update() {
     local SCRIPT_FILE="gh_org_copy.sh"
-    local SCRIPT_DIR
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
     local TEMP_SCRIPT_FILE
     TEMP_SCRIPT_FILE=$(mktemp "${SCRIPT_DIR}/~${SCRIPT_FILE}.tmp.XXXXXX")

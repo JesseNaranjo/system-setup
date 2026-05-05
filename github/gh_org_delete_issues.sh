@@ -103,12 +103,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 DOWNLOAD_CMD=""
 
-# Pattern F — file-scope TEMP_FILES + cleanup + trap.
+TEMP_FILES=()
+
 # cleanup runs on normal exit, SIGINT, SIGTERM. Hoisted to file scope so the
 # trap is wired the moment the script is loaded — a top-level guard that exits
 # before main still reaps tracked temps.
-TEMP_FILES=()
-
 cleanup() {
     local f
     for f in "${TEMP_FILES[@]+"${TEMP_FILES[@]}"}"; do
@@ -117,13 +116,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Pattern H — show_diff_box helper. Replaces the inline 5-line diff block.
-# `--color=always` forces ANSI codes regardless of stdout's TTY status —
-# required because the pager pipe below would otherwise see auto→no-color.
-# `less -RFX` when interactive: -R passes ANSI through, -F exits if content
-# fits one screen (so short diffs render inline), -X skips alt-screen handoff
-# so output stays in scrollback. Falls back to bare `diff` when stdout isn't
-# a TTY (CI, pipelines) or `less` is missing.
+# Render a unified diff between two files inside a labeled box. Pages through
+# `less -RFX` when stdout is a TTY (-R passes ANSI through, -F exits if content
+# fits one screen, -X skips alt-screen so output stays in scrollback); falls
+# back to inline `diff` when piped or `less` is missing. `--color=always`
+# forces ANSI even when piped.
 show_diff_box() {
     local local_file="$1"
     local temp_file="$2"
@@ -139,11 +136,11 @@ show_diff_box() {
     echo ""
 }
 
-# Pattern G — sweep_stale_temps. Defense-in-depth: at startup, reap any
-# same-FS temp files (e.g., from a prior SIGKILL / power-loss / interrupted
-# self-update) older than a normal run window. The EXIT trap above handles
-# in-flight cleanup; this function handles what the trap couldn't fire for.
-# TTY-aware so cron/ssh -T runs don't block on the prompt.
+# Defense-in-depth: at startup, reap any same-FS temp files (e.g., from a
+# prior SIGKILL / power-loss / interrupted self-update) older than a normal
+# run window. The EXIT trap above handles in-flight cleanup; this function
+# handles what the trap couldn't fire for. TTY-aware so cron/ssh -T runs
+# don't block on the prompt.
 sweep_stale_temps() {
     local pattern="$1"
     local stale_files=()
@@ -257,9 +254,9 @@ download_script() {
         [[ -z "$http_status" ]] && http_status="000"
         case "$http_status" in
             200) ;;
-            429) print_error "✖ Rate limited by GitHub (HTTP 429)"; return 1 ;;
-            000) print_error "✖ Download failed (network/timeout)"; return 1 ;;
-            *)   print_error "✖ HTTP ${http_status} error"; return 1 ;;
+            429) print_error "✖ Rate limited by GitHub (HTTP 429)"; rm -f "${output_file}"; return 1 ;;
+            000) print_error "✖ Download failed (network/timeout)"; rm -f "${output_file}"; return 1 ;;
+            *)   print_error "✖ HTTP ${http_status} error"; rm -f "${output_file}"; return 1 ;;
         esac
         # Validate that we got a script, not an error page
         # Check first 10 lines for shebang to handle files with leading comments/blank lines
@@ -267,6 +264,7 @@ download_script() {
             return 0
         else
             print_error "✖ Invalid content received (not a script)"
+            rm -f "${output_file}"
             return 1
         fi
     elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
@@ -275,13 +273,14 @@ download_script() {
             --timeout=15 \
             -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null \
             || wget_exit=$?
-        [[ "$wget_exit" -ne 0 ]] && { print_error "✖ Download failed (wget exit ${wget_exit})"; return 1; }
+        [[ "$wget_exit" -ne 0 ]] && { print_error "✖ Download failed (wget exit ${wget_exit})"; rm -f "${output_file}"; return 1; }
         # Validate that we got a script, not an error page
         # Check first 10 lines for shebang to handle files with leading comments/blank lines
         if head -n 10 "${output_file}" | grep -q "^#!/"; then
             return 0
         else
             print_error "✖ Invalid content received (not a script)"
+            rm -f "${output_file}"
             return 1
         fi
     fi

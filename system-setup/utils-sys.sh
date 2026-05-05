@@ -97,10 +97,11 @@ sweep_stale_temps() {
     print_success "✓ Cleaned up ${#stale_files[@]} stale temp file(s)"
 }
 
-# Pretty-print a unified diff between two files inside a labeled box. Use
-# `less` when stdout is a TTY (so multi-page diffs don't flood scrollback);
-# fall back to inline output otherwise. `--color=always` forces ANSI even
-# when piped to `less`; `-RFX` keeps less from clearing the screen.
+# Render a unified diff between two files inside a labeled box. Pages through
+# `less -RFX` when stdout is a TTY (-R passes ANSI through, -F exits if content
+# fits one screen, -X skips alt-screen so output stays in scrollback); falls
+# back to inline `diff` when piped or `less` is missing. `--color=always`
+# forces ANSI even when piped.
 show_diff_box() {
     local local_file="$1"
     local temp_file="$2"
@@ -882,8 +883,15 @@ update_config_line() {
             backup_file "$file"
             add_change_header "$file" "$config_type"
 
-            local temp_file=$(mktemp)
-            local original_perms=$(get_file_permissions "$file")
+            # Pattern E3: bookkeeping-only inline mktemp. mv target is the
+            # caller-provided $file (often /etc/... via run_elevated, cross-FS
+            # to /tmp tmpfs), so atomic same-FS rename is irrelevant here. The
+            # TEMP_FILES+=() lets the EXIT trap reap a SIGINT-leaked temp.
+            local temp_file
+            temp_file=$(mktemp)
+            TEMP_FILES+=("$temp_file")
+            local original_perms
+            original_perms=$(get_file_permissions "$file")
 
             # Use awk to find the line, comment it, and append the new line at the end of the file
             if ! awk -v pattern="^[[:space:]]*${setting_pattern}" -v new_line="${full_line}" '
@@ -1167,12 +1175,13 @@ download_script() {
                     return 0
                 else
                     print_error "✖ Invalid content received (not a script)"
+                    rm -f "${output_file}"
                     return 1
                 fi
                 ;;
-            429) print_error "✖ Rate limited by GitHub (HTTP 429)"; return 1 ;;
-            000) print_error "✖ Download failed (network/timeout)"; return 1 ;;
-            *)   print_error "✖ HTTP ${http_status} error"; return 1 ;;
+            429) print_error "✖ Rate limited by GitHub (HTTP 429)"; rm -f "${output_file}"; return 1 ;;
+            000) print_error "✖ Download failed (network/timeout)"; rm -f "${output_file}"; return 1 ;;
+            *)   print_error "✖ HTTP ${http_status} error"; rm -f "${output_file}"; return 1 ;;
         esac
     elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
         local wget_exit=0
@@ -1182,12 +1191,14 @@ download_script() {
             || wget_exit=$?
         if [[ "$wget_exit" -ne 0 ]]; then
             print_error "✖ Download failed (wget exit ${wget_exit})"
+            rm -f "${output_file}"
             return 1
         fi
         if head -n 10 "${output_file}" | grep -q "^#!/"; then
             return 0
         else
             print_error "✖ Invalid content received (not a script)"
+            rm -f "${output_file}"
             return 1
         fi
     fi
@@ -1242,16 +1253,18 @@ check_for_updates() {
         rm -f "$temp_file"
     fi
 
-    # Check calling script
-    # mktemp adjacent to destination (same FS) so `mv` is atomic rename(2).
-    temp_file=$(mktemp "${caller_script%/*}/~${caller_script##*/}.tmp.XXXXXX")
+    # Check calling script. Use caller_abs (already resolved) for path-sensitive
+    # operations — the raw ${BASH_SOURCE[0]} caller_script may be a bare basename
+    # when invoked via PATH or bash <name>, breaking ${caller_script%/*} dirname
+    # extraction and PATH-resolved exec.
+    temp_file=$(mktemp "$(dirname "$caller_abs")/~$(basename "$caller_abs").tmp.XXXXXX")
     TEMP_FILES+=("$temp_file")
     if download_script "$caller_relpath" "$temp_file"; then
-        if ! diff -q "$caller_script" "$temp_file" > /dev/null 2>&1; then
-            show_diff_box "$caller_script" "$temp_file" "$caller_relpath"
+        if ! diff -q "$caller_abs" "$temp_file" > /dev/null 2>&1; then
+            show_diff_box "$caller_abs" "$temp_file" "$caller_relpath"
             if prompt_yes_no "→ Update ${caller_relpath}?" "y"; then
                 chmod +x "$temp_file"
-                if ! mv -f "$temp_file" "$caller_script"; then
+                if ! mv -f "$temp_file" "$caller_abs"; then
                     rm -f "$temp_file"
                     print_error "✖ Failed to install update — keeping local version"
                     return 1
@@ -1273,6 +1286,6 @@ check_for_updates() {
     if [[ "$any_updated" == "true" ]]; then
         print_success "Restarting with updated scripts..."
         export SYS_SCRIPTS_UPDATED=1
-        exec "$caller_script" "$@"
+        exec "$caller_abs" "$@"
     fi
 }

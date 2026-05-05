@@ -180,6 +180,11 @@ sweep_stale_temps() {
     print_success "✓ Cleaned up ${#stale_files[@]} stale temp file(s)"
 }
 
+# Render a unified diff between two files inside a labeled box. Pages through
+# `less -RFX` when stdout is a TTY (-R passes ANSI through, -F exits if content
+# fits one screen, -X skips alt-screen so output stays in scrollback); falls
+# back to inline `diff` when piped or `less` is missing. `--color=always`
+# forces ANSI even when piped.
 show_diff_box() {
     local local_file="$1"
     local temp_file="$2"
@@ -233,14 +238,15 @@ download_script() {
         [[ -z "$http_status" ]] && http_status="000"
         case "$http_status" in
             200) ;;
-            429) print_error "✖ Rate limited by GitHub (HTTP 429)"; return 1 ;;
-            000) print_error "✖ Download failed (network/timeout)"; return 1 ;;
-            *)   print_error "✖ HTTP ${http_status} error"; return 1 ;;
+            429) print_error "✖ Rate limited by GitHub (HTTP 429)"; rm -f "${output_file}"; return 1 ;;
+            000) print_error "✖ Download failed (network/timeout)"; rm -f "${output_file}"; return 1 ;;
+            *)   print_error "✖ HTTP ${http_status} error"; rm -f "${output_file}"; return 1 ;;
         esac
         if head -n 10 "${output_file}" | grep -q "^#!/"; then
             return 0
         else
             print_error "✖ Invalid content received (not a script)"
+            rm -f "${output_file}"
             return 1
         fi
     elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
@@ -249,11 +255,12 @@ download_script() {
             --timeout=15 \
             -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null \
             || wget_exit=$?
-        [[ "$wget_exit" -ne 0 ]] && { print_error "✖ Download failed (wget exit ${wget_exit})"; return 1; }
+        [[ "$wget_exit" -ne 0 ]] && { print_error "✖ Download failed (wget exit ${wget_exit})"; rm -f "${output_file}"; return 1; }
         if head -n 10 "${output_file}" | grep -q "^#!/"; then
             return 0
         else
             print_error "✖ Invalid content received (not a script)"
+            rm -f "${output_file}"
             return 1
         fi
     fi
