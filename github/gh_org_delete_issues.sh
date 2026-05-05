@@ -320,7 +320,7 @@ self_update() {
     # `read </dev/tty` under set -e in cron / ssh -T / CI leaves $REPLY empty,
     # the `[[ -z $REPLY ]]` branch matches, and the update silently auto-applies.
     # `return 0` because the script can continue with the unchanged local version.
-    [[ -r /dev/tty ]] || { print_info "Non-interactive — skipping self-update"; return 0; }
+    [[ -r /dev/tty ]] || { rm -f "${TEMP_SCRIPT_FILE}"; print_info "Non-interactive — skipping self-update"; return 0; }
     read -p "→ Overwrite and restart with updated ${SCRIPT_FILE}? [Y/n] " -n 1 -r </dev/tty
     if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
         echo ""
