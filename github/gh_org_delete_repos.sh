@@ -59,7 +59,7 @@ print_warning() {
 }
 
 print_error() {
-    echo -e "${RED}[ ERROR   ]${NC} $1"
+    echo -e "${RED}[ ERROR   ]${NC} $1" >&2
 }
 
 print_dry_run() {
@@ -94,6 +94,9 @@ TOTAL_REPOS_FAILED=0
 
 # Self-update configuration
 readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/github"
+readonly SCRIPT_FILE="gh_org_delete_repos.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 DOWNLOAD_CMD=""
 
 # Parse command line options and repository names
@@ -149,6 +152,71 @@ fi
 # Self-Update Functionality
 # ============================================================================
 
+TEMP_FILES=()
+
+# cleanup runs on normal exit, SIGINT, SIGTERM. Hoisted to file scope so the
+# trap is wired the moment the script is loaded — a top-level guard that exits
+# before main still reaps tracked temps.
+cleanup() {
+    local f
+    for f in "${TEMP_FILES[@]+"${TEMP_FILES[@]}"}"; do
+        rm -f "$f" 2>/dev/null
+    done
+}
+trap cleanup EXIT
+
+# Defense-in-depth: at startup, reap any same-FS temp files (e.g., from a
+# prior SIGKILL / power-loss / interrupted self-update) older than a normal
+# run window. The EXIT trap above handles in-flight cleanup; this function
+# handles what the trap couldn't fire for. TTY-aware so cron/ssh -T runs
+# don't block on the prompt.
+sweep_stale_temps() {
+    local pattern="$1"
+    local stale_files=()
+    while IFS= read -r -d '' f; do
+        stale_files+=("$f")
+    done < <(find "$SCRIPT_DIR" -maxdepth 1 -name "$pattern" -type f -mmin +10 -print0 2>/dev/null)
+
+    [[ ${#stale_files[@]} -eq 0 ]] && return 0
+
+    print_warning "⚠ Found ${#stale_files[@]} stale temp file(s) from a prior interrupted run:"
+    for f in "${stale_files[@]}"; do
+        print_warning "  - $f"
+    done
+
+    # `[[ -r /dev/tty ]]` only checks file permissions; under setsid the device
+    # is world-readable but `open(2)` fails with ENXIO, so a subsequent
+    # `read </dev/tty` aborts under set -e. Probe with a no-op stdin redirect
+    # to detect actual openability.
+    if { : </dev/tty; } 2>/dev/null; then
+        # `|| true` swallows EOF (Ctrl+D) so set -e doesn't abort mid-cleanup.
+        read -p "Press any key to delete and continue, Ctrl+C to abort: " -n 1 -r </dev/tty || true
+        echo ""
+    else
+        print_warning "⚠ Non-interactive context — deleting and continuing without prompt."
+    fi
+
+    for f in "${stale_files[@]}"; do
+        rm -f "$f"
+    done
+    print_success "✓ Cleaned up ${#stale_files[@]} stale temp file(s)"
+}
+
+show_diff_box() {
+    local local_file="$1"
+    local temp_file="$2"
+    local label="$3"
+    echo ""
+    echo -e "${CYAN}╭────────────────────── Δ detected in ${label} ──────────────────────╮${NC}"
+    if [[ -t 1 ]] && command -v less &>/dev/null; then
+        diff -u --color=always "${local_file}" "${temp_file}" | less -RFX || true
+    else
+        diff -u --color=always "${local_file}" "${temp_file}" || true
+    fi
+    echo -e "${CYAN}╰─────────────────────────── ${label} ──────────────────────────────╯${NC}"
+    echo ""
+}
+
 # Detect available download command (curl or wget)
 detect_download_cmd() {
     if command -v curl &>/dev/null; then
@@ -175,40 +243,38 @@ download_script() {
     echo "            ▶ ${REMOTE_BASE}/${script_file}..."
 
     if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-        http_status=$(curl -H 'Cache-Control: no-cache, no-store' -o "${output_file}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${script_file}" 2>/dev/null || echo "000")
-        if [[ "$http_status" == "200" ]]; then
-            # Validate that we got a script, not an error page
-            # Check first 10 lines for shebang to handle files with leading comments/blank lines
-            if head -n 10 "${output_file}" | grep -q "^#!/"; then
-                return 0
-            else
-                print_error "✖ Invalid content received (not a script)"
-                return 1
-            fi
-        elif [[ "$http_status" == "429" ]]; then
-            print_error "✖ Rate limited by GitHub (HTTP 429)"
-            return 1
-        elif [[ "$http_status" != "000" ]]; then
-            print_error "✖ HTTP ${http_status} error"
-            return 1
-        else
-            print_error "✖ Download failed"
+        http_status=$(curl -H 'Cache-Control: no-cache, no-store' \
+            --max-time 15 \
+            -o "${output_file}" -w "%{http_code}" -sSL \
+            "${REMOTE_BASE}/${script_file}" 2>/dev/null || true)
+        [[ -z "$http_status" ]] && http_status="000"
+        case "$http_status" in
+            200) ;;
+            429) print_error "✖ Rate limited by GitHub (HTTP 429)"; return 1 ;;
+            000) print_error "✖ Download failed (network/timeout)"; return 1 ;;
+            *)   print_error "✖ HTTP ${http_status} error"; return 1 ;;
+        esac
+        # Validate that we got a script, not an error page
+        # Check first 10 lines for shebang to handle files with leading comments/blank lines
+        if ! head -n 10 "${output_file}" | grep -q "^#!/"; then
+            print_error "✖ Invalid content received (not a script)"
             return 1
         fi
+        return 0
     elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
-        if wget --no-cache --no-cookies -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null; then
-            # Validate that we got a script, not an error page
-            # Check first 10 lines for shebang to handle files with leading comments/blank lines
-            if head -n 10 "${output_file}" | grep -q "^#!/"; then
-                return 0
-            else
-                print_error "✖ Invalid content received (not a script)"
-                return 1
-            fi
-        else
-            print_error "✖ Download failed"
+        local wget_exit=0
+        wget --no-cache --no-cookies \
+            --timeout=15 \
+            -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null \
+            || wget_exit=$?
+        [[ "$wget_exit" -ne 0 ]] && { print_error "✖ Download failed (wget exit ${wget_exit})"; return 1; }
+        # Validate that we got a script, not an error page
+        # Check first 10 lines for shebang to handle files with leading comments/blank lines
+        if ! head -n 10 "${output_file}" | grep -q "^#!/"; then
+            print_error "✖ Invalid content received (not a script)"
             return 1
         fi
+        return 0
     fi
 
     return 1
@@ -216,13 +282,13 @@ download_script() {
 
 # Check for script updates and restart if updated
 self_update() {
-    local SCRIPT_FILE="gh_org_delete_repos.sh"
-    local SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
-    local TEMP_SCRIPT_FILE="$(mktemp)"
+    local TEMP_SCRIPT_FILE
+    TEMP_SCRIPT_FILE=$(mktemp "${SCRIPT_DIR}/~${SCRIPT_FILE}.tmp.XXXXXX")
+    TEMP_FILES+=("$TEMP_SCRIPT_FILE")
 
     if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
-        rm -f "${TEMP_SCRIPT_FILE}"
+        rm -f "$TEMP_SCRIPT_FILE"
         echo ""
         return 1
     fi
@@ -230,22 +296,25 @@ self_update() {
     # Compare versions
     if diff -q "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
         print_success "- Script is already up-to-date"
-        rm -f "${TEMP_SCRIPT_FILE}"
+        rm -f "$TEMP_SCRIPT_FILE"
         return 0
     fi
 
-    # Show diff
-    echo ""
-    echo -e "${CYAN}╭────────────────────────────────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────────────────────────────────╮${NC}"
-    diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" || true
-    echo -e "${CYAN}╰───────────────────────────────────────────────────────── ${SCRIPT_FILE} ─────────────────────────────────────────────────────────╯${NC}"
-    echo ""
+    show_diff_box "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" "${SCRIPT_FILE}"
 
-    read -p "→ Overwrite and restart with updated ${SCRIPT_FILE}? [Y/n] " -n 1 -r
+    # Non-TTY context (cron, systemd, ssh -T, CI): bare `read </dev/tty` would
+    # fail under `set -e` and silently auto-accept the default. Skip update and
+    # continue with the unchanged local version instead.
+    [[ -r /dev/tty ]] || { rm -f "$TEMP_SCRIPT_FILE"; print_info "Non-interactive — skipping self-update"; return 0; }
+    read -p "→ Overwrite and restart with updated ${SCRIPT_FILE}? [Y/n] " -n 1 -r </dev/tty
     if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
         echo ""
         chmod +x "${TEMP_SCRIPT_FILE}"
-        mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"
+        if ! mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"; then
+            rm -f "$TEMP_SCRIPT_FILE"
+            print_error "✖ Failed to install update — keeping local version"
+            return 1
+        fi
         print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
         echo ""
         export scriptUpdated=1
@@ -253,7 +322,7 @@ self_update() {
         exit 0
     else
         print_warning "⚠ Skipped update - continuing with local version"
-        rm -f "${TEMP_SCRIPT_FILE}"
+        rm -f "$TEMP_SCRIPT_FILE"
     fi
     echo ""
 }
@@ -355,6 +424,8 @@ should_process_repo() {
 
 # Main execution function
 main() {
+    sweep_stale_temps '~*.tmp.??????'
+
     # Check for updates if download tool available
     if detect_download_cmd && [[ ${scriptUpdated:-0} -eq 0 ]]; then
         self_update "$@"
