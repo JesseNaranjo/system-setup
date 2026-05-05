@@ -1,5 +1,8 @@
 # CLAUDE.md
 
+<!-- DRIFT GUARD — Do not remove the audience line below. -->
+> **Audience: AI coding agents only.** This file is written for LLM-based coding assistants (Claude Code, GitHub Copilot, etc.), not human developers. You MUST follow these guidelines.
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 **For comprehensive coding standards, patterns, and conventions, see [.ai/AI-AGENT-INSTRUCTIONS.md](.ai/AI-AGENT-INSTRUCTIONS.md).**

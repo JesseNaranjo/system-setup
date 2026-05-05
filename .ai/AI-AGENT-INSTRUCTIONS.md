@@ -1436,7 +1436,7 @@ prompt_yes_no() {
 # version since the github scripts can run unchanged.
 [[ -r /dev/tty ]] || { print_info "Non-interactive — skipping self-update"; rm -f "${TEMP_SCRIPT_FILE}"; return 0; }
 
-read -p "→ Overwrite and restart with updated ${SCRIPT_FILE}? [Y/n] " -n 1 -r
+read -p "→ Overwrite and restart with updated ${SCRIPT_FILE}? [Y/n] " -n 1 -r </dev/tty
 if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
     # ... apply update ...
 fi
@@ -1444,7 +1444,7 @@ fi
 
 Note the inline `rm -f "${TEMP_SCRIPT_FILE}"` on the non-TTY branch — the EXIT trap reaps on script exit, but a long-running standalone (e.g., iterating across many repos) keeps the temp visible in `$SCRIPT_DIR` until exit. See [Defense-in-depth Cleanup](#defense-in-depth-cleanup).
 
-**Why `[[ -r /dev/tty ]]` for prompts but `{ : </dev/tty; } 2>/dev/null` for `sweep_stale_temps`?** The permissions check is sufficient when followed by `read </dev/tty` because `read` itself returns 1 on `open(2)` failure and triggers the guard's downstream branch. For `sweep_stale_temps`, the failure mode is that `set -e` aborts the script mid-cleanup before any branch can fire, so an open-probe is required. See [Defense-in-depth Cleanup](#defense-in-depth-cleanup) for the open-probe rationale.
+**Why `[[ -r /dev/tty ]]` for prompts but `{ : </dev/tty; } 2>/dev/null` for `sweep_stale_temps`?** `prompt_yes_no` is always called in `if` context, where `set -e` is suspended for the test command. Under cron / `ssh -T` / CI (the common non-TTY contexts), `/dev/tty` has no read permission for the calling user, so the guard fires and returns 1. Under `setsid` (rare — detaches the controlling TTY but leaves the device world-readable), the permissions check passes incorrectly; the subsequent `read </dev/tty` then fails with `set -e` suspended, the function falls through to the default branch, and the caller's `else` branch runs — same net behavior as the cron case **when the default is "n"**. Edge case: `setsid` + default "y" can still produce silent acceptance — see `docs/future-todos.md`. For `sweep_stale_temps`, the function is called as a statement (not in `if` context), so a failed `read </dev/tty` aborts the script under `set -e` — hence the open-probe gate.
 
 ### Prompt Usage
 ```bash
@@ -2328,7 +2328,7 @@ main() {
 
 The no-op stdin redirect (`:` is a builtin that does nothing; the redirect is what we want) drives the actual `open(2)` syscall and lets us branch on the real openability rather than the misleading permissions-only check.
 
-For `prompt_yes_no` the simpler `[[ -r /dev/tty ]]` is acceptable because the failure mode is different — a `read </dev/tty` failure inside an `if`-context returns false from the function, which the caller handles. For `sweep_stale_temps` the failure mode is `set -e` aborting the whole script before any branch fires, which is unrecoverable. Use the open-probe whenever the failure consequence is `set -e` abort.
+For `prompt_yes_no` the simpler `[[ -r /dev/tty ]]` is acceptable because the failure mode is different — a `read </dev/tty` failure inside an `if`-context returns false from the function, which the caller handles. The `setsid` + default "y" combination is a known edge case where the misleading permissions check + `read` failure + default "y" produces silent acceptance — see `docs/future-todos.md`. For `sweep_stale_temps` the failure mode is `set -e` aborting the whole script before any branch fires, which is unrecoverable. Use the open-probe whenever the failure consequence is `set -e` abort.
 
 #### Naming convention: `~filename.tmp.XXXXXX`
 

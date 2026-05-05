@@ -118,7 +118,6 @@ Modules self-update when run directly (not when sourced by the orchestrator).
 - `backup_file()`: Creates timestamped backups (once per session per file)
 - `add_change_header()`: Adds managed-by comment block to config files
 - `check_disk_space()`: Pre-flight validation of available disk space
-- `make_temp_file()`: Creates tracked temp files cleaned up on exit
 - Both backup/header functions track modifications to avoid duplicate operations
 
 **Configuration Management:**
