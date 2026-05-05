@@ -163,6 +163,8 @@ A "simple wrapper" is a function whose only job is to call one other function/co
 - Functions that enforce idempotency (check-before-modify pattern)
 - Functions that add user interaction (prompts, confirmations)
 
+**Bash subshell-capture gotcha.** A wrapper that mutates parent state (e.g., appending to a global array) and is also captured via `$()` runs in a subshell — the mutation never reaches the parent. Real example: `tmp=$(make_temp_file "$tpl")` where `make_temp_file` does both `mktemp` and `TEMP_FILES+=("$tmp")`. The `+=` lands in the subshell's array, so the EXIT-trap cleanup later iterates an empty parent array and the temp file leaks. Inline `mktemp` + `TEMP_FILES+=()` at the call site instead. See [Inline mktemp + TEMP_FILES](#inline-mktemp--temp_files) for the canonical replacement and [Defense-in-depth Cleanup](#defense-in-depth-cleanup) for the broader cleanup architecture.
+
 ### Architecture Decisions
 
 Intentional patterns that may appear redundant but serve specific purposes:
@@ -496,6 +498,27 @@ done
 | Shared helper used by multiple modules | Add to utils-sys.sh | Centralized maintenance |
 | One-off automation script | Standalone | Simpler, no dependencies |
 | Simple system task (start/stop services) | Standalone | Source utils for shared functions, run independently |
+
+### Helper Library Duplication (Intentional)
+
+The canonical helper functions — `download_script`, `prompt_yes_no`, `print_error`, `print_success`, `print_warning`, `cleanup`, `sweep_stale_temps`, `show_diff_box` — are **deliberately duplicated** across:
+
+- `system-setup/utils-sys.sh`
+- `kubernetes/utils-k8s.sh`
+- `lxc/utils-lxc.sh`
+- `llm/utils-llm.sh`
+- `utils/services-check.sh` (defined inline; standalone)
+- `github/gh_org_copy.sh`, `github/gh_org_delete_repos.sh`, `github/gh_org_delete_issues.sh` (defined inline; standalones)
+
+**This is INTENTIONAL.** The suite-isolation architecture requires every directory to be independently downloadable: a user pulling `lxc/script.sh` must get a working script without also fetching `system-setup/utils-sys.sh`. The `github/gh_org_*.sh` standalones go further — they MUST work as a single-file copy/paste with zero external dependencies.
+
+**Rules:**
+
+- **Do NOT extract these helpers to a single shared library.** That would break the standalone invariant the `github/` scripts depend on and the suite-isolation invariant the per-directory `_download-*-scripts.sh` flows depend on.
+- When fixing a bug or adjusting behavior in one of these helpers, **update every copy in the same change**. The pattern letters (A–J) used in the self-update backport plans exist precisely so cross-copy parity can be audited mechanically.
+- Drift between copies is managed by **careful code review**, not tooling. Every PR that touches one helper must justify why the others were or were not also touched.
+
+When adding a NEW helper that is genuinely shared logic (not an existing canonical helper), prefer adding it to the per-suite utils file rather than promoting to a new shared library.
 
 ---
 
@@ -1320,8 +1343,12 @@ normalize_trailing_newlines() {
     local num_lines="${2:-1}"
     local original_perms
     original_perms=$(get_file_permissions "$file")
+    # Pattern E3 (bookkeeping-only inline): the destination is a user-provided
+    # config path (often /etc/...) reached via run_elevated, so atomic same-FS
+    # rename is not the goal here — just cleanup-trap bookkeeping.
     local temp_file
-    temp_file=$(make_temp_file)
+    temp_file=$(mktemp)
+    TEMP_FILES+=("$temp_file")
 
     # Remove all trailing blank lines (last content line keeps its newline)
     sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$file" > "$temp_file"
@@ -1370,17 +1397,23 @@ track_special_packages() {
 ## User Interaction
 
 ### prompt_yes_no Implementation
+
 ```bash
 # Standard prompt - use /dev/tty for pipe compatibility
 prompt_yes_no() {
     local prompt_message="$1"
     local default="${2:-n}"
+    local prompt_suffix
     local user_reply
 
+    # Non-TTY context (cron, systemd, ssh -T, CI): signal "no" rather than fall
+    # through to the empty-reply branch and silently auto-accept the default.
+    [[ -r /dev/tty ]] || return 1
+
     if [[ "${default,,}" == "y" ]]; then
-        local prompt_suffix="(Y/n)"
+        prompt_suffix="(Y/n)"
     else
-        local prompt_suffix="(y/N)"
+        prompt_suffix="(y/N)"
     fi
 
     read -p "$prompt_message $prompt_suffix: " -r user_reply </dev/tty
@@ -1392,6 +1425,26 @@ prompt_yes_no() {
     fi
 }
 ```
+
+**`/dev/tty` guard requirement.** The `[[ -r /dev/tty ]] || return 1` line MUST appear after the `local` declarations and BEFORE any `read`. Without it, `read </dev/tty` fails under `set -e` in non-TTY contexts (cron, `systemd`, `ssh -T`, CI). When that failure happens inside an `if`-context, `set -e` is suppressed and `user_reply` stays empty — the script then falls through to the default branch and silently auto-accepts. For self-update prompts that means a cron job ships an unreviewed script change.
+
+**Pattern B' — bare-`read` self-update prompts (github scripts).** The 3 `github/gh_org_*.sh` standalones use a bare `read -p ... </dev/tty` instead of `prompt_yes_no` for their self-update prompt because they want a single-keystroke `-n 1` UX. The same silent-auto-accept bug applies. Add the same guard immediately before the `read`, but `return 0` (not 1) because the github scripts can continue running with the unchanged local version after a skipped update:
+
+```bash
+# Non-TTY context (cron, systemd, ssh -T, CI): skip self-update rather than
+# silently auto-accept via the empty-reply branch. Continue with the local
+# version since the github scripts can run unchanged.
+[[ -r /dev/tty ]] || { print_info "Non-interactive — skipping self-update"; rm -f "${TEMP_SCRIPT_FILE}"; return 0; }
+
+read -p "→ Overwrite and restart with updated ${SCRIPT_FILE}? [Y/n] " -n 1 -r
+if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+    # ... apply update ...
+fi
+```
+
+Note the inline `rm -f "${TEMP_SCRIPT_FILE}"` on the non-TTY branch — the EXIT trap reaps on script exit, but a long-running standalone (e.g., iterating across many repos) keeps the temp visible in `$SCRIPT_DIR` until exit. See [Defense-in-depth Cleanup](#defense-in-depth-cleanup).
+
+**Why `[[ -r /dev/tty ]]` for prompts but `{ : </dev/tty; } 2>/dev/null` for `sweep_stale_temps`?** The permissions check is sufficient when followed by `read </dev/tty` because `read` itself returns 1 on `open(2)` failure and triggers the guard's downstream branch. For `sweep_stale_temps`, the failure mode is that `set -e` aborts the script mid-cleanup before any branch can fire, so an open-probe is required. See [Defense-in-depth Cleanup](#defense-in-depth-cleanup) for the open-probe rationale.
 
 ### Prompt Usage
 ```bash
@@ -1427,15 +1480,42 @@ done
 ## Output & Logging
 
 ### Standard Output Functions
+
 ```bash
 print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
 print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
-print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1"; }
+print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; }
 print_backup()  { echo -e "${GRAY}[ BACKUP  ] $1${NC}"; }
 print_debug()   { echo -e "${MAGENTA}[ DEBUG   ] $1${NC}"; }
 print_summary() { echo -e "${BLUE}[ SUMMARY ]${NC} $1"; }
 ```
+
+**Stream rules:**
+
+- **`print_error` MUST write to stderr (`>&2`).** Errors must be separable from normal output so callers can pipe stdout to consumers (e.g., a watch loop or a logging sink) without mixing in error noise. Without `>&2`, callers that redirect `2>err.log >out.log` see errors swallowed into stdout and lose the distinction.
+- **`print_warning` stays on stdout.** Warnings are informational — they describe degraded but non-fatal states (a missing optional tool, a config that defaulted to a fallback). They belong with the rest of the run narrative.
+- **All other `print_*` helpers stay on stdout.** Only `print_error` is fd-2.
+
+**Caller-side glyph convention.** The function bodies above don't include glyphs — the `[ ERROR   ]`, `[ WARNING ]`, etc. tags identify the channel. The MEANING glyph is the caller's responsibility:
+
+| Function | Glyph | When |
+|----------|-------|------|
+| `print_success` | `✓ ` | Action completed / state changed |
+| `print_success` | `- ` | Already correct / no-op (idempotent skip) |
+| `print_warning` | `⚠ ` | Non-fatal warning |
+| `print_error` | `✖ ` | Fatal error |
+
+Example:
+
+```bash
+print_success "✓ Configuration applied"
+print_success "- Configuration already correct"
+print_warning "⚠ Optional tool not found — falling back"
+print_error   "✖ Permission denied"
+```
+
+Exceptions to the glyph requirement: decorative banners (`print_warning "═══..."`), multi-line continuations (`print_warning "  1. First..."`, `print_warning "  2. Second..."`), and completion summaries (`print_success "Setup complete!"`). See [Unicode Prefix Convention](#unicode-prefix-convention) below for the full rules.
 
 ### Warning Box Function
 ```bash
@@ -1468,12 +1548,46 @@ print_warning_box() {
 ```
 
 ### Diff Display Pattern
+
+Use the `show_diff_box` helper. It is defined once in every helper library (`utils-sys.sh`, `utils-k8s.sh`, `utils-lxc.sh`, `utils-llm.sh`) and inlined in every standalone (`services-check.sh`, `gh_org_*.sh`):
+
 ```bash
-# Show changes with colored borders
-echo -e "${CYAN}╭────────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────╮${NC}"
-diff -u --color "${LOCAL_FILE}" "${TEMP_FILE}" || true
-echo -e "${CYAN}╰─────────────────────────── ${SCRIPT_FILE} ───────────────────────────────╯${NC}"
+# Pretty-print a unified diff between two files inside a labeled box. Use
+# `less` when stdout is a TTY (so multi-page diffs don't flood scrollback);
+# fall back to inline output otherwise. `--color=always` forces ANSI even
+# when piped to `less`; `-RFX` keeps less from clearing the screen.
+show_diff_box() {
+    local local_file="$1"
+    local temp_file="$2"
+    local label="$3"
+    echo ""
+    echo -e "${CYAN}╭────────────────────── Δ detected in ${label} ──────────────────────╮${NC}"
+    if [[ -t 1 ]] && command -v less &>/dev/null; then
+        diff -u --color=always "${local_file}" "${temp_file}" | less -RFX || true
+    else
+        diff -u --color=always "${local_file}" "${temp_file}" || true
+    fi
+    echo -e "${CYAN}╰─────────────────────────── ${label} ──────────────────────────────╯${NC}"
+    echo ""
+}
 ```
+
+**Callsite:**
+
+```bash
+show_diff_box "${LOCAL_FILE}" "${TEMP_FILE}" "${SCRIPT_FILE}"
+```
+
+**Flag rationale:**
+
+- **`--color=always` (NOT `--color` alone).** `diff --color` defaults to `--color=auto`, which suppresses ANSI when stdout is not a TTY. Pipes to `less`, redirects to a file, and CI capture all strip color in `auto` mode. `always` forces ANSI; `less -R` (below) interprets it correctly.
+- **`less -RFX`:**
+  - **`-R`** passes raw ANSI control sequences through (so the colors from `--color=always` reach the terminal).
+  - **`-F`** quits automatically if the entire content fits on one screen — short diffs print inline with no pager interaction.
+  - **`-X`** disables the alternate-screen switch on entry/exit, so the diff stays in scrollback after `less` exits instead of vanishing.
+- **`[[ -t 1 ]] && command -v less &>/dev/null`** gates the pager. When stdout is not a TTY (CI, pipe, redirect) or `less` is missing, fall through to inline output. The same `--color=always` flag works in both branches.
+
+Replace any inline 5-line diff block (`echo border; diff -u --color file_a file_b; echo border`) with a single `show_diff_box` call.
 
 ### Usage Conventions
 ```bash
@@ -1970,17 +2084,57 @@ append_to_file() {
 }
 ```
 
-### make_temp_file - Tracked Temporary Files
+### Inline mktemp + TEMP_FILES
+
+Create temp files inline at the call site with `mktemp` followed by an immediate `TEMP_FILES+=()`. Do NOT wrap this in a helper that returns the temp path via `$()`. See [No Simple Wrapper Functions](#no-simple-wrapper-functions) for the Bash subshell-capture gotcha that makes the wrapped form leak — the short version: `tmp=$(make_temp_file)` runs the helper in a subshell, so the helper's `TEMP_FILES+=("$tmp")` lands in the subshell's array. The parent's `TEMP_FILES` stays empty, the EXIT trap iterates an empty array, and the temp file is never reaped.
+
+There are three concrete variants. Pick by call site.
+
+#### Pattern E — atomic-rename adjacent template (self-update flows)
+
+For self-update flows where the temp file will be `mv`'d atomically over a known destination on the same filesystem. The template MUST be in the destination's directory so `mv` is `rename(2)`, not `copy + unlink`. The naming convention `~filename.tmp.XXXXXX` is required so the [startup sweep](#defense-in-depth-cleanup) glob is unambiguous:
+
 ```bash
-# Create a tracked temp file that will be cleaned up on exit
-# Returns the temp file path. TEMP_FILES array tracks all created files.
-make_temp_file() {
-    local tmp
-    tmp=$(mktemp)
-    TEMP_FILES+=("$tmp")
-    echo "$tmp"
-}
+# Utils file self-update (utils file path always known via _UTILS_DIR):
+local temp_file
+temp_file=$(mktemp "${_UTILS_DIR}/~${utils_basename}.tmp.XXXXXX")
+TEMP_FILES+=("$temp_file")
+
+# Caller script self-update (caller_script is an absolute path):
+local temp_file
+temp_file=$(mktemp "${caller_script%/*}/~${caller_script##*/}.tmp.XXXXXX")
+TEMP_FILES+=("$temp_file")
+
+# Standalone self-update (gh_org_*, services-check) where SCRIPT_FILE is a
+# hardcoded basename and SCRIPT_DIR is set at file scope:
+local TEMP_SCRIPT_FILE
+TEMP_SCRIPT_FILE=$(mktemp "${SCRIPT_DIR}/~${SCRIPT_FILE}.tmp.XXXXXX")
+TEMP_FILES+=("$TEMP_SCRIPT_FILE")
 ```
+
+#### Pattern E2 — path-aware variant for `_download-*-scripts.sh` and orchestrators
+
+For `_download-lxc-scripts.sh`, `_download-ollama-scripts.sh`, `system-setup/system-setup.sh:update_modules`, and `kubernetes/kubernetes-setup.sh:update_modules`, the iterated `LOCAL_SCRIPT` may include path components (e.g., `system-modules/configure-system.sh`, `kubernetes-modules/install-update-helm.sh`). Pattern E's `${SCRIPT_DIR}/~${SCRIPT_FILE}.tmp.XXXXXX` would collapse the path and miss the destination's actual directory. Use `dirname` / `basename` of the resolved local path instead:
+
+```bash
+local TEMP_SCRIPT_FILE
+TEMP_SCRIPT_FILE=$(mktemp "$(dirname "${LOCAL_SCRIPT}")/~$(basename "${LOCAL_SCRIPT}").tmp.XXXXXX")
+TEMP_FILES+=("$TEMP_SCRIPT_FILE")
+```
+
+This keeps the temp adjacent to `${LOCAL_SCRIPT}` regardless of whether `LOCAL_SCRIPT` is a basename, a `subdir/file`, or an absolute path.
+
+#### Pattern E3 — bookkeeping-only inline (NOT atomic-rename)
+
+For non-self-update sites that just need a temp scratch file with cleanup-trap bookkeeping. Examples: `utils-sys.sh:normalize_trailing_newlines()`, `utils-k8s.sh:update_config_line()`, `utils-k8s.sh:normalize_trailing_newlines()`. Their `mv` targets are arbitrary user-provided file paths (config files like `/etc/...`), often reached via `run_elevated mv` which crosses filesystems anyway. Atomic same-FS rename is irrelevant here; the goal is just cleanup-trap bookkeeping:
+
+```bash
+local temp_file
+temp_file=$(mktemp)
+TEMP_FILES+=("$temp_file")
+```
+
+Atomic-rename for these config-rewrite sites is a known-deferred gap. See `docs/future-todos.md` ("Atomic-rename for config-rewrite sites under elevation").
 
 ### check_disk_space - Pre-Operation Space Verification
 ```bash
@@ -2056,15 +2210,135 @@ while true; do
 done
 ```
 
-### Temp File Cleanup
+### Defense-in-depth Cleanup
 
-ALWAYS use `make_temp_file` (see [File Modification](#file-modification)) instead of raw `mktemp`. It tracks files in the `TEMP_FILES` array for automatic cleanup.
+Long-running scripts and live-replace self-updaters MUST defend temp-file leaks at every transition. Apply all three layers — they cover different failure modes and any one alone leaks.
+
+#### Layer 1 — Inline `rm -f` per non-success branch
+
+In every function that creates a temp via `mktemp` then takes a non-success path (download fail, user decline, no-op, mv-failure), `rm -f` the temp BEFORE the `return`. The EXIT trap below only reaps at script exit; without inline cleanup, a temp leaks visibly in `$SCRIPT_DIR` for the rest of the run — minutes for one-shot updaters, effectively-infinite for ping loops or `--watch` modes.
+
+Example (every non-success branch carries its own `rm -f`):
 
 ```bash
-temp_file=$(make_temp_file)  # Tracked and cleaned up automatically
-echo "content" > "$temp_file"
-# Use temp_file...
+if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
+    rm -f "${TEMP_SCRIPT_FILE}"
+    return 1
+fi
+
+if diff -q "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
+    print_success "- Script is already up-to-date"
+    rm -f "${TEMP_SCRIPT_FILE}"
+    return 0
+fi
+
+if prompt_yes_no "→ Update?" "y"; then
+    if ! mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"; then
+        rm -f "${TEMP_SCRIPT_FILE}"
+        print_error "✖ Failed to install update — keeping local version"
+        return 1
+    fi
+    # success: mv consumed the temp, no rm needed
+else
+    rm -f "${TEMP_SCRIPT_FILE}"
+    print_warning "⚠ Skipped update"
+fi
 ```
+
+#### Layer 2 — File-scope EXIT trap
+
+Reaps tracked temps on normal exit, SIGINT, SIGTERM. Insufficient alone (does not cover SIGKILL, OOM, power-loss, exec'd-away processes, bugs in the trap wiring). The `cleanup` function and `trap cleanup EXIT` MUST be at file scope, NOT inside `main()` — file scope means the trap is wired the moment the script is loaded, so a top-level guard that exits before `main()` still reaps tracked temps:
+
+```bash
+TEMP_FILES=()
+
+# cleanup runs on normal exit, SIGINT, SIGTERM. Hoisted to file scope so the
+# trap is wired the moment the script is loaded — a top-level guard that exits
+# before main still reaps tracked temps.
+cleanup() {
+    local f
+    for f in "${TEMP_FILES[@]+"${TEMP_FILES[@]}"}"; do
+        rm -f "$f" 2>/dev/null
+    done
+}
+trap cleanup EXIT
+```
+
+The `"${TEMP_FILES[@]+"${TEMP_FILES[@]}"}"` form expands to nothing when the array is unset/empty, so the loop is safe under `set -u`.
+
+#### Layer 3 — Startup sweep
+
+Reaps anything Layer 2 couldn't fire for. Runs at the top of `main()`. TTY-aware so cron / `ssh -T` / CI runs don't block on the prompt:
+
+```bash
+sweep_stale_temps() {
+    local pattern="$1"
+    local stale_files=()
+    while IFS= read -r -d '' f; do
+        stale_files+=("$f")
+    done < <(find "$SCRIPT_DIR" -maxdepth 1 -name "$pattern" -type f -mmin +10 -print0 2>/dev/null)
+
+    [[ ${#stale_files[@]} -eq 0 ]] && return 0
+
+    print_warning "⚠ Found ${#stale_files[@]} stale temp file(s) from a prior interrupted run:"
+    for f in "${stale_files[@]}"; do
+        print_warning "  - $f"
+    done
+
+    # `[[ -r /dev/tty ]]` only checks file permissions; under setsid the device
+    # is world-readable but `open(2)` fails with ENXIO, so a subsequent
+    # `read </dev/tty` aborts under set -e. Probe with a no-op stdin redirect
+    # to detect actual openability.
+    if { : </dev/tty; } 2>/dev/null; then
+        # `|| true` swallows EOF (Ctrl+D) so set -e doesn't abort mid-cleanup.
+        read -p "Press any key to delete and continue, Ctrl+C to abort: " -n 1 -r </dev/tty || true
+        echo ""
+    else
+        print_warning "⚠ Non-interactive context — deleting and continuing without prompt."
+    fi
+
+    for f in "${stale_files[@]}"; do
+        rm -f "$f"
+    done
+    print_success "✓ Cleaned up ${#stale_files[@]} stale temp file(s)"
+}
+```
+
+Call from the top of `main()`:
+
+```bash
+main() {
+    sweep_stale_temps '~*.tmp.??????'
+    # ... rest of main
+}
+```
+
+**Sweep requirements:**
+
+- **TTY-aware** so cron / `ssh -T` / CI runs don't block on the prompt.
+- **Mtime threshold** (`find -mmin +10`) so a concurrent run's in-flight temp is not removed.
+- **Same directory** as the live target (`-maxdepth 1` rooted at `$SCRIPT_DIR`) so atomic-rename templates are covered.
+
+#### Open-probe vs permissions check (`{ : </dev/tty; }` vs `[[ -r /dev/tty ]]`)
+
+`sweep_stale_temps` MUST gate the prompt with `if { : </dev/tty; } 2>/dev/null; then`, NOT `if [[ -r /dev/tty ]]; then`. The two checks differ:
+
+- **`[[ -r /dev/tty ]]`** is a **permissions** check. It reports whether the calling process's UID/GID has read permission on the device file. `/dev/tty` is world-readable (mode 0666) on every Linux system, so this check returns true even under `setsid`.
+- **`{ : </dev/tty; } 2>/dev/null`** is an **openability** check. It actually attempts `open(2)`. Under `setsid` (no controlling terminal), `open("/dev/tty", ...)` fails with `ENXIO` — even though the permissions check passes. A subsequent `read </dev/tty` hits the same `ENXIO`, returns failure, and `set -e` aborts the script mid-cleanup.
+
+The no-op stdin redirect (`:` is a builtin that does nothing; the redirect is what we want) drives the actual `open(2)` syscall and lets us branch on the real openability rather than the misleading permissions-only check.
+
+For `prompt_yes_no` the simpler `[[ -r /dev/tty ]]` is acceptable because the failure mode is different — a `read </dev/tty` failure inside an `if`-context returns false from the function, which the caller handles. For `sweep_stale_temps` the failure mode is `set -e` aborting the whole script before any branch fires, which is unrecoverable. Use the open-probe whenever the failure consequence is `set -e` abort.
+
+#### Naming convention: `~filename.tmp.XXXXXX`
+
+Atomic-rename temps MUST use the `~filename.tmp.XXXXXX` shape — leading `~`, `.tmp.` infix, mktemp's 6-character random suffix. The convention exists so:
+
+- The sweep glob `~*.tmp.??????` is unambiguous — no user spontaneously creates files matching this exact shape, so the sweep can safely delete any matches.
+- Leftovers sort to the bottom of `ls` output and read as obviously transient.
+- A single sweep call with `~*.tmp.??????` covers BOTH a caller-script's temp (`~system-setup.sh.tmp.aBcDeF`) AND a sourced utils-file's temp (`~utils-sys.sh.tmp.gHiJkL`) when both end up in the same `$SCRIPT_DIR`. No "must call sweep twice" trap.
+
+Bare-`mktemp` temps in `$TMPDIR` (Pattern E3 sites — reaped at boot anyway) don't need the convention.
 
 ---
 
@@ -2108,6 +2382,7 @@ detect_download_cmd() {
 ```
 
 ### Download Script Function
+
 ```bash
 # Download a script file from the remote repository
 # Args: $1 = script filename (relative path), $2 = output file path
@@ -2121,37 +2396,42 @@ download_script() {
     echo "            ▶ ${REMOTE_BASE}/${script_file}..."
 
     if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-        http_status=$(curl -H 'Cache-Control: no-cache, no-store' -o "${output_file}" -w "%{http_code}" -fsSL "${REMOTE_BASE}/${script_file}" 2>/dev/null || echo "000")
-        if [[ "$http_status" == "200" ]]; then
-            # Validate that we got a script, not an error page
-            # Check first 10 lines for shebang to handle files with leading comments
-            if head -n 10 "${output_file}" | grep -q "^#!/"; then
-                return 0
-            else
-                print_error "✖ Invalid content received (not a script)"
-                return 1
-            fi
-        elif [[ "$http_status" == "429" ]]; then
-            print_error "✖ Rate limited by GitHub (HTTP 429)"
-            return 1
-        elif [[ "$http_status" != "000" ]]; then
-            print_error "✖ HTTP ${http_status} error"
-            return 1
-        else
-            print_error "✖ Download failed"
+        # Drop -f from curl so 4xx/5xx responses still populate http_status (otherwise
+        # curl exits non-zero before %{http_code} is captured). --max-time 15 prevents
+        # a sinkholed network from hanging for 5+ minutes. Set "000" only when
+        # http_status is empty (transport failure), not unconditionally.
+        http_status=$(curl -H 'Cache-Control: no-cache, no-store' \
+            --max-time 15 \
+            -o "${output_file}" -w "%{http_code}" -sSL \
+            "${REMOTE_BASE}/${script_file}" 2>/dev/null || true)
+        [[ -z "$http_status" ]] && http_status="000"
+        case "$http_status" in
+            200)
+                if head -n 10 "${output_file}" | grep -q "^#!/"; then
+                    return 0
+                else
+                    print_error "✖ Invalid content received (not a script)"
+                    return 1
+                fi
+                ;;
+            429) print_error "✖ Rate limited by GitHub (HTTP 429)"; return 1 ;;
+            000) print_error "✖ Download failed (network/timeout)"; return 1 ;;
+            *)   print_error "✖ HTTP ${http_status} error"; return 1 ;;
+        esac
+    elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
+        local wget_exit=0
+        wget --no-cache --no-cookies \
+            --timeout=15 \
+            -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null \
+            || wget_exit=$?
+        if [[ "$wget_exit" -ne 0 ]]; then
+            print_error "✖ Download failed (wget exit ${wget_exit})"
             return 1
         fi
-    elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
-        if wget --no-cache --no-cookies -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null; then
-            # Validate that we got a script
-            if head -n 10 "${output_file}" | grep -q "^#!/"; then
-                return 0
-            else
-                print_error "✖ Invalid content received (not a script)"
-                return 1
-            fi
+        if head -n 10 "${output_file}" | grep -q "^#!/"; then
+            return 0
         else
-            print_error "✖ Download failed"
+            print_error "✖ Invalid content received (not a script)"
             return 1
         fi
     fi
@@ -2160,52 +2440,71 @@ download_script() {
 }
 ```
 
+**Critical changes from the older template:**
+
+- **`-fsSL` → `-sSL`** (drop the `-f`). With `-f`, curl exits non-zero on 4xx/5xx BEFORE `%{http_code}` is written to the output, so the captured `http_status` is empty and the old `|| echo "000"` fallback turns every HTTP error into `"000"` (and on some platforms, the concatenation `404` + `000` produced visible `"404000"` strings in error messages). Without `-f`, curl writes the body (the GitHub error page) to `output_file`, exits 0, and `%{http_code}` is captured cleanly. The shebang validation downstream rejects the error-page body. The sister-repo audit traced an "HTTP 404000 error" message to this exact bug.
+- **`--max-time 15`** caps total transfer time. Without it, a sinkholed/black-hole network can hang for 5+ minutes (curl's default connect/read timeouts are very generous). 15 seconds is enough for a slow GitHub raw fetch and short enough that an interactive user notices and Ctrl+C's. Verified via [everything.curl.dev/usingcurl/timeouts.html](https://everything.curl.dev/usingcurl/timeouts.html).
+- **`[[ -z "$http_status" ]] && http_status="000"`** runs only when curl produced no status — true network failure, NOT HTTP error. The old `|| echo "000"` ran on any non-zero curl exit including HTTP-4xx-with-`-f`, conflating two different failures.
+- **`case` statement** replaces the if/elif chain so each branch is one line and the failure-message wording is uniform.
+- **wget `--timeout=15`** mirrors the curl change. The old wget branch had no timeout at all.
+- **`local wget_exit=0; wget … || wget_exit=$?`** captures wget's exit code without aborting the function under `set -e`. The old form (`if wget …; then`) hid the exit code in the conditional and lost the error specificity.
+
 ### Self-Update Function
+
 ```bash
 # Check for updates to the main script itself
 # Will restart the script if updated
 self_update() {
-    local SCRIPT_FILE="$(basename "${BASH_SOURCE[0]}")"
-    local LOCAL_SCRIPT="${BASH_SOURCE[0]}"
-    local TEMP_SCRIPT="$(mktemp)"
+    local SCRIPT_FILE="services-check.sh"
+    local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
+    local TEMP_SCRIPT_FILE
+    # Pattern E: mktemp adjacent to destination (same FS) so `mv` is atomic
+    # rename(2). The `~filename.tmp.XXXXXX` shape is the sweep glob's anchor.
+    TEMP_SCRIPT_FILE=$(mktemp "${SCRIPT_DIR}/~${SCRIPT_FILE}.tmp.XXXXXX")
+    TEMP_FILES+=("$TEMP_SCRIPT_FILE")
 
-    if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT}"; then
-        rm -f "${TEMP_SCRIPT}"
-        echo ""
+    if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
+        rm -f "$TEMP_SCRIPT_FILE"
         return 1
     fi
 
     # Compare and handle differences
-    if diff -u "${LOCAL_SCRIPT}" "${TEMP_SCRIPT}" > /dev/null 2>&1; then
-        print_success "- ${SCRIPT_FILE} is already up-to-date"
-        rm -f "${TEMP_SCRIPT}"
-        echo ""
+    if diff -q "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
+        print_success "- Script is already up-to-date"
+        rm -f "$TEMP_SCRIPT_FILE"
         return 0
     fi
 
-    # Show diff with colored borders
-    echo ""
-    echo -e "${CYAN}╭───────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────────╮${NC}"
-    diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT}" || true
-    echo -e "${CYAN}╰───────────────────────── ${SCRIPT_FILE} ─────────────────────────────╯${NC}"
-    echo ""
+    show_diff_box "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" "${SCRIPT_FILE}"
 
     if prompt_yes_no "→ Overwrite and restart with updated ${SCRIPT_FILE}?" "y"; then
-        echo ""
-        chmod +x "${TEMP_SCRIPT}"
-        mv -f "${TEMP_SCRIPT}" "${LOCAL_SCRIPT}"
+        chmod +x "${TEMP_SCRIPT_FILE}"
+        # Pattern D: explicit failure handler so a read-only $SCRIPT_DIR or
+        # cross-FS attempt doesn't leave the local script half-overwritten.
+        if ! mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"; then
+            rm -f "$TEMP_SCRIPT_FILE"
+            print_error "✖ Failed to install update — keeping local version"
+            return 1
+        fi
         print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
         echo ""
         export scriptUpdated=1
         exec "${LOCAL_SCRIPT}" "$@"
         exit 0
     else
-        print_warning "⚠ Skipped ${SCRIPT_FILE} update - continuing with local version"
-        rm -f "${TEMP_SCRIPT}"
+        rm -f "$TEMP_SCRIPT_FILE"
+        print_warning "⚠ Skipped update - continuing with local version"
     fi
     echo ""
 }
 ```
+
+**Pattern callouts** (cross-references — see [Inline mktemp + TEMP_FILES](#inline-mktemp--temp_files), [Defense-in-depth Cleanup](#defense-in-depth-cleanup), and [Diff Display Pattern](#diff-display-pattern)):
+
+- **Pattern E** (adjacent `mktemp` + `TEMP_FILES+=()`) replaces the older `local TEMP_SCRIPT="$(mktemp)"` form, which landed in `$TMPDIR` (tmpfs) and made `mv -f` a cross-FS `copy + unlink` rather than an atomic `rename(2)`. SIGKILL or power-loss mid-copy could leave a truncated script.
+- **Pattern D** (`if ! mv -f`) replaces the bare `mv -f` so a read-only or cross-FS destination produces a typed error and the local file is preserved.
+- **Pattern H** (`show_diff_box`) replaces the inline diff border + `diff -u --color` block. Color is now `--color=always` and multi-page diffs page through `less -RFX`.
+- The function is called by every `_download-*-scripts.sh` updater and the standalones (`utils/services-check.sh`, `github/gh_org_*.sh`).
 
 ### check_for_updates Pattern (per-directory utils)
 
@@ -2216,9 +2515,26 @@ Used by individual scripts and modules in lxc/, llm/, kubernetes/, and system-se
 check_for_updates "${BASH_SOURCE[0]}" "$@"
 ```
 
-Flow: detect download cmd → download utils → diff/prompt → download caller → diff/prompt → exec restart if updated. Uses per-directory env var guards (`LXC_SCRIPTS_UPDATED`, `LLM_SCRIPTS_UPDATED`, `K8S_SCRIPTS_UPDATED`, `SYS_SCRIPTS_UPDATED`) to prevent infinite restart loops.
+Flow: detect download cmd → adjacent-`mktemp` utils temp → download utils → diff/prompt → adjacent-`mktemp` caller temp → download caller → diff/prompt → exec restart if updated. Uses per-directory env var guards (`LXC_SCRIPTS_UPDATED`, `LLM_SCRIPTS_UPDATED`, `K8S_SCRIPTS_UPDATED`, `SYS_SCRIPTS_UPDATED`) to prevent infinite restart loops.
+
+The two `mktemp` sites use the two Pattern E variants:
+
+```bash
+# Utils file temp (utils path always known via _UTILS_DIR):
+temp_file=$(mktemp "${_UTILS_DIR}/~${utils_basename}.tmp.XXXXXX")
+TEMP_FILES+=("$temp_file")
+# ... download_script + show_diff_box + prompt_yes_no + Pattern D mv ...
+
+# Caller script temp (caller_script is an absolute path):
+temp_file=$(mktemp "${caller_script%/*}/~${caller_script##*/}.tmp.XXXXXX")
+TEMP_FILES+=("$temp_file")
+# ... download_script + show_diff_box + prompt_yes_no + Pattern D mv ...
+```
+
+Each non-success branch (download fail, no-diff, user decline, mv fail) carries its own `rm -f "$temp_file"` per [Layer 1 of the cleanup architecture](#defense-in-depth-cleanup). When the success branch runs, `mv` consumes the temp and no `rm` is needed.
 
 ### Module Update Function
+
 ```bash
 # Update all module scripts
 # Downloads each module and prompts user to replace if different
@@ -2234,16 +2550,22 @@ update_modules() {
     while IFS= read -r script_path; do
         local SCRIPT_FILE="$script_path"
         local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
-        local TEMP_SCRIPT="$(mktemp)"
 
-        # Ensure the local directory exists
+        # Ensure the local directory exists (so the adjacent mktemp template below resolves)
         local script_dir="$(dirname "$LOCAL_SCRIPT")"
         mkdir -p "$script_dir"
 
-        if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT}"; then
+        # Pattern E2 (path-aware): mktemp adjacent to LOCAL_SCRIPT (which may
+        # contain a subdir like system-modules/...). Inline TEMP_FILES+=() so the
+        # cleanup trap reaches the parent's array.
+        local TEMP_SCRIPT_FILE
+        TEMP_SCRIPT_FILE=$(mktemp "$(dirname "${LOCAL_SCRIPT}")/~$(basename "${LOCAL_SCRIPT}").tmp.XXXXXX")
+        TEMP_FILES+=("$TEMP_SCRIPT_FILE")
+
+        if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
             echo "            (skipping ${SCRIPT_FILE})"
             ((failed_count++)) || true
-            rm -f "${TEMP_SCRIPT}"
+            rm -f "${TEMP_SCRIPT_FILE}"
             echo ""
             continue
         fi
@@ -2254,28 +2576,31 @@ update_modules() {
         fi
 
         # Compare and handle differences
-        if diff -u "${LOCAL_SCRIPT}" "${TEMP_SCRIPT}" > /dev/null 2>&1; then
+        if diff -u "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
             print_success "- ${SCRIPT_FILE} is already up-to-date"
             ((uptodate_count++)) || true
-            rm -f "${TEMP_SCRIPT}"
+            rm -f "${TEMP_SCRIPT_FILE}"
             echo ""
         else
-            echo ""
-            echo -e "${CYAN}╭────────────────── Δ detected in ${SCRIPT_FILE} ──────────────────╮${NC}"
-            diff -u --color "${LOCAL_SCRIPT}" "${TEMP_SCRIPT}" || true
-            echo -e "${CYAN}╰────────────────────── ${SCRIPT_FILE} ───────────────────────╯${NC}"
-            echo ""
+            show_diff_box "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" "${SCRIPT_FILE}"
 
             if prompt_yes_no "→ Overwrite local ${SCRIPT_FILE} with remote copy?" "y"; then
                 echo ""
-                chmod +x "${TEMP_SCRIPT}"
-                mv -f "${TEMP_SCRIPT}" "${LOCAL_SCRIPT}"
+                chmod +x "${TEMP_SCRIPT_FILE}"
+                # Pattern D: mv -f failure handler.
+                if ! mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"; then
+                    rm -f "${TEMP_SCRIPT_FILE}"
+                    print_error "✖ Failed to install update for ${SCRIPT_FILE} — keeping local version"
+                    ((failed_count++)) || true
+                    echo ""
+                    continue
+                fi
                 print_success "✓ Replaced ${SCRIPT_FILE}"
                 ((updated_count++)) || true
             else
                 print_warning "⚠ Skipped ${SCRIPT_FILE}"
                 ((skipped_count++)) || true
-                rm -f "${TEMP_SCRIPT}"
+                rm -f "${TEMP_SCRIPT_FILE}"
             fi
             echo ""
         fi
@@ -2298,6 +2623,8 @@ update_modules() {
     fi
 }
 ```
+
+**Why Pattern E2 (not E)?** `LOCAL_SCRIPT` here is `${SCRIPT_DIR}/${SCRIPT_FILE}` where `SCRIPT_FILE` may contain a subdirectory (e.g., `system-modules/configure-system.sh` or `kubernetes-modules/install-update-helm.sh`). Pattern E's `${SCRIPT_DIR}/~${SCRIPT_FILE}.tmp.XXXXXX` would produce a literal `~system-modules/configure-system.sh.tmp.XXX` path that `mktemp` cannot create (the slash is interpreted as a directory separator). Pattern E2 wraps `dirname`/`basename` around `LOCAL_SCRIPT` so the temp lands in the right subdirectory regardless of path shape.
 
 ### Script List and Obsolete Cleanup
 ```bash
@@ -2363,6 +2690,12 @@ readonly NC='\033[0m'
 # Remote repository configuration
 readonly REMOTE_BASE="https://raw.githubusercontent.com/USER/REPO/refs/heads/main/DOMAIN"
 
+# Resolve script directory for adjacent-mktemp templates and the sweep root.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Tracked temp files for the EXIT-trap cleanup. MUST be at file scope.
+TEMP_FILES=()
+
 # List of script files to download/update
 get_script_list() {
     echo "script-a.sh"
@@ -2372,21 +2705,32 @@ get_script_list() {
 # List of obsolete scripts to clean up
 OBSOLETE_SCRIPTS=()
 
-# Include: print_info, print_success, print_warning, print_error
-# Include: prompt_yes_no
+# Include: print_info, print_success, print_warning, print_error (>&2)
+# Include: prompt_yes_no (with [[ -r /dev/tty ]] guard)
+# Include: cleanup + trap cleanup EXIT (file-scope, NOT inside main)
+# Include: sweep_stale_temps (with { : </dev/tty; } open-probe)
+# Include: show_diff_box (with --color=always + less -RFX)
 # Include: detect_download_cmd (with print_warning_box inline or simplified)
-# Include: download_script
+# Include: download_script (with --max-time 15, -sSL not -fsSL, case statement)
 # Include: cleanup_obsolete_scripts
-# Include: self_update
-# Include: update_modules
+# Include: self_update (Pattern E adjacent mktemp + Pattern D mv handler)
+# Include: update_modules (Pattern E2 path-aware mktemp + Pattern D mv handler)
 
 # Main execution
-if detect_download_cmd; then
-    if [[ ${scriptUpdated:-0} -eq 0 ]]; then
-        self_update "$@"
+main() {
+    sweep_stale_temps '~*.tmp.??????'
+
+    if detect_download_cmd; then
+        if [[ ${scriptUpdated:-0} -eq 0 ]]; then
+            self_update "$@"
+        fi
+        update_modules
+        cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
     fi
-    update_modules
-    cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
 fi
 ```
 
