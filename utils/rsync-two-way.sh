@@ -33,21 +33,10 @@ readonly STAMP=$(date +%F_%H-%M-%S)
 readonly LOG_FILE="${HOME}/.rsync-two-way.log"
 
 # Print colored output
-print_info() {
-    echo -e "${BLUE}[ INFO    ]${NC} $1"
-}
-
-print_success() {
-    echo -e "${GREEN}[ SUCCESS ]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[ WARNING ]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ ERROR   ]${NC} $1" >&2
-}
+print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
+print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
+print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
 
 print_section() {
     echo -e "${CYAN}╭────────────────────────────────────────────────────────────────────────╮${NC}"

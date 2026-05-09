@@ -17,10 +17,10 @@ readonly RED='\033[0;31m'
 readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m'
 
+print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
 print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
 print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
-print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; }
 
 # ── Cleanup & defense-in-depth ────────────────────────────────────────────────
 TEMP_FILES=()

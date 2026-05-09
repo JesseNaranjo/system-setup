@@ -161,21 +161,10 @@ show_diff_box() {
 # Output Functions
 # ============================================================================
 
-print_info() {
-    echo -e "${BLUE}[ INFO    ]${NC} $1"
-}
-
-print_success() {
-    echo -e "${GREEN}[ SUCCESS ]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[ WARNING ]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ ERROR   ]${NC} $1" >&2
-}
+print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
+print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
+print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
 
 print_header() {
     echo ""
@@ -184,9 +173,7 @@ print_header() {
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
 
-print_step() {
-    echo -e "${BLUE}  →${NC} $1"
-}
+print_step() { echo -e "${BLUE}  →${NC} $1"; }
 
 print_timestamp() {
     local section="$1"

@@ -52,21 +52,10 @@ declare -gA COUNTS_BY_TYPE=()
 # Standard Output Functions
 # ============================================================================
 
-print_info() {
-    echo -e "${BLUE}[ INFO    ]${NC} $1"
-}
-
-print_success() {
-    echo -e "${GREEN}[ SUCCESS ]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[ WARNING ]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ ERROR   ]${NC} $1" >&2
-}
+print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
+print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
+print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
 
 # ============================================================================
 # Usage

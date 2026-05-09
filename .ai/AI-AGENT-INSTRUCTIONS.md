@@ -124,9 +124,9 @@ Apply the DRY principle when code duplication creates maintenance risk. Extract 
    readonly NC='\033[0m'
 
    # Output functions - extracted because pattern repeats
+   print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
    print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
    print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
-   print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1"; }
    ```
 
 #### When NOT to Extract
@@ -901,9 +901,9 @@ readonly RED='\033[0;31m'
 readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m'
 
-print_info() { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
+print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
+print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
 print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
-print_error() { echo -e "${RED}[ ERROR   ]${NC} $1"; }
 
 main() {
     print_info "Starting..."
@@ -1482,13 +1482,13 @@ done
 ### Standard Output Functions
 
 ```bash
-print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
-print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
-print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; }
 print_backup()  { echo -e "${GRAY}[ BACKUP  ] $1${NC}"; }
 print_debug()   { echo -e "${MAGENTA}[ DEBUG   ] $1${NC}"; }
+print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
+print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
+print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
 print_summary() { echo -e "${BLUE}[ SUMMARY ]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
 ```
 
 **Stream rules:**
@@ -1496,6 +1496,7 @@ print_summary() { echo -e "${BLUE}[ SUMMARY ]${NC} $1"; }
 - **`print_error` MUST write to stderr (`>&2`).** Errors must be separable from normal output so callers can pipe stdout to consumers (e.g., a watch loop or a logging sink) without mixing in error noise. Without `>&2`, callers that redirect `2>err.log >out.log` see errors swallowed into stdout and lose the distinction.
 - **`print_warning` stays on stdout.** Warnings are informational — they describe degraded but non-fatal states (a missing optional tool, a config that defaulted to a fallback). They belong with the rest of the run narrative.
 - **All other `print_*` helpers stay on stdout.** Only `print_error` is fd-2.
+- **`print_error` MUST emit a terminal bell (`printf '\a' >&2`) and then `sleep 2`, both gated on `[[ -t 2 ]]`.** Errors are easily lost when subsequent output scrolls them off-screen; the bell pulls attention to the terminal and the pause keeps the message visible long enough to be read. Both effects are interactive-only — gating on `[[ -t 2 ]]` keeps CI / cron / `ssh -T` runs fast and prevents BEL bytes from polluting redirected logs. Use `if/fi` (not `&& { …; }`) so a non-TTY run still returns exit 0 and doesn't trip `set -euo pipefail` in the caller. Use `sleep 2` (not `sleep 2s`) — the unit suffix is a GNU coreutils extension and breaks on older BSD `sleep`.
 
 **Caller-side glyph convention.** The function bodies above don't include glyphs — the `[ ERROR   ]`, `[ WARNING ]`, etc. tags identify the channel. The MEANING glyph is the caller's responsibility:
 

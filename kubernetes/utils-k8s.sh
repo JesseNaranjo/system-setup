@@ -148,33 +148,13 @@ PACKAGE_CACHE_POPULATED=false
 # ============================================================================
 
 # Print colored output
-print_backup() {
-    echo -e "${GRAY}[ BACKUP  ] $1${NC}"
-}
-
-print_debug() {
-    echo -e "${MAGENTA}[ DEBUG   ] $1${NC}"
-}
-
-print_error() {
-    echo -e "${RED}[ ERROR   ]${NC} $1" >&2
-}
-
-print_info() {
-    echo -e "${BLUE}[ INFO    ]${NC} $1"
-}
-
-print_success() {
-    echo -e "${GREEN}[ SUCCESS ]${NC} $1"
-}
-
-print_summary() {
-    echo -e "${BLUE}[ SUMMARY ]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[ WARNING ]${NC} $1"
-}
+print_backup()  { echo -e "${GRAY}[ BACKUP  ] $1${NC}"; }
+print_debug()   { echo -e "${MAGENTA}[ DEBUG   ] $1${NC}"; }
+print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
+print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
+print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
+print_summary() { echo -e "${BLUE}[ SUMMARY ]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
 
 # Print a warning box with multiple lines of content
 # Usage: print_warning_box "line1" "line2" "line3" ...

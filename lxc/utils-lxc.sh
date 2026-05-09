@@ -19,12 +19,11 @@ readonly RED='\033[0;31m'
 readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m'
 
-print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
-print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
-print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; }
-print_backup()  { echo -e "${GRAY}[ BACKUP  ]${NC} $1"; }
-print_bold_error() { echo -e "${BOLD_RED}$1${NC}"; }
+print_backup()     { echo -e "${GRAY}[ BACKUP  ] $1${NC}"; }
+print_error()      { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
+print_info()       { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
+print_success()    { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
+print_warning()    { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
 
 # Display a formatted warning box
 # Usage: print_warning_box "line1" "line2" "line3" ...
