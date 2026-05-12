@@ -48,13 +48,11 @@ watch_loop() {
             tput ed
         fi
 
-        echo "LXC ($(date '+%Y-%m-%d %H:%M:%S'))"
+        echo -e "LXC ($(date '+%Y-%m-%d %H:%M:%S'))  ${GRAY}[Watching every ${WATCH_INTERVAL}s - Ctrl+C to stop]${NC}"
         echo ""
         /usr/bin/lxc-ls --fancy || print_warning "⚠ lxc-ls failed (continuing)"
         echo ""
         df -h /
-        echo ""
-        echo -e "${GRAY}[Watching every ${WATCH_INTERVAL}s - Ctrl+C to stop]${NC}"
         sleep "$WATCH_INTERVAL"
     done
 }

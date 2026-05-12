@@ -509,11 +509,9 @@ watch_services() {
             tput ed
         fi
 
-        echo "Services ($(date '+%Y-%m-%d %H:%M:%S'))"
+        echo -e "Services ($(date '+%Y-%m-%d %H:%M:%S'))  ${GRAY}[Watching every ${interval}s - Ctrl+C to stop]${NC}"
         echo ""
         run_checks "${filters[@]}" || true
-        echo ""
-        echo -e "${GRAY}[Watching every ${interval}s - Ctrl+C to stop]${NC}"
         sleep "$interval"
     done
 }
