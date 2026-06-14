@@ -302,6 +302,7 @@ check_ssh_config() {
 configure_ssh_config() {
     local ssh_config="${TARGET_USER_HOME}/.ssh/config"
     local key_path="${TARGET_USER_HOME}/.ssh/${SSH_KEY_NAME}.key"
+    local host_pattern
 
     echo ""
     print_info "SSH config setup for LXC containers"
