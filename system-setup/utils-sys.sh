@@ -202,9 +202,12 @@ prompt_yes_no() {
     local prompt_suffix
     local user_reply
 
-    # Non-TTY context (cron, systemd, ssh -T, CI): signal "no" rather than fall
-    # through to the empty-reply branch and silently auto-accept the default.
-    [[ -r /dev/tty ]] || return 1
+    # Non-interactive context (cron, systemd, ssh -T, CI, setsid): signal "no"
+    # rather than fall through to the empty-reply branch and silently auto-accept
+    # the default. Use the `{ : </dev/tty; }` open(2) probe, NOT `[[ -r /dev/tty ]]`
+    # — the latter only checks permissions and stays true under setsid while
+    # open() fails with ENXIO, so the read below would then misbehave.
+    { : </dev/tty; } 2>/dev/null || return 1
 
     # Set the prompt suffix based on default
     if [[ "${default,,}" == "y" ]]; then

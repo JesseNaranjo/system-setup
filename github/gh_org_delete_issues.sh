@@ -302,11 +302,13 @@ self_update() {
     # color preserved through pipe via --color=always).
     show_diff_box "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" "${SCRIPT_FILE}"
 
-    # Pattern B' — bare-`read` self-update guard. Without this, a failed
-    # `read </dev/tty` under set -e in cron / ssh -T / CI leaves $REPLY empty,
-    # the `[[ -z $REPLY ]]` branch matches, and the update silently auto-applies.
+    # Pattern B' — bare-`read` self-update guard. Use the `{ : </dev/tty; }`
+    # open(2) probe, NOT `[[ -r /dev/tty ]]`: the latter stays true under setsid
+    # while open() fails with ENXIO, so the bare `read </dev/tty` aborts under
+    # set -e; under cron / ssh -T / CI a failed read also leaves $REPLY empty so
+    # the `[[ -z $REPLY ]]` branch would silently auto-apply the update.
     # `return 0` because the script can continue with the unchanged local version.
-    [[ -r /dev/tty ]] || { rm -f "${TEMP_SCRIPT_FILE}"; print_info "Non-interactive — skipping self-update"; return 0; }
+    { : </dev/tty; } 2>/dev/null || { rm -f "${TEMP_SCRIPT_FILE}"; print_info "Non-interactive — skipping self-update"; return 0; }
     read -p "→ Overwrite and restart with updated ${SCRIPT_FILE}? [Y/n] " -n 1 -r </dev/tty
     if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
         echo ""

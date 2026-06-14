@@ -1406,9 +1406,12 @@ prompt_yes_no() {
     local prompt_suffix
     local user_reply
 
-    # Non-TTY context (cron, systemd, ssh -T, CI): signal "no" rather than fall
-    # through to the empty-reply branch and silently auto-accept the default.
-    [[ -r /dev/tty ]] || return 1
+    # Non-interactive context (cron, systemd, ssh -T, CI, setsid): signal "no"
+    # rather than fall through to the empty-reply branch and silently auto-accept
+    # the default. Use the `{ : </dev/tty; }` open(2) probe, NOT `[[ -r /dev/tty ]]`
+    # — the latter only checks permissions and stays true under setsid while
+    # open() fails with ENXIO, so the read below would then misbehave.
+    { : </dev/tty; } 2>/dev/null || return 1
 
     if [[ "${default,,}" == "y" ]]; then
         prompt_suffix="(Y/n)"
@@ -1426,15 +1429,17 @@ prompt_yes_no() {
 }
 ```
 
-**`/dev/tty` guard requirement.** The `[[ -r /dev/tty ]] || return 1` line MUST appear after the `local` declarations and BEFORE any `read`. Without it, `read </dev/tty` fails under `set -e` in non-TTY contexts (cron, `systemd`, `ssh -T`, CI). When that failure happens inside an `if`-context, `set -e` is suppressed and `user_reply` stays empty — the script then falls through to the default branch and silently auto-accepts. For self-update prompts that means a cron job ships an unreviewed script change.
+**`/dev/tty` guard requirement.** The `{ : </dev/tty; } 2>/dev/null || return 1` open-probe MUST appear after the `local` declarations and BEFORE any `read`. It performs a real `open(2)` on the controlling terminal: under cron / `systemd` / `ssh -T` / CI / `setsid` the open fails, the guard returns 1, and the caller's `else` branch runs. Do NOT use `[[ -r /dev/tty ]]` — it only checks permissions (the device is world-readable, mode 0666), so it stays true under `setsid` while the open fails with `ENXIO`; the subsequent `read </dev/tty` then fails. Under this repo's `set -u`, the still-unset `user_reply` then triggers an `unbound variable` abort (verified under `setsid`: the failed read leaves `user_reply` unset, so `[[ -z "$user_reply" ]]` aborts the script). Without `set -u` it would instead silently fall through to the default and auto-accept — for self-update prompts that would mean a cron job ships an unreviewed script change. Either way the permissions check fails to prevent a broken `read`.
 
-**Pattern B' — bare-`read` self-update prompts (github scripts).** The 3 `github/gh_org_*.sh` standalones use a bare `read -p ... </dev/tty` instead of `prompt_yes_no` for their self-update prompt because they want a single-keystroke `-n 1` UX. The same silent-auto-accept bug applies. Add the same guard immediately before the `read`, but `return 0` (not 1) because the github scripts can continue running with the unchanged local version after a skipped update:
+**Pattern B' — bare-`read` self-update prompts (github scripts).** The 3 `github/gh_org_*.sh` standalones use a bare `read -p ... </dev/tty` instead of `prompt_yes_no` for their self-update prompt because they want a single-keystroke `-n 1` UX. The same silent-auto-accept bug applies. Add the same open-probe guard immediately before the `read`, but `return 0` (not 1) because the github scripts can continue running with the unchanged local version after a skipped update. Because this `read` is bare (not in `if`-context), a failed open under `setsid` is a hard `set -e` abort — which is exactly why the `{ : </dev/tty; }` open-probe is required here rather than the misleading `[[ -r /dev/tty ]]` permissions check:
 
 ```bash
-# Non-TTY context (cron, systemd, ssh -T, CI): skip self-update rather than
-# silently auto-accept via the empty-reply branch. Continue with the local
+# Non-interactive context (cron, systemd, ssh -T, CI, setsid): skip self-update
+# rather than silently auto-accept via the empty-reply branch. The `{ : </dev/tty; }`
+# open(2) probe detects real openability (a bare `read` below would `set -e`-abort
+# under setsid, where `[[ -r /dev/tty ]]` wrongly passes). Continue with the local
 # version since the github scripts can run unchanged.
-[[ -r /dev/tty ]] || { print_info "Non-interactive — skipping self-update"; rm -f "${TEMP_SCRIPT_FILE}"; return 0; }
+{ : </dev/tty; } 2>/dev/null || { print_info "Non-interactive — skipping self-update"; rm -f "${TEMP_SCRIPT_FILE}"; return 0; }
 
 read -p "→ Overwrite and restart with updated ${SCRIPT_FILE}? [Y/n] " -n 1 -r </dev/tty
 if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
@@ -1444,7 +1449,7 @@ fi
 
 Note the inline `rm -f "${TEMP_SCRIPT_FILE}"` on the non-TTY branch — the EXIT trap reaps on script exit, but a long-running standalone (e.g., iterating across many repos) keeps the temp visible in `$SCRIPT_DIR` until exit. See [Defense-in-depth Cleanup](#defense-in-depth-cleanup).
 
-**Why `[[ -r /dev/tty ]]` for prompts but `{ : </dev/tty; } 2>/dev/null` for `sweep_stale_temps`?** `prompt_yes_no` is always called in `if` context, where `set -e` is suspended for the test command. Under cron / `ssh -T` / CI (the common non-TTY contexts), `/dev/tty` has no read permission for the calling user, so the guard fires and returns 1. Under `setsid` (rare — detaches the controlling TTY but leaves the device world-readable), the permissions check passes incorrectly; the subsequent `read </dev/tty` then fails with `set -e` suspended, the function falls through to the default branch, and the caller's `else` branch runs — same net behavior as the cron case **when the default is "n"**. Edge case: `setsid` + default "y" can still produce silent acceptance — see `docs/future-todos.md`. For `sweep_stale_temps`, the function is called as a statement (not in `if` context), so a failed `read </dev/tty` aborts the script under `set -e` — hence the open-probe gate.
+**Why the open-probe everywhere?** Both `prompt_yes_no` (and notify-then-continue prompts) and `sweep_stale_temps` use the same `{ : </dev/tty; } 2>/dev/null` open-probe, because each ultimately does `read </dev/tty` and must detect real openability, not mere permissions. `[[ -r /dev/tty ]]` is a permissions check that stays true under `setsid` while `open()` fails with `ENXIO`, so it is never the right guard before a `read </dev/tty`.
 
 ### Prompt Usage
 ```bash
@@ -2329,7 +2334,7 @@ main() {
 
 The no-op stdin redirect (`:` is a builtin that does nothing; the redirect is what we want) drives the actual `open(2)` syscall and lets us branch on the real openability rather than the misleading permissions-only check.
 
-For `prompt_yes_no` the simpler `[[ -r /dev/tty ]]` is acceptable because the failure mode is different — a `read </dev/tty` failure inside an `if`-context returns false from the function, which the caller handles. The `setsid` + default "y" combination is a known edge case where the misleading permissions check + `read` failure + default "y" produces silent acceptance — see `docs/future-todos.md`. For `sweep_stale_temps` the failure mode is `set -e` aborting the whole script before any branch fires, which is unrecoverable. Use the open-probe whenever the failure consequence is `set -e` abort.
+Both `sweep_stale_temps` and `prompt_yes_no` use the open-probe — every guard that precedes a `read </dev/tty` must, because the permissions check is misleading under `setsid`.
 
 #### Naming convention: `~filename.tmp.XXXXXX`
 
@@ -2707,7 +2712,7 @@ get_script_list() {
 OBSOLETE_SCRIPTS=()
 
 # Include: print_info, print_success, print_warning, print_error (>&2)
-# Include: prompt_yes_no (with [[ -r /dev/tty ]] guard)
+# Include: prompt_yes_no (with { : </dev/tty; } open-probe guard)
 # Include: cleanup + trap cleanup EXIT (file-scope, NOT inside main)
 # Include: sweep_stale_temps (with { : </dev/tty; } open-probe)
 # Include: show_diff_box (with --color=always + less -RFX)

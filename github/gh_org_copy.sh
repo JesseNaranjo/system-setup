@@ -276,10 +276,12 @@ self_update() {
     # Show diff
     show_diff_box "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" "${SCRIPT_FILE}"
 
-    # Non-TTY context (cron, systemd, ssh -T, CI): skip self-update rather than
-    # silently auto-accept via the empty-reply branch. Continue with the local
-    # version since the github scripts can run unchanged.
-    [[ -r /dev/tty ]] || { print_info "Non-interactive — skipping self-update"; rm -f "${TEMP_SCRIPT_FILE}"; return 0; }
+    # Non-interactive context (cron, systemd, ssh -T, CI, setsid): skip self-update
+    # rather than silently auto-accept via the empty-reply branch. Use the
+    # `{ : </dev/tty; }` open(2) probe, NOT `[[ -r /dev/tty ]]` — the latter stays
+    # true under setsid while open() fails with ENXIO, so the bare `read </dev/tty`
+    # below would abort under set -e. Continue with the unchanged local version.
+    { : </dev/tty; } 2>/dev/null || { print_info "Non-interactive — skipping self-update"; rm -f "${TEMP_SCRIPT_FILE}"; return 0; }
 
     read -p "→ Overwrite and restart with updated ${SCRIPT_FILE}? [Y/n] " -n 1 -r </dev/tty
     if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
