@@ -409,6 +409,8 @@ main() {
         print_menu_option "7" "Run system diagnostics" supports_diagnostics
         echo "            8) Exit (or Ctrl+C)"
         echo ""
+        # No controlling terminal (cron/ssh -T/CI/setsid): open-probe, then leave the menu instead of a failed read.
+        { : </dev/tty; } 2>/dev/null || { print_error "✖ Non-interactive — cannot read menu choice. Exiting menu."; return 1; }
         read -p "            Enter choice (1-8): " -r choice </dev/tty
 
         echo ""

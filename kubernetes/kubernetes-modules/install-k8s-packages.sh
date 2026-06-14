@@ -41,6 +41,8 @@ select_node_role() {
 
     local choice
     while true; do
+        # No controlling terminal (cron/ssh -T/CI/setsid): open-probe, then abort instead of a failed read.
+        { : </dev/tty; } 2>/dev/null || { print_error "✖ Non-interactive — cannot select a role. Aborting package installation."; return 1; }
         read -r -p "Select [1-4]: " choice </dev/tty
         case "$choice" in
             1) SELECTED_ROLE="control-plane"; break ;;

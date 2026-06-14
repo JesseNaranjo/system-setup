@@ -30,6 +30,12 @@ source "${SCRIPT_DIR}/utils-sys.sh"
 prompt_resolution() {
     # All display output goes to /dev/tty so that only the result
     # is captured when called via geometry=$(prompt_resolution)
+    # No controlling terminal (cron/ssh -T/CI/setsid): the >/dev/tty menu writes and
+    # the read below would fail — emit the documented default via the open-probe.
+    if ! { : </dev/tty; } 2>/dev/null; then
+        echo "1920x1080"
+        return 0
+    fi
     print_info "Select VNC display resolution:" >/dev/tty
     echo "            1) 1280x720   (720p / HD)" >/dev/tty
     echo "            2) 1366x768   (WXGA)" >/dev/tty

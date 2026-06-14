@@ -319,7 +319,9 @@ configure_ssh_config() {
     echo "                - web.example.com (matches: specific FQDN)"
     echo ""
 
-    # Read from /dev/tty to work correctly in context
+    # Read from /dev/tty to work correctly in context. No controlling terminal
+    # (cron/ssh -T/CI/setsid): open-probe, then skip instead of a failed read.
+    { : </dev/tty; } 2>/dev/null || { print_warning "⚠ Non-interactive — no host pattern provided, skipping SSH config setup"; return 1; }
     read -p "Host pattern: " -r host_pattern </dev/tty
 
     if [[ -z "$host_pattern" ]]; then

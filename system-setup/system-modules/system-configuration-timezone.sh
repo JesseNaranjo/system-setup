@@ -101,6 +101,8 @@ configure_timezone() {
     local -a tz_presets=("America/New_York" "America/Chicago" "America/Denver" "America/Los_Angeles")
 
     local tz_choice
+    # No controlling terminal (cron/ssh -T/CI/setsid): open-probe, then keep UTC instead of a failed read.
+    { : </dev/tty; } 2>/dev/null || { print_error "✖ Non-interactive — cannot select timezone. Keeping timezone as UTC."; return 1; }
     read -p "            Enter choice (1-5): " -r tz_choice </dev/tty
 
     local new_tz=""
@@ -114,6 +116,8 @@ configure_timezone() {
             echo ""
             list_all_timezones
             echo ""
+            # No controlling terminal: open-probe, then keep UTC instead of a failed read.
+            { : </dev/tty; } 2>/dev/null || { print_error "✖ Non-interactive — cannot enter a timezone. Keeping timezone as UTC."; return 1; }
             read -p "            Enter timezone (e.g., Europe/London): " -r new_tz </dev/tty
             ;;
         *)

@@ -125,6 +125,8 @@ configure_container_static_ip() {
     local static_prefix=""
 
     while true; do
+        # No controlling terminal (cron/ssh -T/CI/setsid): open-probe, then skip instead of a failed read.
+        { : </dev/tty; } 2>/dev/null || { print_error "✖ Non-interactive — cannot enter a static IP. Skipping static IP configuration."; return 1; }
         read -p "            Enter static IP in CIDR notation (e.g., 192.168.1.100/24, defaults to /24): " -r user_input </dev/tty
 
         # Check if input contains a slash (CIDR notation)

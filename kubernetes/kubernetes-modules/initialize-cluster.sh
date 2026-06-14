@@ -204,6 +204,8 @@ initialize_control_plane() {
     run_kubeadm_preflight || return 1
 
     local pod_cidr
+    # No controlling terminal (cron/ssh -T/CI/setsid): open-probe, then abort rather than init a cluster with a default CIDR.
+    { : </dev/tty; } 2>/dev/null || { print_error "✖ Non-interactive — cannot prompt for pod network CIDR. Aborting control-plane init."; return 1; }
     read -r -p "Enter pod network CIDR [192.168.0.0/16]: " pod_cidr </dev/tty
     pod_cidr="${pod_cidr:-192.168.0.0/16}"
 
@@ -257,6 +259,8 @@ join_as_worker() {
     run_kubeadm_preflight || return 1
 
     local join_cmd
+    # No controlling terminal (cron/ssh -T/CI/setsid): open-probe, then abort instead of a failed read.
+    { : </dev/tty; } 2>/dev/null || { print_error "✖ Non-interactive — cannot prompt for the join command. Aborting worker join."; return 1; }
     read -r -p "Enter the full 'kubeadm join' command: " join_cmd </dev/tty
 
     if [[ -z "$join_cmd" ]]; then
@@ -307,6 +311,8 @@ handle_new_cluster() {
     echo ""
 
     local choice
+    # No controlling terminal (cron/ssh -T/CI/setsid): open-probe, then abort instead of a failed read.
+    { : </dev/tty; } 2>/dev/null || { print_error "✖ Non-interactive — cannot select a cluster option. Aborting."; return 1; }
     read -r -p "Select an option [1-3]: " choice </dev/tty
 
     case "${choice}" in
