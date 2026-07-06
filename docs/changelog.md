@@ -1,0 +1,18 @@
+# Changelog
+
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), date-based, newest first.
+This changelog begins 2026-07-06. Entries below capture the project's major
+features as of that date; earlier history is not individually recorded.
+
+## [2026-07-06]
+
+### Added
+- System setup suite — modular, idempotent Linux/macOS orchestrator (`system-setup/system-setup.sh`) that installs packages and configures git, nano, tmux, shell, swap, SSH socket activation, timezone, `/etc/issue`, systemd-networkd migration, container static IP, and APT DEB822 sources, with a choice of user or system scope.
+- Remote desktop provisioning — `install-desktop.sh` sets up TigerVNC and XRDP with XFCE4 sessions, clipboard support, and TLS certificate management on Linux.
+- LXC container management — full lifecycle scripts (`lxc/`) to configure the host, create containers (auto-detecting distro, release, and architecture), start/stop/restart them via systemd, watch live status, and back up or restore with 7z compression, for both privileged and unprivileged containers; includes flags for running Kubernetes inside LXC (cgroup delegation, swap restriction, `/proc/sys` writability, AppArmor).
+- Kubernetes cluster setup — orchestrated, kubeadm-based provisioning (`kubernetes/`) with CRI-O runtime, kernel-module and sysctl configuration, swap disabling, Helm and Minikube installation, certificate lifecycle management, cluster init/join/validate, and LXC-container awareness.
+- Ollama LLM runner — GNU screen launchers (`llm/`) for running Ollama locally or as a network-accessible API server, each with integrated GPU (nvtop) and CPU (htop) monitoring panes.
+- GitHub organization tooling — bulk `gh`/`jq` scripts (`github/`) that migrate repositories between orgs (refs, LFS, wikis, labels, milestones, issues, PRs-as-issues, discussions) and bulk close/lock/delete issues or delete repositories, defaulting to dry-run for safety.
+- Cross-platform utilities — standalone maintenance scripts (`utils/`) for DNS record queries, local service health checks, two-way rsync/Robocopy synchronization, battery monitoring, and macOS/KVM fixes.
+- Self-updating scripts — each suite can fetch its latest version from GitHub on run, showing a diff and prompting before overwriting so local copies stay current without manual reinstalls.
+- Configuration references and walkthroughs — curated notes (`configs/`, `walkthroughs/`, `raspberry-pi/`, and top-level docs) covering application configs (git, nano, tmux, shell, htop, VS Code, GNOME, macOS, Steam/Bazzite), setup walkthroughs, Raspberry Pi builds, and hardware notes (DKMS, GRUB, mDNS, NVIDIA drivers).
