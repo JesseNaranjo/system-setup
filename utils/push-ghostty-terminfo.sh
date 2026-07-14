@@ -359,6 +359,20 @@ main() {
         print_error "✖ Local '${TERM_NAME}' terminfo not found — is Ghostty installed on this host?"
         exit 69
     fi
+
+    print_info "Validating connectivity to ${host}..."
+    if ! ssh -o BatchMode=yes -o ConnectTimeout=10 "$host" exit 2>/dev/null; then
+        print_error "✖ Cannot connect to ${host} non-interactively"
+        print_info "Requires key-based SSH auth. Verify: keys configured, host reachable."
+        exit 68
+    fi
+    print_success "✓ Connected to ${host}"
+
+    if ! ssh -o BatchMode=yes -o ConnectTimeout=10 "$host" \
+        'command -v tic >/dev/null 2>&1 && command -v infocmp >/dev/null 2>&1'; then
+        print_error "✖ ${host} lacks 'tic'/'infocmp' — install ncurses (Debian/Ubuntu: ncurses-bin)"
+        exit 69
+    fi
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
