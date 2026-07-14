@@ -332,8 +332,33 @@ main() {
         echo ""
     fi
 
-    # (Task 2 fills in: parse args, preflight, connectivity, install, verify.)
-    :
+    local host="" user_mode=false force=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --user)  user_mode=true ;;
+            --force) force=true ;;
+            -*)      print_error "✖ Unknown option: $1"; show_usage; exit 64 ;;
+            *)
+                if [[ -n "$host" ]]; then
+                    print_error "✖ Only one host may be specified (got '$host' and '$1')"
+                    exit 64
+                fi
+                host="$1"
+                ;;
+        esac
+        shift
+    done
+    [[ -z "$host" ]] && { print_error "✖ No host specified"; show_usage; exit 64; }
+    REMOTE_CLEANUP_HOST="$host"
+
+    command -v ssh >/dev/null 2>&1 || { print_error "✖ 'ssh' not found"; exit 69; }
+    command -v infocmp >/dev/null 2>&1 || { print_error "✖ 'infocmp' not found (install ncurses)"; exit 69; }
+
+    local local_ti
+    if ! local_ti="$(infocmp -x "$TERM_NAME" 2>/dev/null)"; then
+        print_error "✖ Local '${TERM_NAME}' terminfo not found — is Ghostty installed on this host?"
+        exit 69
+    fi
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
