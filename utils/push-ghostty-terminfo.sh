@@ -316,6 +316,68 @@ ${YELLOW}Exit codes:${NC} 0 OK | 64 usage | 68 no-host | 69 missing-tool | 70 in
 EOF
 }
 
+# entry_present <host> <user_mode>  -> 0 if xterm-ghostty exists at the target scope.
+# Assumes the ncurses directory-tree DB layout (<dir>/<char>/xterm-ghostty), which
+# covers all standard targets (Debian/Ubuntu/RHEL/Fedora/Arch/macOS). A remote built
+# with hashed-DB ncurses (rare, opt-in) stores a single terminfo.db this glob can't
+# see: the install still succeeds, but both the pre-check skip and the post-install
+# verify miss it (verify then reports exit 70 despite success — confirm manually via
+# `ssh host infocmp xterm-ghostty`). --force does not change this. See the Design note.
+entry_present() {
+    local host="$1" user_mode="$2"
+    if [[ "$user_mode" == true ]]; then
+        ssh -o BatchMode=yes "$host" 'ls "$HOME"/.terminfo/*/'"${TERM_NAME}"' >/dev/null 2>&1'
+    else
+        ssh -o BatchMode=yes "$host" "ls ${SYSTEM_TERMINFO_DIR}/*/${TERM_NAME} >/dev/null 2>&1"
+    fi
+}
+
+# install_entry <host> <user_mode> <local_ti>
+install_entry() {
+    local host="$1" user_mode="$2" ti="$3"
+
+    if [[ "$user_mode" == true ]]; then
+        print_info "Installing ${TERM_NAME} for the login user on ${host} (~/.terminfo)..."
+        if ! printf '%s\n' "$ti" | ssh "$host" 'mkdir -p "$HOME/.terminfo" && tic -x -o "$HOME/.terminfo" -'; then
+            print_error "✖ Per-user terminfo install failed on ${host}"
+            exit 70
+        fi
+        return 0
+    fi
+
+    # System-wide. If the remote login user is already root, write the system dir
+    # directly — no sudo (may be absent on minimal images), no TTY needed.
+    local remote_uid
+    remote_uid="$(ssh -o BatchMode=yes "$host" 'id -u' 2>/dev/null || echo)"
+    if [[ "$remote_uid" == "0" ]]; then
+        print_info "Installing ${TERM_NAME} system-wide on ${host} (remote user is root)..."
+        # shellcheck disable=SC2029 # SYSTEM_TERMINFO_DIR is our local readonly
+        # constant, not a remote env var — client-side expansion is intentional.
+        if ! printf '%s\n' "$ti" | ssh "$host" "tic -x -o ${SYSTEM_TERMINFO_DIR} -"; then
+            print_error "✖ System-wide terminfo install failed on ${host}"
+            exit 70
+        fi
+        return 0
+    fi
+
+    # Non-root: (1) stage to a remote temp non-interactively, capturing its path;
+    # (2) privileged compile on a TTY so sudo can prompt; (3) remove the temp.
+    print_info "Staging terminfo on ${host}..."
+    if ! REMOTE_TMP="$(printf '%s\n' "$ti" | ssh "$host" \
+        'f=$(mktemp "${TMPDIR:-/tmp}/ghostty-terminfo.XXXXXX") && cat >"$f" && printf %s "$f"')" \
+        || [[ -z "$REMOTE_TMP" ]]; then
+        print_error "✖ Failed to stage terminfo on ${host}"
+        exit 70
+    fi
+
+    print_info "Installing system-wide (may prompt for the sudo password on ${host})..."
+    if ! ssh -t "$host" "sudo tic -x -o ${SYSTEM_TERMINFO_DIR} '${REMOTE_TMP}'; rc=\$?; rm -f '${REMOTE_TMP}'; exit \$rc"; then
+        print_error "✖ System-wide terminfo install failed on ${host}"
+        exit 70     # trap best-effort removes REMOTE_TMP
+    fi
+    REMOTE_TMP=""  # step 2 already removed it; disarm the trap
+}
+
 main() {
     local original_args=("$@")
 
@@ -372,6 +434,26 @@ main() {
         'command -v tic >/dev/null 2>&1 && command -v infocmp >/dev/null 2>&1'; then
         print_error "✖ ${host} lacks 'tic'/'infocmp' — install ncurses (Debian/Ubuntu: ncurses-bin)"
         exit 69
+    fi
+
+    local scope_label="system-wide (all users incl. root)"
+    [[ "$user_mode" == true ]] && scope_label="the login user only (~/.terminfo)"
+
+    if [[ "$force" == false ]] && entry_present "$host" "$user_mode"; then
+        print_success "✓ ${TERM_NAME} already installed ${scope_label} on ${host} — use --force to reinstall"
+        exit 0
+    fi
+
+    # No confirmation prompt: the action is low-risk, explicitly targeted, and
+    # idempotent (the pre-check above already skips redundant installs). Requiring
+    # a y/n would also make --user a silent no-op in non-interactive automation.
+    install_entry "$host" "$user_mode" "$local_ti"
+
+    if entry_present "$host" "$user_mode"; then
+        print_success "✓ ${TERM_NAME} installed ${scope_label} on ${host}"
+    else
+        print_error "✖ Post-install verification failed: entry not found at the target scope on ${host}"
+        exit 70
     fi
 }
 
