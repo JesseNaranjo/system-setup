@@ -7,7 +7,7 @@ features as of that date; earlier history is not individually recorded.
 ## [2026-07-14]
 
 ### Added
-- Ghostty terminfo push — `utils/push-ghostty-terminfo.sh` copies the local `xterm-ghostty` terminfo entry to a remote SSH host, defaulting to a **system-wide** install (`/usr/share/terminfo` via remote sudo) so every user including `root`/`su` resolves it, with a `--user` fallback to `~/.terminfo`. Complements Ghostty's per-user `ssh-terminfo` shell integration for cases where it is skipped (wrapper tools, non-interactive shells) or insufficient (root/other users). Idempotent, self-updating, single-host.
+- Ghostty terminfo push — `utils/push-ghostty-terminfo.sh` copies the local `xterm-ghostty` terminfo entry to a remote SSH host, defaulting to a **system-wide** install (`/usr/share/terminfo` via remote sudo) so every user including `root`/`su` resolves it, with a `--user` fallback to `~/.terminfo`. Complements Ghostty's per-user `ssh-terminfo` shell integration for cases where it is skipped (wrapper tools, non-interactive shells) or insufficient (root/other users). Multiplexes all SSH connections over one ControlMaster socket, so you authenticate at most once — an interactive password/passphrase on a TTY, or key-based auth for non-interactive runs (cron, `ssh -T`). Idempotent, self-updating, single-host.
 - Ghostty configuration reference — `configs/ghostty.md` documents the recommended `shell-integration-features = ssh-terminfo,ssh-env` settings and when to fall back to the push script.
 
 ## [2026-07-06]
