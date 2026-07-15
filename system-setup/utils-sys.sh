@@ -1220,7 +1220,7 @@ check_for_updates() {
         if ! diff -q "${_UTILS_DIR}/${utils_basename}" "$temp_file" > /dev/null 2>&1; then
             show_diff_box "${_UTILS_DIR}/${utils_basename}" "$temp_file" "$utils_basename"
             if prompt_yes_no "→ Update ${utils_basename}?" "y"; then
-                chmod +x "$temp_file"
+                chmod 644 "$temp_file"
                 if ! mv -f "$temp_file" "${_UTILS_DIR}/${utils_basename}"; then
                     rm -f "$temp_file"
                     print_error "✖ Failed to install update — keeping local version"
