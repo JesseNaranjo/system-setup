@@ -1555,23 +1555,29 @@ print_warning_box() {
 
 ### Diff Display Pattern
 
-Use the `show_diff_box` helper. It is defined once in every helper library (`utils-sys.sh`, `utils-k8s.sh`, `utils-lxc.sh`, `utils-llm.sh`) and inlined in every standalone (`services-check.sh`, `gh_org_*.sh`):
+Use the `show_diff_box` helper. It is defined once in every helper library (`utils-sys.sh`, `utils-k8s.sh`, `utils-lxc.sh`, `utils-llm.sh`) and inlined in every standalone (`services-check.sh`, `push-ghostty-terminfo.sh`, `gh_org_*.sh`):
 
 ```bash
 # Pretty-print a unified diff between two files inside a labeled box. Use
 # `less` when stdout is a TTY (so multi-page diffs don't flood scrollback);
-# fall back to inline output otherwise. `--color=always` forces ANSI even
-# when piped to `less`; `-RFX` keeps less from clearing the screen.
+# fall back to inline output otherwise. GNU diff's `--color=always` forces
+# ANSI even when piped to `less`, but BSD/macOS diff lacks it — so detect
+# support once and omit the flag where unavailable. `-RFX` keeps less from
+# clearing the screen.
 show_diff_box() {
     local local_file="$1"
     local temp_file="$2"
     local label="$3"
     echo ""
     echo -e "${CYAN}╭────────────────────── Δ detected in ${label} ──────────────────────╮${NC}"
+    # GNU diff supports --color; BSD/macOS diff does not. Detect support once so the
+    # preview still renders on macOS instead of erroring into an empty box.
+    local diff_color=()
+    diff --color=always /dev/null /dev/null >/dev/null 2>&1 && diff_color=(--color=always)
     if [[ -t 1 ]] && command -v less &>/dev/null; then
-        diff -u --color=always "${local_file}" "${temp_file}" | less -RFX || true
+        diff -u "${diff_color[@]+"${diff_color[@]}"}" "${local_file}" "${temp_file}" | less -RFX || true
     else
-        diff -u --color=always "${local_file}" "${temp_file}" || true
+        diff -u "${diff_color[@]+"${diff_color[@]}"}" "${local_file}" "${temp_file}" || true
     fi
     echo -e "${CYAN}╰─────────────────────────── ${label} ──────────────────────────────╯${NC}"
     echo ""

@@ -70,6 +70,7 @@ print_warning_box() {
     echo -e "            ${YELLOW}╔$(printf '═%.0s' $(seq 1 $box_width))╗${NC}"
     echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
 
+    local line padded_line
     for line in "$@"; do
         local line_len=${#line}
         local right_pad=$((content_width - line_len))
@@ -130,7 +131,7 @@ TEMP_FILES=()
 cleanup() {
     local f
     for f in "${TEMP_FILES[@]+"${TEMP_FILES[@]}"}"; do
-        rm -f "$f" 2>/dev/null
+        rm -f "$f" 2>/dev/null || true
     done
 }
 trap cleanup EXIT
@@ -167,7 +168,7 @@ sweep_stale_temps() {
     fi
 
     for f in "${stale_files[@]}"; do
-        rm -f "$f"
+        rm -f "$f" || true
     done
     print_success "✓ Cleaned up ${#stale_files[@]} stale temp file(s)"
 }
@@ -183,10 +184,14 @@ show_diff_box() {
     local label="$3"
     echo ""
     echo -e "${CYAN}╭────────────────────── Δ detected in ${label} ──────────────────────╮${NC}"
+    # GNU diff supports --color; BSD/macOS diff does not. Detect support once so the
+    # preview still renders on macOS instead of erroring into an empty box.
+    local diff_color=()
+    diff --color=always /dev/null /dev/null >/dev/null 2>&1 && diff_color=(--color=always)
     if [[ -t 1 ]] && command -v less &>/dev/null; then
-        diff -u --color=always "${local_file}" "${temp_file}" | less -RFX || true
+        diff -u "${diff_color[@]+"${diff_color[@]}"}" "${local_file}" "${temp_file}" | less -RFX || true
     else
-        diff -u --color=always "${local_file}" "${temp_file}" || true
+        diff -u "${diff_color[@]+"${diff_color[@]}"}" "${local_file}" "${temp_file}" || true
     fi
     echo -e "${CYAN}╰─────────────────────────── ${label} ──────────────────────────────╯${NC}"
     echo ""
@@ -291,7 +296,6 @@ self_update() {
         echo ""
         export scriptUpdated=1
         exec "${LOCAL_SCRIPT}" "$@"
-        exit 0
     else
         rm -f "$TEMP_SCRIPT_FILE"
         print_warning "⚠ Skipped update - continuing with local version"
