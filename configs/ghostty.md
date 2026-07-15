@@ -30,8 +30,10 @@ For a reliable, **system-wide** install (all users, including root), use:
 utils/push-ghostty-terminfo.sh user@host
 ```
 
-You authenticate at most once — interactively (password or key passphrase) on a
-terminal, or with a key for non-interactive use — because it multiplexes every SSH
-connection over a single shared session.
+It multiplexes every SSH connection over a single shared session, so you authenticate
+to the host at most once — interactively (password or key passphrase) on a terminal, or
+with a key for non-interactive use. The default system-wide install also prompts once
+for the remote **sudo** password (skipped when the remote user is `root` or has
+passwordless sudo); `--user` needs no sudo.
 
 See `utils/README.md` for options (`--user`, `--force`).

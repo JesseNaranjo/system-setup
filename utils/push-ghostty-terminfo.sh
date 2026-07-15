@@ -10,7 +10,7 @@
 # --user installs to the login user's ~/.terminfo (no sudo).
 #
 # All per-run SSH connections are multiplexed over one ControlMaster socket, so you
-# authenticate at most once. On a TTY that single auth may be interactive (SSH
+# authenticate to the host at most once. On a TTY that single auth may be interactive (SSH
 # password or key passphrase); without a TTY (cron, ssh -T) it falls back to
 # BatchMode and requires key-based auth. The remote sudo password (system-wide mode)
 # is entered on a TTY via `ssh -t` over the same shared connection.
@@ -333,9 +333,10 @@ ${YELLOW}Options:${NC}
 ${YELLOW}Default:${NC} system-wide install to ${SYSTEM_TERMINFO_DIR} (all users incl. root)
   via a two-step temp-file + 'ssh -t' flow (may prompt for the remote sudo password).
 
-${YELLOW}Auth:${NC} connections are multiplexed over one SSH ControlMaster — you
-  authenticate at most once. Interactive auth (password/passphrase) works on a TTY;
-  non-interactive runs (cron, ssh -T) require key-based auth.
+${YELLOW}Auth:${NC} connections are multiplexed over one SSH ControlMaster, so you
+  authenticate to the host at most once. Interactive auth (password/passphrase) works
+  on a TTY; non-interactive runs (cron, ssh -T) require key-based auth. System-wide
+  mode also prompts once for the remote sudo password (see Default above).
 
 ${YELLOW}Exit codes:${NC} 0 OK | 64 usage | 68 no-host | 69 missing-tool | 70 install-failed
 EOF
@@ -375,22 +376,20 @@ open_ssh_master() {
     print_success "✓ Connected to ${host}"
 }
 
-# entry_present <host> <user_mode>  -> 0 if xterm-ghostty exists at the target scope.
-# Assumes the ncurses directory-tree DB layout (<dir>/<char>/xterm-ghostty), which
-# covers all standard targets (Debian/Ubuntu/RHEL/Fedora/Arch/macOS). A remote built
-# with hashed-DB ncurses (rare, opt-in) stores a single terminfo.db this glob can't
-# see: the install still succeeds, but both the pre-check skip and the post-install
-# verify miss it (verify then reports exit 70 despite success — confirm manually via
-# `ssh host infocmp xterm-ghostty`). --force does not change this. See the Design note.
+# entry_present <host> <user_mode>  -> 0 if xterm-ghostty resolves at the target scope.
+# Uses `infocmp -A <dir>` to scope the lookup to exactly <dir> (verified: no fallback to the
+# system db or $HOME/.terminfo), so it is layout-agnostic (directory-tree AND hashed
+# terminfo.db) and a per-user copy can't mask a missing system entry. Reuses infocmp, already
+# required by the remote preflight.
 entry_present() {
     local host="$1" user_mode="$2"
     if [[ "$user_mode" == true ]]; then
-        ssh "${SSH_OPTS[@]}" "$host" 'ls "$HOME"/.terminfo/*/'"${TERM_NAME}"' >/dev/null 2>&1'
+        ssh "${SSH_OPTS[@]}" "$host" 'infocmp -A "$HOME/.terminfo" -x '"${TERM_NAME}"' >/dev/null 2>&1'
     else
         # SYSTEM_TERMINFO_DIR/TERM_NAME are local readonly constants, intentionally
         # expanded client-side into the remote command string.
         # shellcheck disable=SC2029
-        ssh "${SSH_OPTS[@]}" "$host" "ls ${SYSTEM_TERMINFO_DIR}/*/${TERM_NAME} >/dev/null 2>&1"
+        ssh "${SSH_OPTS[@]}" "$host" "infocmp -A ${SYSTEM_TERMINFO_DIR} -x ${TERM_NAME} >/dev/null 2>&1"
     fi
 }
 
@@ -453,7 +452,7 @@ main() {
     sweep_stale_temps '~*.tmp.??????'
 
     if detect_download_cmd && [[ ${scriptUpdated:-0} -eq 0 ]]; then
-        self_update "${original_args[@]}" || true
+        self_update "${original_args[@]+"${original_args[@]}"}" || true
         echo ""
     fi
 
@@ -497,7 +496,7 @@ main() {
     [[ "$user_mode" == true ]] && scope_label="the login user only (~/.terminfo)"
 
     if [[ "$force" == false ]] && entry_present "$host" "$user_mode"; then
-        print_success "✓ ${TERM_NAME} already installed ${scope_label} on ${host} — use --force to reinstall"
+        print_success "- ${TERM_NAME} already installed ${scope_label} on ${host} — use --force to reinstall"
         exit 0
     fi
 
