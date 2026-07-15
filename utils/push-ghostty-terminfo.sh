@@ -128,16 +128,11 @@ cleanup() {
         rm -f "$f" 2>/dev/null
     done
     # Best-effort reap of the remote staging temp if we died between staging and
-    # the privileged compile. Reuse the master when it's up (no re-auth); BatchMode
-    # + ConnectTimeout so cleanup never blocks on a prompt.
+    # the privileged compile. Reuse the master (always up when a temp exists);
+    # BatchMode + ConnectTimeout so cleanup never blocks on a prompt.
     if [[ -n "$REMOTE_TMP" && -n "$REMOTE_CLEANUP_HOST" ]]; then
-        if [[ -n "$SSH_CTL" ]]; then
-            ssh -o BatchMode=yes -o ConnectTimeout=5 -o ControlPath="$SSH_CTL" \
-                "$REMOTE_CLEANUP_HOST" "rm -f '${REMOTE_TMP}'" 2>/dev/null || true
-        else
-            ssh -o BatchMode=yes -o ConnectTimeout=5 \
-                "$REMOTE_CLEANUP_HOST" "rm -f '${REMOTE_TMP}'" 2>/dev/null || true
-        fi
+        ssh -o BatchMode=yes -o ConnectTimeout=5 -o ControlPath="$SSH_CTL" \
+            "$REMOTE_CLEANUP_HOST" "rm -f '${REMOTE_TMP}'" 2>/dev/null || true
     fi
     # Close the SSH master and remove its private socket dir. ControlPersist=60 is
     # the backstop if this never runs (SIGKILL/power-loss).
