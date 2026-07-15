@@ -22,9 +22,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=utils-llm.sh
 source "${SCRIPT_DIR}/utils-llm.sh"
 
-# List of script files to download/update (excludes _download-ollama-scripts.sh)
+# List of script files to download/update (excludes _download-ollama-scripts.sh and utils-llm.sh)
 get_script_list() {
-    echo "utils-llm.sh"
     echo "ollama-remote.sh"
     echo "ollama-screen.sh"
 }

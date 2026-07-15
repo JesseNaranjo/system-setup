@@ -22,9 +22,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=utils-lxc.sh
 source "${SCRIPT_DIR}/utils-lxc.sh"
 
-# List of script files to download/update (excludes _download-lxc-scripts.sh)
+# List of script files to download/update (excludes _download-lxc-scripts.sh and utils-lxc.sh)
 get_script_list() {
-    echo "utils-lxc.sh"
     echo "backup-lxc.sh"
     echo "config-lxc-ssh.sh"
     echo "create-lxc.sh"
