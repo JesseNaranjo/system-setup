@@ -338,7 +338,7 @@ install_entry() {
 
     if [[ "$user_mode" == true ]]; then
         print_info "Installing ${TERM_NAME} for the login user on ${host} (~/.terminfo)..."
-        if ! printf '%s\n' "$ti" | ssh "$host" 'mkdir -p "$HOME/.terminfo" && tic -x -o "$HOME/.terminfo" -'; then
+        if ! printf '%s\n' "$ti" | ssh -o BatchMode=yes "$host" 'mkdir -p "$HOME/.terminfo" && tic -x -o "$HOME/.terminfo" -'; then
             print_error "✖ Per-user terminfo install failed on ${host}"
             exit 70
         fi
@@ -351,9 +351,7 @@ install_entry() {
     remote_uid="$(ssh -o BatchMode=yes "$host" 'id -u' 2>/dev/null || echo)"
     if [[ "$remote_uid" == "0" ]]; then
         print_info "Installing ${TERM_NAME} system-wide on ${host} (remote user is root)..."
-        # shellcheck disable=SC2029 # SYSTEM_TERMINFO_DIR is our local readonly
-        # constant, not a remote env var — client-side expansion is intentional.
-        if ! printf '%s\n' "$ti" | ssh "$host" "tic -x -o ${SYSTEM_TERMINFO_DIR} -"; then
+        if ! printf '%s\n' "$ti" | ssh -o BatchMode=yes "$host" "tic -x -o ${SYSTEM_TERMINFO_DIR} -"; then
             print_error "✖ System-wide terminfo install failed on ${host}"
             exit 70
         fi
@@ -363,7 +361,7 @@ install_entry() {
     # Non-root: (1) stage to a remote temp non-interactively, capturing its path;
     # (2) privileged compile on a TTY so sudo can prompt; (3) remove the temp.
     print_info "Staging terminfo on ${host}..."
-    if ! REMOTE_TMP="$(printf '%s\n' "$ti" | ssh "$host" \
+    if ! REMOTE_TMP="$(printf '%s\n' "$ti" | ssh -o BatchMode=yes "$host" \
         'f=$(mktemp "${TMPDIR:-/tmp}/ghostty-terminfo.XXXXXX") && cat >"$f" && printf %s "$f"')" \
         || [[ -z "$REMOTE_TMP" ]]; then
         print_error "✖ Failed to stage terminfo on ${host}"
