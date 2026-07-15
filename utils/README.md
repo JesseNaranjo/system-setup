@@ -10,6 +10,7 @@ Cross-platform utility scripts for system maintenance, file synchronization, and
 | `monitor-battery.sh` | Linux | Monitors battery percentage at regular intervals |
 | `dig-all.sh` | Linux/macOS | Queries all common DNS record types for one or more domains, with optional resolver override |
 | `services-check.sh` | Linux/macOS | Checks local service availability (installation + port health) |
+| `push-ghostty-terminfo.sh` | Linux/macOS | Installs the local xterm-ghostty terminfo on a remote SSH host (system-wide by default; `--user` for per-user) |
 | `disable-kvm-module.sh` | Linux | Disables the KVM kernel module |
 | `reset-macOS-display-settings.sh` | macOS | Resets macOS display configuration |
 | `compare-directories.ps1` | Windows | Compares two directory trees using PowerShell |
@@ -39,6 +40,15 @@ Cross-platform utility scripts for system maintenance, file synchronization, and
 
 # Watch specific services every 5 seconds
 ./services-check.sh --watch 5 redis postgresql
+
+# Install xterm-ghostty system-wide on a remote (all users incl. root)
+./push-ghostty-terminfo.sh user@host
+
+# Per-user only (no remote sudo)
+./push-ghostty-terminfo.sh --user user@host
+
+# Reinstall / update an existing entry
+./push-ghostty-terminfo.sh --force user@host
 ```
 
 ## Adding New Scripts
