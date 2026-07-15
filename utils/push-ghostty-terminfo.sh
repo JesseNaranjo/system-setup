@@ -362,7 +362,7 @@ install_entry() {
     # (2) privileged compile on a TTY so sudo can prompt; (3) remove the temp.
     print_info "Staging terminfo on ${host}..."
     if ! REMOTE_TMP="$(printf '%s\n' "$ti" | ssh -o BatchMode=yes "$host" \
-        'f=$(mktemp "${TMPDIR:-/tmp}/ghostty-terminfo.XXXXXX") && cat >"$f" && printf %s "$f"')" \
+        'f=$(mktemp "${TMPDIR:-/tmp}/ghostty-terminfo.XXXXXX") && { cat >"$f" && printf %s "$f" || { rm -f "$f"; exit 1; }; }')" \
         || [[ -z "$REMOTE_TMP" ]]; then
         print_error "✖ Failed to stage terminfo on ${host}"
         exit 70
