@@ -9,6 +9,7 @@ features as of that date; earlier history is not individually recorded.
 ### Fixed
 - Self-update diff preview on macOS — the diff shown before a script self-updates now feature-detects `diff --color` (GNU diff supports it, BSD/macOS diff does not), fixing a silently-empty preview box on macOS. Applied to every copy of the shared `show_diff_box` helper.
 - Shell-helper robustness (repo-wide) — hardened the duplicated `cleanup`, `sweep_stale_temps`, `self_update`, and `print_warning_box` helpers against EXIT-trap exit-code clobbering, a rare `set -e` abort during temp cleanup, an unreachable post-`exec` statement, and leaked function-local variables.
+- **Sourced `utils-*.sh` libraries no longer get the executable bit on self-update (repo-wide).** `check_for_updates()` installed the downloaded utils library with `chmod +x` in its "Check utils file" branch — the same path as the executable caller — so every accepted update marked the sourced library executable. The utils branch now installs with `chmod 644` in all four copies (`system-setup/utils-sys.sh`, `kubernetes/utils-k8s.sh`, `llm/utils-llm.sh`, `lxc/utils-lxc.sh`); the caller branch keeps `chmod +x`. Also removed the utils entry from `llm/_download-ollama-scripts.sh` and `lxc/_download-lxc-scripts.sh` `get_script_list()` (their `update_modules` loop was a second `chmod +x` site), matching the other orchestrators; the library is still updated by `check_for_updates`. Restored the three drifted library files to mode `100644`.
 
 ## [2026-07-14]
 
