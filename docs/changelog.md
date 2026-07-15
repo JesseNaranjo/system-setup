@@ -4,6 +4,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), date-based, ne
 This changelog begins 2026-07-06. Entries below capture the project's major
 features as of that date; earlier history is not individually recorded.
 
+## [2026-07-15]
+
+### Fixed
+- Self-update diff preview on macOS — the diff shown before a script self-updates now feature-detects `diff --color` (GNU diff supports it, BSD/macOS diff does not), fixing a silently-empty preview box on macOS. Applied to every copy of the shared `show_diff_box` helper.
+- Shell-helper robustness (repo-wide) — hardened the duplicated `cleanup`, `sweep_stale_temps`, `self_update`, and `print_warning_box` helpers against EXIT-trap exit-code clobbering, a rare `set -e` abort during temp cleanup, an unreachable post-`exec` statement, and leaked function-local variables.
+
 ## [2026-07-14]
 
 ### Added
