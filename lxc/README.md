@@ -286,7 +286,7 @@ Self-updating script manager:
 
 Individual scripts self-update when run directly via `check_for_updates()`. This checks for updates to both `utils-lxc.sh` and the calling script, showing diffs and prompting before overwriting. Scripts that are sourced (not executed directly) skip the update check.
 
-`utils-lxc.sh` must be present in the same directory as the scripts. It is downloaded automatically by `_download-lxc-scripts.sh`.
+`utils-lxc.sh` must be present in the same directory as the scripts; it is kept current via `check_for_updates()` (above), not by the `_download-lxc-scripts.sh` download manifest.
 
 ## Architecture
 
