@@ -9,8 +9,11 @@
 # (/usr/share/terminfo, via remote sudo) so all users incl. root/su resolve it;
 # --user installs to the login user's ~/.terminfo (no sudo).
 #
-# Requires non-interactive (key-based) SSH auth. The only interactive step is the
-# remote sudo password (system-wide mode), entered on a TTY via `ssh -t`.
+# All per-run SSH connections are multiplexed over one ControlMaster socket, so you
+# authenticate at most once. On a TTY that single auth may be interactive (SSH
+# password or key passphrase); without a TTY (cron, ssh -T) it falls back to
+# BatchMode and requires key-based auth. The remote sudo password (system-wide mode)
+# is entered on a TTY via `ssh -t` over the same shared connection.
 #
 # Exit codes (sysexits.h, per .ai/AI-AGENT-INSTRUCTIONS.md § standalone conventions):
 #   0 OK | 64 EX_USAGE (bad args) | 68 EX_NOHOST (cannot connect)
@@ -43,6 +46,9 @@ readonly SCRIPT_DIR
 TEMP_FILES=()
 REMOTE_TMP=""            # remote staging temp (system-wide mode); cleaned by trap
 REMOTE_CLEANUP_HOST=""   # host to reach for remote temp cleanup
+CTL_DIR=""               # private dir holding the SSH ControlMaster socket (rm'd by cleanup)
+SSH_CTL=""               # ControlPath (socket) for connection multiplexing
+SSH_OPTS=()              # ssh opts for every REUSE call; set by open_ssh_master once the master is up
 
 # ============================================================================
 # Standard Output Functions
@@ -122,10 +128,30 @@ cleanup() {
         rm -f "$f" 2>/dev/null
     done
     # Best-effort reap of the remote staging temp if we died between staging and
-    # the privileged compile. BatchMode so cleanup never blocks on a prompt.
+    # the privileged compile. Reuse the master when it's up (no re-auth); BatchMode
+    # + ConnectTimeout so cleanup never blocks on a prompt.
     if [[ -n "$REMOTE_TMP" && -n "$REMOTE_CLEANUP_HOST" ]]; then
-        ssh -o BatchMode=yes -o ConnectTimeout=5 "$REMOTE_CLEANUP_HOST" \
-            "rm -f '${REMOTE_TMP}'" 2>/dev/null || true
+        if [[ -n "$SSH_CTL" ]]; then
+            ssh -o BatchMode=yes -o ConnectTimeout=5 -o ControlPath="$SSH_CTL" \
+                "$REMOTE_CLEANUP_HOST" "rm -f '${REMOTE_TMP}'" 2>/dev/null || true
+        else
+            ssh -o BatchMode=yes -o ConnectTimeout=5 \
+                "$REMOTE_CLEANUP_HOST" "rm -f '${REMOTE_TMP}'" 2>/dev/null || true
+        fi
+    fi
+    # Close the SSH master and remove its private socket dir. ControlPersist=60 is
+    # the backstop if this never runs (SIGKILL/power-loss).
+    if [[ -n "$SSH_CTL" && -S "$SSH_CTL" ]]; then
+        ssh -o ControlPath="$SSH_CTL" -O exit "$REMOTE_CLEANUP_HOST" 2>/dev/null || true
+    fi
+    # `if/fi` (not bare `[[ ]] &&`), always paired with `|| true`: this is the EXIT
+    # trap, so its own exit status becomes the script's exit status unless it's 0
+    # (bash preserves the original `exit N` only when the trap's last command
+    # succeeds). A bare `&&` here would silently clobber every exit code (0/64/etc.)
+    # to 1 whenever CTL_DIR is unset (e.g. --help, bad args — before
+    # open_ssh_master ever runs).
+    if [[ -n "$CTL_DIR" ]]; then
+        rm -rf "$CTL_DIR" 2>/dev/null || true
     fi
 }
 trap cleanup EXIT
@@ -312,8 +338,46 @@ ${YELLOW}Options:${NC}
 ${YELLOW}Default:${NC} system-wide install to ${SYSTEM_TERMINFO_DIR} (all users incl. root)
   via a two-step temp-file + 'ssh -t' flow (may prompt for the remote sudo password).
 
+${YELLOW}Auth:${NC} connections are multiplexed over one SSH ControlMaster — you
+  authenticate at most once. Interactive auth (password/passphrase) works on a TTY;
+  non-interactive runs (cron, ssh -T) require key-based auth.
+
 ${YELLOW}Exit codes:${NC} 0 OK | 64 usage | 68 no-host | 69 missing-tool | 70 install-failed
 EOF
+}
+
+# open_ssh_master <host>  -> establish a multiplexed SSH master connection.
+# Sets CTL_DIR, SSH_CTL, SSH_OPTS. This IS the connectivity + auth gate: on a TTY
+# it allows ONE interactive prompt (SSH password or key passphrase) that every
+# later connection then shares; without a TTY (cron, ssh -T, setsid) it uses
+# BatchMode and fails cleanly if key auth isn't set up. `-f` backgrounds the master
+# AFTER auth (ssh(1)), so a prompt shows in the foreground first. Fatal on failure.
+open_ssh_master() {
+    local host="$1"
+    CTL_DIR="$(mktemp -d "${TMPDIR:-/tmp}/pgt-ssh.XXXXXX")"
+    SSH_CTL="${CTL_DIR}/cm.sock"
+
+    # No openable TTY -> require non-interactive (key) auth so we never hang a
+    # cron/ssh -T run on a password prompt. Same open(2) probe as prompt_yes_no.
+    local batch=()
+    if ! { : </dev/tty; } 2>/dev/null; then
+        batch=(-o BatchMode=yes)
+    fi
+
+    print_info "Connecting to ${host}..."
+    if ! ssh "${batch[@]+"${batch[@]}"}" \
+        -o ControlMaster=yes -o ControlPath="$SSH_CTL" \
+        -o ControlPersist=60 -o ConnectTimeout=10 -fN "$host"; then
+        print_error "✖ Cannot establish an SSH connection to ${host}"
+        print_info "Verify the host is reachable and your SSH credentials are valid."
+        print_info "Non-interactive runs (cron, ssh -T) require key-based auth."
+        exit 68
+    fi
+
+    # Every later connection reuses the now-authenticated master. BatchMode is a
+    # safety net: if the master died, reuse calls fail cleanly instead of prompting.
+    SSH_OPTS=(-o BatchMode=yes -o ControlPath="$SSH_CTL")
+    print_success "✓ Connected to ${host}"
 }
 
 # entry_present <host> <user_mode>  -> 0 if xterm-ghostty exists at the target scope.
@@ -326,9 +390,12 @@ EOF
 entry_present() {
     local host="$1" user_mode="$2"
     if [[ "$user_mode" == true ]]; then
-        ssh -o BatchMode=yes "$host" 'ls "$HOME"/.terminfo/*/'"${TERM_NAME}"' >/dev/null 2>&1'
+        ssh "${SSH_OPTS[@]}" "$host" 'ls "$HOME"/.terminfo/*/'"${TERM_NAME}"' >/dev/null 2>&1'
     else
-        ssh -o BatchMode=yes "$host" "ls ${SYSTEM_TERMINFO_DIR}/*/${TERM_NAME} >/dev/null 2>&1"
+        # SYSTEM_TERMINFO_DIR/TERM_NAME are local readonly constants, intentionally
+        # expanded client-side into the remote command string.
+        # shellcheck disable=SC2029
+        ssh "${SSH_OPTS[@]}" "$host" "ls ${SYSTEM_TERMINFO_DIR}/*/${TERM_NAME} >/dev/null 2>&1"
     fi
 }
 
@@ -338,7 +405,7 @@ install_entry() {
 
     if [[ "$user_mode" == true ]]; then
         print_info "Installing ${TERM_NAME} for the login user on ${host} (~/.terminfo)..."
-        if ! printf '%s\n' "$ti" | ssh -o BatchMode=yes "$host" 'mkdir -p "$HOME/.terminfo" && tic -x -o "$HOME/.terminfo" -'; then
+        if ! printf '%s\n' "$ti" | ssh "${SSH_OPTS[@]}" "$host" 'mkdir -p "$HOME/.terminfo" && tic -x -o "$HOME/.terminfo" -'; then
             print_error "✖ Per-user terminfo install failed on ${host}"
             exit 70
         fi
@@ -348,10 +415,13 @@ install_entry() {
     # System-wide. If the remote login user is already root, write the system dir
     # directly — no sudo (may be absent on minimal images), no TTY needed.
     local remote_uid
-    remote_uid="$(ssh -o BatchMode=yes "$host" 'id -u' 2>/dev/null || echo)"
+    remote_uid="$(ssh "${SSH_OPTS[@]}" "$host" 'id -u' 2>/dev/null || echo)"
     if [[ "$remote_uid" == "0" ]]; then
         print_info "Installing ${TERM_NAME} system-wide on ${host} (remote user is root)..."
-        if ! printf '%s\n' "$ti" | ssh -o BatchMode=yes "$host" "tic -x -o ${SYSTEM_TERMINFO_DIR} -"; then
+        # SYSTEM_TERMINFO_DIR is a local readonly constant, intentionally expanded
+        # client-side into the remote command string.
+        # shellcheck disable=SC2029
+        if ! printf '%s\n' "$ti" | ssh "${SSH_OPTS[@]}" "$host" "tic -x -o ${SYSTEM_TERMINFO_DIR} -"; then
             print_error "✖ System-wide terminfo install failed on ${host}"
             exit 70
         fi
@@ -361,7 +431,7 @@ install_entry() {
     # Non-root: (1) stage to a remote temp non-interactively, capturing its path;
     # (2) privileged compile on a TTY so sudo can prompt; (3) remove the temp.
     print_info "Staging terminfo on ${host}..."
-    if ! REMOTE_TMP="$(printf '%s\n' "$ti" | ssh -o BatchMode=yes "$host" \
+    if ! REMOTE_TMP="$(printf '%s\n' "$ti" | ssh "${SSH_OPTS[@]}" "$host" \
         'f=$(mktemp "${TMPDIR:-/tmp}/ghostty-terminfo.XXXXXX") && { cat >"$f" && printf %s "$f" || { rm -f "$f"; exit 1; }; }')" \
         || [[ -z "$REMOTE_TMP" ]]; then
         print_error "✖ Failed to stage terminfo on ${host}"
@@ -369,7 +439,7 @@ install_entry() {
     fi
 
     print_info "Installing system-wide (may prompt for the sudo password on ${host})..."
-    if ! ssh -t "$host" "sudo tic -x -o ${SYSTEM_TERMINFO_DIR} '${REMOTE_TMP}'; rc=\$?; rm -f '${REMOTE_TMP}'; exit \$rc"; then
+    if ! ssh -t "${SSH_OPTS[@]}" "$host" "sudo tic -x -o ${SYSTEM_TERMINFO_DIR} '${REMOTE_TMP}'; rc=\$?; rm -f '${REMOTE_TMP}'; exit \$rc"; then
         print_error "✖ System-wide terminfo install failed on ${host}"
         exit 70     # trap best-effort removes REMOTE_TMP
     fi
@@ -420,15 +490,9 @@ main() {
         exit 69
     fi
 
-    print_info "Validating connectivity to ${host}..."
-    if ! ssh -o BatchMode=yes -o ConnectTimeout=10 "$host" exit 2>/dev/null; then
-        print_error "✖ Cannot connect to ${host} non-interactively"
-        print_info "Requires key-based SSH auth. Verify: keys configured, host reachable."
-        exit 68
-    fi
-    print_success "✓ Connected to ${host}"
+    open_ssh_master "$host"
 
-    if ! ssh -o BatchMode=yes -o ConnectTimeout=10 "$host" \
+    if ! ssh "${SSH_OPTS[@]}" "$host" \
         'command -v tic >/dev/null 2>&1 && command -v infocmp >/dev/null 2>&1'; then
         print_error "✖ ${host} lacks 'tic'/'infocmp' — install ncurses (Debian/Ubuntu: ncurses-bin)"
         exit 69
