@@ -2535,13 +2535,15 @@ The two `mktemp` sites use the two Pattern E variants:
 # Utils file temp (utils path always known via _UTILS_DIR):
 temp_file=$(mktemp "${_UTILS_DIR}/~${utils_basename}.tmp.XXXXXX")
 TEMP_FILES+=("$temp_file")
-# ... download_script + show_diff_box + prompt_yes_no + Pattern D mv ...
+# ... download_script + show_diff_box + prompt_yes_no + chmod 644 (sourced lib) + Pattern D mv ...
 
 # Caller script temp (caller_script is an absolute path):
 temp_file=$(mktemp "${caller_script%/*}/~${caller_script##*/}.tmp.XXXXXX")
 TEMP_FILES+=("$temp_file")
-# ... download_script + show_diff_box + prompt_yes_no + Pattern D mv ...
+# ... download_script + show_diff_box + prompt_yes_no + chmod +x (executable) + Pattern D mv ...
 ```
+
+The install step sets the mode explicitly: the utils-file branch uses `chmod 644` (a sourced library, never executed directly); the caller branch uses `chmod +x` (an executable script). This is the only substantive difference between the two branches — do not copy `chmod +x` into the utils branch.
 
 Each non-success branch (download fail, no-diff, user decline, mv fail) carries its own `rm -f "$temp_file"` per [Layer 1 of the cleanup architecture](#defense-in-depth-cleanup). When the success branch runs, `mv` consumes the temp and no `rm` is needed.
 
