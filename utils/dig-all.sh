@@ -15,14 +15,13 @@
 #   -h, --help         Show this help and exit.
 
 set -euo pipefail
+[[ "${TRACE-0}" == "1" ]] && set -o xtrace
 
-readonly BLUE='\033[0;34m'
-readonly CYAN='\033[0;36m'
-readonly GRAY='\033[0;90m'
-readonly GREEN='\033[0;32m'
-readonly RED='\033[0;31m'
-readonly YELLOW='\033[1;33m'
-readonly NC='\033[0m'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+
+# shellcheck source=utils-misc.sh
+source "${SCRIPT_DIR}/utils-misc.sh"
 
 readonly RECORD_TYPES=(A AAAA CNAME MX NS SOA TXT SRV CAA PTR DNSKEY DS NAPTR SPF TLSA SSHFP)
 
@@ -47,15 +46,6 @@ declare -A RECORD_DESCRIPTIONS=(
 readonly RECORD_DESCRIPTIONS
 
 declare -gA COUNTS_BY_TYPE=()
-
-# ============================================================================
-# Standard Output Functions
-# ============================================================================
-
-print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
-print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
-print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
 
 # ============================================================================
 # Usage
@@ -193,6 +183,15 @@ render_summary_table() {
 # ============================================================================
 
 main() {
+    local a
+    for a in "$@"; do
+        [[ "$a" == "-h" || "$a" == "--help" ]] && { show_usage; exit 0; }
+    done
+    [[ $# -eq 0 ]] && { show_usage; exit 0; }
+
+    sweep_stale_temps '~*.tmp.??????'
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
+
     local resolver=""
     local domains=()
 
