@@ -2,33 +2,27 @@
 
 # services-check.sh - Check availability of local services
 #
-# Usage: ./services-check.sh [--watch [seconds]] [service ...]
+# Usage: ./services-check.sh [--watch [seconds]] [-h|--help] [service ...]
 #
 # Checks if services are installed (binary or systemd detection) and whether
 # their ports are responding. With no arguments, checks all installed services.
 # With arguments, checks only the named services (case-insensitive).
 #
 # Options:
-#   --watch [N]  Continuously monitor services, refreshing every N seconds
-#                (default: 10). Press Ctrl+C to stop.
+#   --watch [N]    Continuously monitor services, refreshing every N seconds
+#                  (default: 10). Press Ctrl+C to stop.
+#   -h, --help     Show this help and exit.
 
 set -euo pipefail
+[[ "${TRACE-0}" == "1" ]] && set -o xtrace
 
-readonly BLUE='\033[0;34m'
-readonly CYAN='\033[0;36m'
-readonly GRAY='\033[0;90m'
-readonly GREEN='\033[0;32m'
-readonly RED='\033[0;31m'
-readonly YELLOW='\033[1;33m'
-readonly NC='\033[0m'
-
-readonly TIMEOUT=2
-
-# Self-update configuration
-readonly REMOTE_BASE="https://raw.githubusercontent.com/JesseNaranjo/system-setup/refs/heads/main/utils"
-DOWNLOAD_CMD=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
+
+# shellcheck source=utils-misc.sh
+source "${SCRIPT_DIR}/utils-misc.sh"
+
+readonly TIMEOUT=2
 
 # Service definitions: "DisplayName:server_binary:port:systemd_unit"
 # - DisplayName: Human-readable name (used for output and argument matching)
@@ -50,258 +44,6 @@ readonly SERVICES=(
     "Redis:redis-server:6379:redis-server"
     "Valkey:valkey-server:6379:valkey-server"
 )
-
-# ============================================================================
-# Standard Output Functions
-# ============================================================================
-
-print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
-print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
-print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
-
-# Usage: print_warning_box "line1" "line2" "line3" ...
-print_warning_box() {
-    local box_width=77
-    local padding=8
-    local content_width=$((box_width - padding - 1))
-
-    echo ""
-    echo -e "            ${YELLOW}╔$(printf '═%.0s' $(seq 1 $box_width))╗${NC}"
-    echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
-
-    local line padded_line
-    for line in "$@"; do
-        local line_len=${#line}
-        local right_pad=$((content_width - line_len))
-        if [[ $right_pad -lt 0 ]]; then
-            right_pad=0
-            line="${line:0:$content_width}"
-        fi
-        printf -v padded_line "%-${content_width}s" "$line"
-        echo -e "            ${YELLOW}║        ${padded_line}║${NC}"
-    done
-
-    echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
-    echo -e "            ${YELLOW}╚$(printf '═%.0s' $(seq 1 $box_width))╝${NC}"
-    echo ""
-}
-
-# ============================================================================
-# Utility Functions
-# ============================================================================
-
-# Prompt user for yes/no confirmation
-# Usage: prompt_yes_no "message" [default]
-#   default: "y" or "n" (optional, defaults to "n")
-# Returns: 0 for yes, 1 for no
-prompt_yes_no() {
-    local prompt_message="$1"
-    local default="${2:-n}"
-    local prompt_suffix
-    local user_reply
-
-    # Non-interactive context (cron, systemd, ssh -T, CI, setsid): signal "no"
-    # rather than fall through to the empty-reply branch and silently auto-accept
-    # the default. Use the `{ : </dev/tty; }` open(2) probe, NOT `[[ -r /dev/tty ]]`
-    # — the latter only checks permissions and stays true under setsid while
-    # open() fails with ENXIO, so the read below would then misbehave.
-    { : </dev/tty; } 2>/dev/null || return 1
-
-    if [[ "${default,,}" == "y" ]]; then
-        prompt_suffix="(Y/n)"
-    else
-        prompt_suffix="(y/N)"
-    fi
-
-    read -p "$prompt_message $prompt_suffix: " -r user_reply </dev/tty
-
-    if [[ -z "$user_reply" ]]; then
-        [[ "${default,,}" == "y" ]]
-    else
-        [[ $user_reply =~ ^[Yy]$ ]]
-    fi
-}
-
-TEMP_FILES=()
-
-# cleanup runs on normal exit, SIGINT, SIGTERM. Hoisted to file scope so the
-# trap is wired the moment the script is loaded — a top-level guard that exits
-# before main still reaps tracked temps.
-cleanup() {
-    local f
-    for f in "${TEMP_FILES[@]+"${TEMP_FILES[@]}"}"; do
-        rm -f "$f" 2>/dev/null || true
-    done
-}
-trap cleanup EXIT
-
-# Defense-in-depth: at startup, reap any same-FS temp files (e.g., from a
-# prior SIGKILL / power-loss / interrupted self-update) older than a normal
-# run window. The EXIT trap above handles in-flight cleanup; this function
-# handles what the trap couldn't fire for. TTY-aware so cron/ssh -T runs
-# don't block on the prompt.
-sweep_stale_temps() {
-    local pattern="$1"
-    local stale_files=()
-    while IFS= read -r -d '' f; do
-        stale_files+=("$f")
-    done < <(find "$SCRIPT_DIR" -maxdepth 1 -name "$pattern" -type f -mmin +10 -print0 2>/dev/null)
-
-    [[ ${#stale_files[@]} -eq 0 ]] && return 0
-
-    print_warning "⚠ Found ${#stale_files[@]} stale temp file(s) from a prior interrupted run:"
-    for f in "${stale_files[@]}"; do
-        print_warning "  - $f"
-    done
-
-    # `[[ -r /dev/tty ]]` only checks file permissions; under setsid the device
-    # is world-readable but `open(2)` fails with ENXIO, so a subsequent
-    # `read </dev/tty` aborts under set -e. Probe with a no-op stdin redirect
-    # to detect actual openability.
-    if { : </dev/tty; } 2>/dev/null; then
-        # `|| true` swallows EOF (Ctrl+D) so set -e doesn't abort mid-cleanup.
-        read -p "Press any key to delete and continue, Ctrl+C to abort: " -n 1 -r </dev/tty || true
-        echo ""
-    else
-        print_warning "⚠ Non-interactive context — deleting and continuing without prompt."
-    fi
-
-    for f in "${stale_files[@]}"; do
-        rm -f "$f" || true
-    done
-    print_success "✓ Cleaned up ${#stale_files[@]} stale temp file(s)"
-}
-
-# Render a unified diff between two files inside a labeled box. Pages through
-# `less -RFX` when stdout is a TTY (-R passes ANSI through, -F exits if content
-# fits one screen, -X skips alt-screen so output stays in scrollback); falls
-# back to inline `diff` when piped or `less` is missing. `--color=always`
-# forces ANSI even when piped.
-show_diff_box() {
-    local local_file="$1"
-    local temp_file="$2"
-    local label="$3"
-    echo ""
-    echo -e "${CYAN}╭────────────────────── Δ detected in ${label} ──────────────────────╮${NC}"
-    # GNU diff supports --color; BSD/macOS diff does not. Detect support once so the
-    # preview still renders on macOS instead of erroring into an empty box.
-    local diff_color=()
-    diff --color=always /dev/null /dev/null >/dev/null 2>&1 && diff_color=(--color=always)
-    if [[ -t 1 ]] && command -v less &>/dev/null; then
-        diff -u "${diff_color[@]+"${diff_color[@]}"}" "${local_file}" "${temp_file}" | less -RFX || true
-    else
-        diff -u "${diff_color[@]+"${diff_color[@]}"}" "${local_file}" "${temp_file}" || true
-    fi
-    echo -e "${CYAN}╰─────────────────────────── ${label} ──────────────────────────────╯${NC}"
-    echo ""
-}
-
-# ============================================================================
-# Self-Update Functionality
-# ============================================================================
-
-detect_download_cmd() {
-    if command -v curl &>/dev/null; then
-        DOWNLOAD_CMD="curl"
-        return 0
-    elif command -v wget &>/dev/null; then
-        DOWNLOAD_CMD="wget"
-        return 0
-    else
-        DOWNLOAD_CMD=""
-        print_warning_box \
-            "UPDATES NOT AVAILABLE" \
-            "" \
-            "Neither 'curl' nor 'wget' is installed on this system." \
-            "Self-updating functionality requires one of these tools."
-        return 1
-    fi
-}
-
-download_script() {
-    local script_file="$1"
-    local output_file="$2"
-    local http_status=""
-
-    print_info "Fetching ${script_file}..."
-    print_info "  → ${REMOTE_BASE}/${script_file}"
-
-    if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-        http_status=$(curl -H 'Cache-Control: no-cache, no-store' \
-            --max-time 15 \
-            -o "${output_file}" -w "%{http_code}" -sSL \
-            "${REMOTE_BASE}/${script_file}" 2>/dev/null || true)
-        [[ -z "$http_status" ]] && http_status="000"
-        case "$http_status" in
-            200) ;;
-            429) print_error "✖ Rate limited by GitHub (HTTP 429)"; rm -f "${output_file}"; return 1 ;;
-            000) print_error "✖ Download failed (network/timeout)"; rm -f "${output_file}"; return 1 ;;
-            *)   print_error "✖ HTTP ${http_status} error"; rm -f "${output_file}"; return 1 ;;
-        esac
-        if head -n 10 "${output_file}" | grep -q "^#!/"; then
-            return 0
-        else
-            print_error "✖ Invalid content received (not a script)"
-            rm -f "${output_file}"
-            return 1
-        fi
-    elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
-        local wget_exit=0
-        wget --no-cache --no-cookies \
-            --timeout=15 \
-            -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null \
-            || wget_exit=$?
-        [[ "$wget_exit" -ne 0 ]] && { print_error "✖ Download failed (wget exit ${wget_exit})"; rm -f "${output_file}"; return 1; }
-        if head -n 10 "${output_file}" | grep -q "^#!/"; then
-            return 0
-        else
-            print_error "✖ Invalid content received (not a script)"
-            rm -f "${output_file}"
-            return 1
-        fi
-    fi
-
-    return 1
-}
-
-self_update() {
-    local SCRIPT_FILE="services-check.sh"
-    local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
-    local TEMP_SCRIPT_FILE
-    TEMP_SCRIPT_FILE=$(mktemp "${SCRIPT_DIR}/~${SCRIPT_FILE}.tmp.XXXXXX")
-    TEMP_FILES+=("$TEMP_SCRIPT_FILE")
-
-    if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
-        rm -f "$TEMP_SCRIPT_FILE"
-        return 1
-    fi
-
-    if diff -q "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" > /dev/null 2>&1; then
-        print_success "- Script is already up-to-date"
-        rm -f "$TEMP_SCRIPT_FILE"
-        return 0
-    fi
-
-    show_diff_box "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" "${SCRIPT_FILE}"
-
-    if prompt_yes_no "→ Overwrite and restart with updated ${SCRIPT_FILE}?" "y"; then
-        chmod +x "${TEMP_SCRIPT_FILE}"
-        if ! mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"; then
-            rm -f "$TEMP_SCRIPT_FILE"
-            print_error "✖ Failed to install update — keeping local version"
-            return 1
-        fi
-        print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
-        echo ""
-        export scriptUpdated=1
-        exec "${LOCAL_SCRIPT}" "$@"
-    else
-        rm -f "$TEMP_SCRIPT_FILE"
-        print_warning "⚠ Skipped update - continuing with local version"
-    fi
-    echo ""
-}
 
 # ============================================================================
 # Port Check Functions
@@ -496,6 +238,24 @@ validate_filters() {
     [[ "$has_unknown" == false ]]
 }
 
+# ============================================================================
+# Usage
+# ============================================================================
+
+show_usage() { cat <<EOF
+Usage: ${0##*/} [--watch [seconds]] [-h|--help] [service ...]
+
+Checks if services are installed (binary or systemd detection) and whether
+their ports are responding. With no arguments, checks all installed services.
+With arguments, checks only the named services (case-insensitive).
+
+Options:
+  --watch [N]    Continuously monitor services, refreshing every N seconds
+                 (default: 10). Press Ctrl+C to stop.
+  -h, --help     Show this help and exit.
+EOF
+}
+
 watch_services() {
     local interval="$1"
     shift
@@ -524,7 +284,14 @@ watch_services() {
 }
 
 main() {
-    local original_args=("$@")
+    local a
+    for a in "$@"; do
+        [[ "$a" == "-h" || "$a" == "--help" ]] && { show_usage; exit 0; }
+    done
+
+    sweep_stale_temps '~*.tmp.??????'
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
+
     local watch_mode=false
     local watch_interval=10
     local filters=()
@@ -548,16 +315,6 @@ main() {
 
     # Enforce minimum watch interval to prevent busy loops
     [[ "$watch_interval" -lt 1 ]] && watch_interval=1
-
-    # Defense-in-depth: reap stale atomic-rename temps from prior interrupted
-    # runs. Catch-all glob covers any ~*.tmp.?????? in $SCRIPT_DIR.
-    sweep_stale_temps '~*.tmp.??????'
-
-    # Self-update check
-    if detect_download_cmd && [[ ${scriptUpdated:-0} -eq 0 ]]; then
-        self_update "${original_args[@]}" || true
-        echo ""
-    fi
 
     detect_port_checker
     detect_systemctl
