@@ -16,28 +16,23 @@
 # Exit codes: 0 OK | 1 usage error | 2 rsync error | 3 connectivity error
 
 set -euo pipefail
+[[ "${TRACE-0}" == "1" ]] && set -o xtrace
 
-# Colors for output
-readonly BLUE='\033[0;34m'
-readonly CYAN='\033[0;36m' # Cyan for lines/borders
-readonly GRAY='\033[0;90m'
-readonly GREEN='\033[0;32m'
-readonly RED='\033[0;31m'
-readonly YELLOW='\033[1;33m'
-readonly NC='\033[0m' # No Color
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+
+# shellcheck source=utils-misc.sh
+source "${SCRIPT_DIR}/utils-misc.sh"
 
 # Script metadata
-readonly SCRIPT_NAME="$(basename "$0")"
-readonly SCRIPT_VERSION="1.0.0"
-readonly STAMP=$(date +%F_%H-%M-%S)
+SCRIPT_NAME="$(basename "$0")"
+readonly SCRIPT_NAME
+STAMP="$(date +%F_%H-%M-%S)"
+readonly STAMP
 readonly LOG_FILE="${HOME}/.rsync-two-way.log"
 
-# Print colored output
-print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
-print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
-print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
-
+# Referenced by show_usage/log below (both defined outside main()), so it
+# must stay a top-level global — not something main() can localize.
 print_section() {
     echo -e "${CYAN}╭────────────────────────────────────────────────────────────────────────╮${NC}"
     echo -e "${CYAN}│${NC} $1"
@@ -49,45 +44,10 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"
 }
 
-# Prompt user for yes/no confirmation
-# Usage: prompt_yes_no "message" [default]
-#   default: "y" or "n" (optional, defaults to "n")
-# Returns: 0 for yes, 1 for no
-prompt_yes_no() {
-    local prompt_message="$1"
-    local default="${2:-n}"
-    local prompt_suffix
-    local user_reply
-
-    # Non-interactive context (cron, systemd, ssh -T, CI, setsid): signal "no"
-    # rather than fall through to the empty-reply branch and silently auto-accept
-    # the default. Use the `{ : </dev/tty; }` open(2) probe, NOT `[[ -r /dev/tty ]]`
-    # — the latter only checks permissions and stays true under setsid while
-    # open() fails with ENXIO, so the read below would then misbehave.
-    { : </dev/tty; } 2>/dev/null || return 1
-
-    # Set the prompt suffix based on default
-    if [[ "${default,,}" == "y" ]]; then
-        prompt_suffix="(Y/n)"
-    else
-        prompt_suffix="(y/N)"
-    fi
-
-    # Read from /dev/tty to work correctly in while-read loops
-    read -p "$prompt_message $prompt_suffix: " -r user_reply </dev/tty
-
-    # If user just pressed Enter (empty reply), use default
-    if [[ -z "$user_reply" ]]; then
-        [[ "${default,,}" == "y" ]]
-    else
-        [[ $user_reply =~ ^[Yy]$ ]]
-    fi
-}
-
 # Show usage information
 show_usage() {
     cat << EOF
-${GREEN}${SCRIPT_NAME}${NC} v${SCRIPT_VERSION} - Bidirectional rsync synchronization
+${GREEN}${SCRIPT_NAME}${NC} - Bidirectional rsync synchronization
 
 ${YELLOW}Usage:${NC}
   $SCRIPT_NAME LOCAL_DIR REMOTE_SPEC
@@ -120,178 +80,190 @@ ${YELLOW}Exit Codes:${NC}
 EOF
 }
 
-# Validate arguments
-if [[ $# -eq 0 ]] || [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
-    show_usage
-    exit 0
-fi
+main() {
+    # Help fast-path — before any network/self-update work. Preserves the
+    # original "no args -> usage, exit 0" behavior.
+    if [[ $# -eq 0 ]] || [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
+        show_usage
+        exit 0
+    fi
 
-if [[ $# -ne 2 ]]; then
-    print_error "✖ Invalid number of arguments"
+    sweep_stale_temps '~*.tmp.??????'
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
+
+    if [[ $# -ne 2 ]]; then
+        print_error "✖ Invalid number of arguments"
+        echo ""
+        show_usage
+        exit 1
+    fi
+
+    local LOCAL="$1"             # e.g. /srv/share/
+    local REMOTE="$2"            # e.g. alice@backup.example.com:/srv/share/
+
+    # Configuration
+    local ENABLE_BACKUPS=false  # Set to true to enable backup-dir functionality
+
+    # Patterns you never want to copy
+    local EXCLUDES=(
+      ".DS_Store"
+      "Thumbs.db"
+      ".Spotlight-V100"
+      ".Trashes"
+      ".TemporaryItems"
+      ".fseventsd"
+      "desktop.ini"
+      # ".git/"              # Uncomment to exclude Git repositories
+      ".svn/"
+      ".~lock.*"
+      "*.swp"
+      "*.tmp"
+      "*~"
+    )
+
+    # Core rsync switches (see man rsync)
+    local OPTS=(
+      --archive           # -a: recurse; preserve mode, owner, times, links…
+      --verbose           # -v: verbose output
+      --human-readable    # -h: human-readable numbers
+      --hard-links        # preserve hard links
+      --delete            # mirror deletions
+      --update            # do NOT overwrite newer files on receiver
+      --partial           # keep temp files if transfer interrupted
+      --inplace           # update destination files in-place
+      --itemize-changes   # output a change-summary for all updates
+      --compress          # compress file data during transfer
+      --stats             # give some file-transfer stats
+    )
+
+    # Add backup options if enabled
+    if [[ "$ENABLE_BACKUPS" == true ]]; then
+      OPTS+=(
+        --backup
+        --backup-dir=".$STAMP.bak"
+      )
+    fi
+
+    # Add excludes to options
+    local e
+    for e in "${EXCLUDES[@]}"; do
+      OPTS+=(--exclude="$e")
+    done
+
+    # Validate local directory exists
+    if [[ ! -d "$LOCAL" ]]; then
+        print_error "✖ Local directory does not exist: $LOCAL"
+        log "ERROR: Local directory does not exist: $LOCAL"
+        exit 1
+    fi
+
+    # Extract remote host and path for connectivity check
+    local REMOTE_USER_HOST REMOTE_HOST
+    if [[ "$REMOTE" =~ ^([^@]+@)?([^:]+):(.+)$ ]]; then
+        REMOTE_USER_HOST="${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
+        REMOTE_HOST="${BASH_REMATCH[2]}"
+    else
+        print_error "✖ Invalid remote specification format: $REMOTE"
+        print_info "Expected format: user@host:/path or host:/path"
+        exit 1
+    fi
+
+    # Check if rsync is installed
+    if ! command -v rsync &>/dev/null; then
+        print_error "✖ rsync is not installed. Please install it first."
+        log "ERROR: rsync not found in PATH"
+        exit 2
+    fi
+
+    # Validate SSH connectivity to remote host
+    print_info "Validating connectivity to $REMOTE_HOST..."
+    log "Checking SSH connectivity to $REMOTE_HOST"
+
+    if ! ssh -o BatchMode=yes -o ConnectTimeout=10 "$REMOTE_USER_HOST" "exit" 2>/dev/null; then
+        print_error "✖ Cannot connect to remote host: $REMOTE_HOST"
+        print_info "Please verify:"
+        echo "  • SSH keys are properly configured"
+        echo "  • Remote host is reachable"
+        echo "  • User has proper permissions"
+        log "ERROR: SSH connectivity check failed for $REMOTE_HOST"
+        exit 3
+    fi
+
+    print_success "✓ Connected to $REMOTE_HOST"
+    log "SSH connectivity verified for $REMOTE_HOST"
+
+    # Display sync configuration
     echo ""
-    show_usage
-    exit 1
-fi
+    print_section "Synchronization Configuration"
+    echo -e "${BLUE}Local Directory:${NC}  $LOCAL"
+    echo -e "${BLUE}Remote Location:${NC} $REMOTE"
+    echo -e "${BLUE}Backup Enabled:${NC}  $ENABLE_BACKUPS"
+    echo -e "${BLUE}Excludes:${NC}        ${#EXCLUDES[@]} pattern(s)"
+    echo -e "${BLUE}Log File:${NC}        $LOG_FILE"
+    echo ""
 
-LOCAL="$1"             # e.g. /srv/share/
-REMOTE="$2"            # e.g. alice@backup.example.com:/srv/share/
+    # Prompt user to continue
+    if ! prompt_yes_no "            → Continue with synchronization?" "y"; then
+        print_warning "⚠ Synchronization cancelled by user"
+        log "Synchronization cancelled by user"
+        exit 0
+    fi
 
-# Configuration
-ENABLE_BACKUPS=false  # Set to true to enable backup-dir functionality
+    echo ""
 
-# Patterns you never want to copy
-EXCLUDES=(
-  ".DS_Store"
-  "Thumbs.db"
-  ".Spotlight-V100"
-  ".Trashes"
-  ".TemporaryItems"
-  ".fseventsd"
-  "desktop.ini"
-  # ".git/"              # Uncomment to exclude Git repositories
-  ".svn/"
-  ".~lock.*"
-  "*.swp"
-  "*.tmp"
-  "*~"
-)
+    # Log sync start
+    log "=========================================="
+    log "Starting two-way sync: $LOCAL <-> $REMOTE"
+    log "Backup enabled: $ENABLE_BACKUPS"
 
-# Core rsync switches (see man rsync)
-OPTS=(
-  --archive           # -a: recurse; preserve mode, owner, times, links…
-  --verbose           # -v: verbose output
-  --human-readable    # -h: human-readable numbers
-  --hard-links        # preserve hard links
-  --delete            # mirror deletions
-  --update            # do NOT overwrite newer files on receiver
-  --partial           # keep temp files if transfer interrupted
-  --inplace           # update destination files in-place
-  --itemize-changes   # output a change-summary for all updates
-  --compress          # compress file data during transfer
-  --stats             # give some file-transfer stats
-)
+    # ---------- Pass 1: push LOCAL ➜ REMOTE ----------
+    print_section "Pass 1: Pushing changes from LOCAL ➜ REMOTE"
+    log "Pass 1: LOCAL -> REMOTE"
+    echo ""
 
-# Add backup options if enabled
-if [[ "$ENABLE_BACKUPS" == true ]]; then
-  OPTS+=(
-    --backup
-    --backup-dir=".$STAMP.bak"
-  )
-fi
+    local RSYNC_EXIT
+    if rsync "${OPTS[@]}" "$LOCAL/" "$REMOTE"; then
+        print_success "✓ Pass 1 completed successfully"
+        log "Pass 1 completed successfully"
+    else
+        RSYNC_EXIT=$?
+        print_error "✖ Pass 1 failed with exit code $RSYNC_EXIT"
+        log "ERROR: Pass 1 failed with exit code $RSYNC_EXIT"
+        exit 2
+    fi
 
-# Add excludes to options
-for e in "${EXCLUDES[@]}"; do
-  OPTS+=(--exclude="$e")
-done
+    echo ""
 
-# Validate local directory exists
-if [[ ! -d "$LOCAL" ]]; then
-    print_error "✖ Local directory does not exist: $LOCAL"
-    log "ERROR: Local directory does not exist: $LOCAL"
-    exit 1
-fi
+    # ---------- Pass 2: pull REMOTE ➜ LOCAL ----------
+    print_section "Pass 2: Pulling changes from REMOTE ➜ LOCAL"
+    log "Pass 2: REMOTE -> LOCAL"
+    echo ""
 
-# Extract remote host and path for connectivity check
-if [[ "$REMOTE" =~ ^([^@]+@)?([^:]+):(.+)$ ]]; then
-    REMOTE_USER_HOST="${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
-    REMOTE_PATH="${BASH_REMATCH[3]}"
-    REMOTE_HOST="${BASH_REMATCH[2]}"
-else
-    print_error "✖ Invalid remote specification format: $REMOTE"
-    print_info "Expected format: user@host:/path or host:/path"
-    exit 1
-fi
+    if rsync "${OPTS[@]}" "$REMOTE/" "$LOCAL"; then
+        print_success "✓ Pass 2 completed successfully"
+        log "Pass 2 completed successfully"
+    else
+        RSYNC_EXIT=$?
+        print_error "✖ Pass 2 failed with exit code $RSYNC_EXIT"
+        log "ERROR: Pass 2 failed with exit code $RSYNC_EXIT"
+        exit 2
+    fi
 
-# Check if rsync is installed
-if ! command -v rsync &>/dev/null; then
-    print_error "✖ rsync is not installed. Please install it first."
-    log "ERROR: rsync not found in PATH"
-    exit 2
-fi
+    echo ""
+    print_section "Synchronization Complete"
+    print_success "Two-way sync completed successfully at $(date '+%Y-%m-%d %H:%M:%S')"
 
-# Validate SSH connectivity to remote host
-print_info "Validating connectivity to $REMOTE_HOST..."
-log "Checking SSH connectivity to $REMOTE_HOST"
+    if [[ "$ENABLE_BACKUPS" == true ]]; then
+        print_info "Backup directory: .$STAMP.bak (on both local and remote)"
+    fi
 
-if ! ssh -o BatchMode=yes -o ConnectTimeout=10 "$REMOTE_USER_HOST" "exit" 2>/dev/null; then
-    print_error "✖ Cannot connect to remote host: $REMOTE_HOST"
-    print_info "Please verify:"
-    echo "  • SSH keys are properly configured"
-    echo "  • Remote host is reachable"
-    echo "  • User has proper permissions"
-    log "ERROR: SSH connectivity check failed for $REMOTE_HOST"
-    exit 3
-fi
+    echo ""
+    log "Two-way sync completed successfully"
+    log "=========================================="
 
-print_success "✓ Connected to $REMOTE_HOST"
-log "SSH connectivity verified for $REMOTE_HOST"
-
-# Display sync configuration
-echo ""
-print_section "Synchronization Configuration"
-echo -e "${BLUE}Local Directory:${NC}  $LOCAL"
-echo -e "${BLUE}Remote Location:${NC} $REMOTE"
-echo -e "${BLUE}Backup Enabled:${NC}  $ENABLE_BACKUPS"
-echo -e "${BLUE}Excludes:${NC}        ${#EXCLUDES[@]} pattern(s)"
-echo -e "${BLUE}Log File:${NC}        $LOG_FILE"
-echo ""
-
-# Prompt user to continue
-if ! prompt_yes_no "            → Continue with synchronization?" "y"; then
-    print_warning "⚠ Synchronization cancelled by user"
-    log "Synchronization cancelled by user"
     exit 0
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
 fi
-
-echo ""
-
-# Log sync start
-log "=========================================="
-log "Starting two-way sync: $LOCAL <-> $REMOTE"
-log "Backup enabled: $ENABLE_BACKUPS"
-
-# ---------- Pass 1: push LOCAL ➜ REMOTE ----------
-print_section "Pass 1: Pushing changes from LOCAL ➜ REMOTE"
-log "Pass 1: LOCAL -> REMOTE"
-echo ""
-
-if rsync "${OPTS[@]}" "$LOCAL/" "$REMOTE"; then
-    print_success "✓ Pass 1 completed successfully"
-    log "Pass 1 completed successfully"
-else
-    RSYNC_EXIT=$?
-    print_error "✖ Pass 1 failed with exit code $RSYNC_EXIT"
-    log "ERROR: Pass 1 failed with exit code $RSYNC_EXIT"
-    exit 2
-fi
-
-echo ""
-
-# ---------- Pass 2: pull REMOTE ➜ LOCAL ----------
-print_section "Pass 2: Pulling changes from REMOTE ➜ LOCAL"
-log "Pass 2: REMOTE -> LOCAL"
-echo ""
-
-if rsync "${OPTS[@]}" "$REMOTE/" "$LOCAL"; then
-    print_success "✓ Pass 2 completed successfully"
-    log "Pass 2 completed successfully"
-else
-    RSYNC_EXIT=$?
-    print_error "✖ Pass 2 failed with exit code $RSYNC_EXIT"
-    log "ERROR: Pass 2 failed with exit code $RSYNC_EXIT"
-    exit 2
-fi
-
-echo ""
-print_section "Synchronization Complete"
-print_success "Two-way sync completed successfully at $(date '+%Y-%m-%d %H:%M:%S')"
-
-if [[ "$ENABLE_BACKUPS" == true ]]; then
-    print_info "Backup directory: .$STAMP.bak (on both local and remote)"
-fi
-
-echo ""
-log "Two-way sync completed successfully"
-log "=========================================="
-
-exit 0
