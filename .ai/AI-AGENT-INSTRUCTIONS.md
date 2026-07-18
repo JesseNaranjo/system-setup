@@ -408,7 +408,7 @@ Personal system configuration repository containing bash scripts and documentati
 | `kubernetes/` | Modular | Kubernetes cluster setup and configuration suite |
 | `github/` | Standalone | GitHub CLI automation scripts |
 | `llm/` | Modular Standalone | Ollama/LLM management scripts |
-| `utils/` | Standalone | Cross-platform utility scripts |
+| `utils/` | Modular Standalone | Cross-platform utilities (2 trivial Lightweight + 2 Windows .ps1 remain standalone) |
 | `configs/` | Documentation | Configuration documentation (markdown) |
 | `walkthroughs/` | Documentation | Step-by-step guides (markdown) |
 
@@ -445,12 +445,12 @@ This repository uses several script architectures. Choose based on context:
 - Include `prompt_yes_no` if user interaction needed
 - Can be copied/downloaded and run immediately
 
-### 3. Modular Standalone Scripts (lxc/, llm/)
+### 3. Modular Standalone Scripts (lxc/, llm/, utils/)
 
 **When to use:** Scripts managed by a `_download-*-scripts.sh` updater that share utilities within their directory.
 
 **Structure:**
-- Shared utilities: `utils-lxc.sh` / `utils-llm.sh` (colors, prompts, self-update functions)
+- Shared utilities: `utils-lxc.sh` / `utils-llm.sh` / `utils-misc.sh` (colors, prompts, self-update functions)
 - Each script sources its directory's utils file
 - Managed by `_download-*-scripts.sh` updaters
 - Self-update when run directly via `check_for_updates()`
@@ -474,9 +474,10 @@ This repository uses several script architectures. Choose based on context:
 - No user prompts - runs non-interactively
 - Quick, single-purpose scripts
 
-**Exception:** `tools-update.sh` uses Standalone Script patterns (colors, `print_*` functions,
-user prompts, self-update mechanism) because it needs interactive self-update and structured output.
-New complex scripts in `utils/` should follow Standalone conventions if they need these capabilities.
+**Note:** Substantive scripts in `utils/` (anything needing self-update, structured output, or user
+prompts) now follow the Modular Standalone pattern — see [Section 3](#3-modular-standalone-scripts-lxc-llm-utils):
+source `utils-misc.sh` and self-update via `check_for_updates`. Only trivial one-offs
+(`monitor-battery.sh`, `disable-kvm-module.sh`) stay Lightweight.
 
 **Example:**
 ```bash
@@ -494,7 +495,7 @@ done
 | Scenario | Architecture | Reason |
 |----------|-------------|--------|
 | New feature for system-setup | Modular | Add to existing module or create new one |
-| New utility script in lxc/, llm/ | Modular Standalone | Source utils-*.sh, self-update via check_for_updates |
+| New utility script in lxc/, llm/, utils/ | Modular Standalone | Source utils-*.sh, self-update via check_for_updates |
 | Shared helper used by multiple modules | Add to utils-sys.sh | Centralized maintenance |
 | One-off automation script | Standalone | Simpler, no dependencies |
 | Simple system task (start/stop services) | Standalone | Source utils for shared functions, run independently |
@@ -507,7 +508,7 @@ The canonical helper functions — `download_script`, `prompt_yes_no`, `print_er
 - `kubernetes/utils-k8s.sh`
 - `lxc/utils-lxc.sh`
 - `llm/utils-llm.sh`
-- `utils/services-check.sh` (defined inline; standalone)
+- `utils/utils-misc.sh`
 - `github/gh_org_copy.sh`, `github/gh_org_delete_repos.sh`, `github/gh_org_delete_issues.sh` (defined inline; standalones)
 
 **This is INTENTIONAL.** The suite-isolation architecture requires every directory to be independently downloadable: a user pulling `lxc/script.sh` must get a working script without also fetching `system-setup/utils-sys.sh`. The `github/gh_org_*.sh` standalones go further — they MUST work as a single-file copy/paste with zero external dependencies.
@@ -515,7 +516,7 @@ The canonical helper functions — `download_script`, `prompt_yes_no`, `print_er
 **Rules:**
 
 - **Do NOT extract these helpers to a single shared library.** That would break the standalone invariant the `github/` scripts depend on and the suite-isolation invariant the per-directory `_download-*-scripts.sh` flows depend on.
-- When fixing a bug or adjusting behavior in one of these helpers, **update every copy in the same change**. The pattern letters (A–J) used in the self-update backport plans exist precisely so cross-copy parity can be audited mechanically.
+- When fixing a bug or adjusting behavior in one of these helpers, **update every copy in the same change**. `utils/utils-misc.sh` is the 5th per-directory parity copy for this audit. The pattern letters (A–J) used in the self-update backport plans exist precisely so cross-copy parity can be audited mechanically.
 - Drift between copies is managed by **careful code review**, not tooling. Every PR that touches one helper must justify why the others were or were not also touched.
 
 When adding a NEW helper that is genuinely shared logic (not an existing canonical helper), prefer adding it to the per-suite utils file rather than promoting to a new shared library.
@@ -1555,7 +1556,7 @@ print_warning_box() {
 
 ### Diff Display Pattern
 
-Use the `show_diff_box` helper. It is defined once in every helper library (`utils-sys.sh`, `utils-k8s.sh`, `utils-lxc.sh`, `utils-llm.sh`) and inlined in every standalone (`services-check.sh`, `push-ghostty-terminfo.sh`, `gh_org_*.sh`):
+Use the `show_diff_box` helper. It is defined once in every helper library (`utils-sys.sh`, `utils-k8s.sh`, `utils-lxc.sh`, `utils-llm.sh`, `utils-misc.sh`) and inlined in every standalone (`gh_org_*.sh`):
 
 ```bash
 # Pretty-print a unified diff between two files inside a labeled box. Use
@@ -2117,7 +2118,7 @@ local temp_file
 temp_file=$(mktemp "${caller_script%/*}/~${caller_script##*/}.tmp.XXXXXX")
 TEMP_FILES+=("$temp_file")
 
-# Standalone self-update (gh_org_*, services-check) where SCRIPT_FILE is a
+# Standalone self-update (gh_org_*) where SCRIPT_FILE is a
 # hardcoded basename and SCRIPT_DIR is set at file scope:
 local TEMP_SCRIPT_FILE
 TEMP_SCRIPT_FILE=$(mktemp "${SCRIPT_DIR}/~${SCRIPT_FILE}.tmp.XXXXXX")
@@ -2467,7 +2468,7 @@ download_script() {
 # Check for updates to the main script itself
 # Will restart the script if updated
 self_update() {
-    local SCRIPT_FILE="services-check.sh"
+    local SCRIPT_FILE="gh_org_copy.sh"
     local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
     local TEMP_SCRIPT_FILE
     # Pattern E: mktemp adjacent to destination (same FS) so `mv` is atomic
@@ -2516,18 +2517,18 @@ self_update() {
 - **Pattern E** (adjacent `mktemp` + `TEMP_FILES+=()`) replaces the older `local TEMP_SCRIPT="$(mktemp)"` form, which landed in `$TMPDIR` (tmpfs) and made `mv -f` a cross-FS `copy + unlink` rather than an atomic `rename(2)`. SIGKILL or power-loss mid-copy could leave a truncated script.
 - **Pattern D** (`if ! mv -f`) replaces the bare `mv -f` so a read-only or cross-FS destination produces a typed error and the local file is preserved.
 - **Pattern H** (`show_diff_box`) replaces the inline diff border + `diff -u --color` block. Color is now `--color=always` and multi-page diffs page through `less -RFX`.
-- The function is called by every `_download-*-scripts.sh` updater and the standalones (`utils/services-check.sh`, `github/gh_org_*.sh`).
+- The function is called by every `_download-*-scripts.sh` updater and the standalones (`github/gh_org_*.sh`).
 
 ### check_for_updates Pattern (per-directory utils)
 
-Used by individual scripts and modules in lxc/, llm/, kubernetes/, and system-setup/. Checks for updates to both the utils file and the calling script, then exec-restarts if updated.
+Used by individual scripts and modules in lxc/, llm/, kubernetes/, system-setup/, and utils/. Checks for updates to both the utils file and the calling script, then exec-restarts if updated.
 
 ```bash
 # Called at the start of main() or inside source guard
 check_for_updates "${BASH_SOURCE[0]}" "$@"
 ```
 
-Flow: detect download cmd → adjacent-`mktemp` utils temp → download utils → diff/prompt → adjacent-`mktemp` caller temp → download caller → diff/prompt → exec restart if updated. Uses per-directory env var guards (`LXC_SCRIPTS_UPDATED`, `LLM_SCRIPTS_UPDATED`, `K8S_SCRIPTS_UPDATED`, `SYS_SCRIPTS_UPDATED`) to prevent infinite restart loops.
+Flow: detect download cmd → adjacent-`mktemp` utils temp → download utils → diff/prompt → adjacent-`mktemp` caller temp → download caller → diff/prompt → exec restart if updated. Uses per-directory env var guards (`LXC_SCRIPTS_UPDATED`, `LLM_SCRIPTS_UPDATED`, `K8S_SCRIPTS_UPDATED`, `SYS_SCRIPTS_UPDATED`, `UTILS_SCRIPTS_UPDATED`) to prevent infinite restart loops.
 
 The two `mktemp` sites use the two Pattern E variants:
 

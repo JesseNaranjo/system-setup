@@ -4,6 +4,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), date-based, ne
 This changelog begins 2026-07-06. Entries below capture the project's major
 features as of that date; earlier history is not individually recorded.
 
+## [2026-07-17]
+
+### Added
+- `utils/utils-misc.sh` — shared utilities library for `utils/` (colors, prompts, self-update functions), the 5th per-directory parity copy of the canonical helper set alongside `utils-sys.sh`, `utils-k8s.sh`, `utils-lxc.sh`, and `utils-llm.sh`.
+- `utils/_download-utils-scripts.sh` — self-updating script manager for `utils/`, mirroring the `_download-lxc-scripts.sh` / `_download-ollama-scripts.sh` pattern.
+
+### Changed
+- Converted 6 `utils/` scripts (`dig-all.sh`, `push-ghostty-terminfo.sh`, `reset-macOS-display-settings.sh`, `rsync-two-way.sh`, `services-check.sh`, `unlock-keychain.sh`) from Standalone to Modular Standalone: each now sources `utils-misc.sh` and self-updates via `check_for_updates()` instead of duplicating helpers and self-update logic inline. `monitor-battery.sh` and `disable-kvm-module.sh` were intentionally kept as Lightweight standalone scripts (trivial one-offs, no shared utilities needed).
+- Dropped the inline `self_update` function from `services-check.sh` and `push-ghostty-terminfo.sh` now that both source `utils-misc.sh`'s shared `check_for_updates()`.
+- Brought `reset-macOS-display-settings.sh` up to repository standard (previously broken/non-conforming) as part of the conversion.
+
 ## [2026-07-15]
 
 ### Fixed
