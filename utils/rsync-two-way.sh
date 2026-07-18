@@ -31,8 +31,7 @@ STAMP="$(date +%F_%H-%M-%S)"
 readonly STAMP
 readonly LOG_FILE="${HOME}/.rsync-two-way.log"
 
-# Referenced by show_usage/log below (both defined outside main()), so it
-# must stay a top-level global — not something main() can localize.
+# Single-use section-banner helper kept inline (not provided by utils-misc.sh).
 print_section() {
     echo -e "${CYAN}╭────────────────────────────────────────────────────────────────────────╮${NC}"
     echo -e "${CYAN}│${NC} $1"

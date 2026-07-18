@@ -68,11 +68,12 @@ main() {
     fi
 
     shopt -s nullglob
-    local f found=0
+    local f found=0 by_backup
     for f in "$HOME"/Library/Preferences/ByHost/com.apple.windowserver.displays.*.plist; do
         found=1
-        cp -p "$f" "${f}.backup.${stamp}.bak"
-        print_backup "- Created backup: ${f}.backup.${stamp}.bak"
+        by_backup="${f}.backup.${stamp}.bak"
+        cp -p "$f" "$by_backup"
+        print_backup "- Created backup: $by_backup"
         rm -f "$f"
         print_success "✓ Removed $f"
     done
