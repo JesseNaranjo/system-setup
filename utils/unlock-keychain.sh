@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
-[[ "${TRACE-0}" == "1" ]] && set -o xtrace
 
 # unlock-keychain.sh — unlock the login keychain in the CURRENT shell/session.
 #
@@ -11,6 +9,9 @@ set -euo pipefail
 # in the same shell.
 #
 # The scheduled launchd run does NOT need this — it already runs in the GUI login session.
+
+set -euo pipefail
+[[ "${TRACE-0}" == "1" ]] && set -o xtrace
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR

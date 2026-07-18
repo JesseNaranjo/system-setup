@@ -10,7 +10,10 @@ readonly UTILS_MISC_SH_LOADED=true
 set -euo pipefail
 
 # ── Output ────────────────────────────────────────────────────────────────────
-# $'\033' (real ESC): heredoc show_usage in push-ghostty/rsync needs literal-safe escapes
+# $'\033' (real ESC): heredoc show_usage in push-ghostty/rsync needs literal-safe escapes.
+# This is the ONLY canonical-helper parity copy using $'\033' — do NOT "unify" it back to '\033'
+# (the cat-heredoc show_usage in those two scripts would then print literal escapes and lose color).
+# BOLD_RED is intentionally omitted here (no utils/ script uses it; carrying it would trip SC2034).
 readonly BLUE=$'\033[0;34m'
 readonly CYAN=$'\033[0;36m'
 readonly GRAY=$'\033[0;90m'

@@ -9,11 +9,12 @@ features as of that date; earlier history is not individually recorded.
 ### Added
 - `utils/utils-misc.sh` — shared utilities library for `utils/` (colors, prompts, self-update functions), the 5th per-directory parity copy of the canonical helper set alongside `utils-sys.sh`, `utils-k8s.sh`, `utils-lxc.sh`, and `utils-llm.sh`.
 - `utils/_download-utils-scripts.sh` — self-updating script manager for `utils/`, mirroring the `_download-lxc-scripts.sh` / `_download-ollama-scripts.sh` pattern.
+- `utils/reset-macOS-display-settings.sh` — new Modular Standalone utility that resets the macOS WindowServer display-preference plists (system-wide and per-user ByHost), backing up each plist before removal and requiring explicit confirmation. Replaces a previously broken, untracked stub.
+- `utils/unlock-keychain.sh` — new Modular Standalone utility that unlocks the macOS login keychain in the current shell/session, so `security find-generic-password` works from a raw SSH shell.
 
 ### Changed
-- Converted 6 `utils/` scripts (`dig-all.sh`, `push-ghostty-terminfo.sh`, `reset-macOS-display-settings.sh`, `rsync-two-way.sh`, `services-check.sh`, `unlock-keychain.sh`) from Standalone to Modular Standalone: each now sources `utils-misc.sh` and self-updates via `check_for_updates()` instead of duplicating helpers and self-update logic inline. `monitor-battery.sh` and `disable-kvm-module.sh` were intentionally kept as Lightweight standalone scripts (trivial one-offs, no shared utilities needed).
+- Converted 4 previously-Standalone `utils/` scripts (`dig-all.sh`, `push-ghostty-terminfo.sh`, `rsync-two-way.sh`, `services-check.sh`) to Modular Standalone: each now sources `utils-misc.sh` and self-updates via `check_for_updates()` instead of duplicating helpers and self-update logic inline. `monitor-battery.sh` and `disable-kvm-module.sh` were intentionally kept as Lightweight standalone scripts (trivial one-offs, no shared utilities needed).
 - Dropped the inline `self_update` function from `services-check.sh` and `push-ghostty-terminfo.sh` now that both source `utils-misc.sh`'s shared `check_for_updates()`.
-- Brought `reset-macOS-display-settings.sh` up to repository standard (previously broken/non-conforming) as part of the conversion.
 
 ## [2026-07-15]
 
