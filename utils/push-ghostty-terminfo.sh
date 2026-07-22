@@ -15,7 +15,7 @@
 # BatchMode and requires key-based auth. The remote sudo password (system-wide mode)
 # is entered on a TTY via `ssh -t` over the same shared connection.
 #
-# Exit codes (sysexits.h, per .ai/AI-AGENT-INSTRUCTIONS.md § standalone conventions):
+# Exit codes (sysexits.h, per AGENTS.md § standalone conventions):
 #   0 OK | 64 EX_USAGE (bad args) | 68 EX_NOHOST (cannot connect)
 #   | 69 EX_UNAVAILABLE (missing tool: local ssh/infocmp, remote tic/infocmp, or
 #     the local xterm-ghostty terminfo entry) | 70 EX_SOFTWARE (install/verify failed)

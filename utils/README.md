@@ -67,6 +67,6 @@ Cross-platform utility scripts for system maintenance, file synchronization, and
 
 ## Adding New Scripts
 
-1. Create script following repository conventions (see AI-AGENT-INSTRUCTIONS.md)
+1. Create script following repository conventions (see AGENTS.md)
 2. Add the script's path to `get_script_list()` in `_download-utils-scripts.sh`
 3. Update this README

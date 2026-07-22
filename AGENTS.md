@@ -3,7 +3,7 @@
 <!-- DRIFT GUARD — Do not remove the audience line below. -->
 > **Audience: AI coding agents only.** This file is written for LLM-based coding assistants (Claude Code, GitHub Copilot, etc.), not human developers. You MUST follow these guidelines. It assumes you already know general programming principles (SOLID, DRY, YAGNI, etc.) and focuses on project-specific conventions.
 
-> **Sync note:** [CLAUDE.md](../CLAUDE.md) and [.github/copilot-instructions.md](../.github/copilot-instructions.md) are minimal pointer files that reference this document. They must stay in sync with each other.
+> **Sync note:** [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md), [GEMINI.md](GEMINI.md), and [.github/copilot-instructions.md](.github/copilot-instructions.md) are exact clones - all must symlink to AGENTS.md. Only read the ONE relevant to you. Do NOT read or load any of the others into context since that would be wasteful context usage.
 
 Personal system configuration repository with bash scripts for setting up Linux and macOS systems. Modular architecture with package management, system configuration, LXC containers, Kubernetes setup, and utilities.
 
@@ -2784,7 +2784,7 @@ Each significant folder contains a `README.md` that documents its contents, patt
 
 | Path | Documents | Status |
 |------|-----------|--------|
-| `.ai/AI-AGENT-INSTRUCTIONS.md` | LLM coding standards (this document) | ✅ |
+| `AGENTS.md` | LLM coding standards (this document) | ✅ |
 | `configs/README.md` | Configuration documentation files | ❌ |
 | `walkthroughs/README.md` | Step-by-step guides | ❌ |
 
@@ -2853,7 +2853,7 @@ Brief description of what these scripts do.
 
 ## Adding New Scripts
 
-1. Create script following repository conventions (see AI-AGENT-INSTRUCTIONS.md)
+1. Create script following repository conventions (see AGENTS.md)
 2. Add to `get_script_list()` in the download script
 3. Update this README
 ```
