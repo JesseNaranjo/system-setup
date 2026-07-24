@@ -16,7 +16,7 @@
 # Usage: ./rsync-over-tunnel.sh <step> [options]   (no args prints the runbook)
 #
 # Exit codes (sysexits.h): 0 OK | 64 usage | 66 missing input | 69 unavailable |
-#                          70 software | 77 no permission
+#                          77 no permission
 set -euo pipefail
 [[ "${TRACE-0}" == "1" ]] && set -o xtrace
 
