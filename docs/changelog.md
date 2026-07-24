@@ -4,6 +4,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), date-based, ne
 This changelog begins 2026-07-06. Entries below capture the project's major
 features as of that date; earlier history is not individually recorded.
 
+## [2026-07-24]
+
+### Added
+
+- `utils/rsync-over-tunnel.sh` — one-way LXC lxcpath migration to another host over an SSH tunnel, using a throwaway root rsync daemon bound to loopback on the target. Preserves numeric ids / hardlinks / ACLs / xattrs / sparseness for idmapped container rootfs; leaves no persistent privilege or config behind (interactive sudo, no `NOPASSWD` drop-in). Standardized to Modular Standalone (sources `utils-misc.sh`, self-updates via `check_for_updates`). Subcommands: `target-tunnel`, `source-tunnel`, `source-transfer`. `--path` is required (no auto-detection). SSH target is guarded against option-injection; no cipher is forced (ssh negotiates unless `--cipher` is given).
+
 ## [2026-07-17]
 
 ### Added
