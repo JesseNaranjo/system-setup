@@ -9,6 +9,7 @@ Cross-platform utility scripts for system maintenance, file synchronization, and
 | `utils-misc.sh` | Linux/macOS | Shared utilities library (colors, prompts, self-update) required by the scripts below |
 | `_download-utils-scripts.sh` | Linux/macOS | Self-updating script manager for this directory |
 | `rsync-two-way.sh` | Linux/macOS | Two-way file synchronization using rsync |
+| `rsync-over-tunnel.sh` | Linux | One-way LXC lxcpath migration to another host over an SSH tunnel via a throwaway loopback rsync daemon |
 | `monitor-battery.sh` | Linux | Monitors battery percentage at regular intervals |
 | `dig-all.sh` | Linux/macOS | Queries all common DNS record types for one or more domains, with optional resolver override |
 | `services-check.sh` | Linux/macOS | Checks local service availability (installation + port health) |
@@ -59,7 +60,7 @@ Cross-platform utility scripts for system maintenance, file synchronization, and
 
 ## Self-Update
 
-`dig-all.sh`, `push-ghostty-terminfo.sh`, `reset-macOS-display-settings.sh`, `rsync-two-way.sh`, `services-check.sh`, and `unlock-keychain.sh` self-update when run directly via `check_for_updates()`. This checks for updates to both `utils-misc.sh` and the calling script, showing diffs and prompting before overwriting. Scripts that are sourced (not executed directly) skip the update check.
+`dig-all.sh`, `push-ghostty-terminfo.sh`, `reset-macOS-display-settings.sh`, `rsync-over-tunnel.sh`, `rsync-two-way.sh`, `services-check.sh`, and `unlock-keychain.sh` self-update when run directly via `check_for_updates()`. This checks for updates to both `utils-misc.sh` and the calling script, showing diffs and prompting before overwriting. Scripts that are sourced (not executed directly) skip the update check.
 
 `utils-misc.sh` must be present in the same directory as the scripts; it is kept current via `check_for_updates()` (above), not by the `_download-utils-scripts.sh` download manifest.
 
