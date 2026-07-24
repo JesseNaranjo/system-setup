@@ -27,6 +27,7 @@ get_script_list() {
     echo "dig-all.sh"
     echo "push-ghostty-terminfo.sh"
     echo "reset-macOS-display-settings.sh"
+    echo "rsync-over-tunnel.sh"
     echo "rsync-two-way.sh"
     echo "services-check.sh"
     echo "unlock-keychain.sh"
