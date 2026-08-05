@@ -169,7 +169,7 @@ print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
 print_warning_box() {
     local box_width=77
     local padding=8
-    local content_width=$((box_width - padding - 1))
+    local content_width=$((box_width - padding))
 
     echo ""
     echo -e "            ${YELLOW}╔$(printf '═%.0s' $(seq 1 $box_width))╗${NC}"

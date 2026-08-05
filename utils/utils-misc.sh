@@ -52,7 +52,7 @@ print_warning()    { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
 # Each line will be padded to fit within the box
 print_warning_box() {
     local box_width=77
-    local content_width=$((box_width - 8 - 1))
+    local content_width=$((box_width - 8))
 
     echo ""
     echo -e "            ${YELLOW}╔$(printf '═%.0s' $(seq 1 $box_width))╗${NC}"
