@@ -108,20 +108,37 @@ trap cleanup EXIT
 # fits one screen, -X skips alt-screen so output stays in scrollback); falls
 # back to inline `diff` when piped or `less` is missing. `--color=always`
 # forces ANSI even when piped.
+# Strip non-SGR ANSI escape sequences from input. Defends against terminal-
+# injection attacks where attacker-controlled file content could spoof the
+# subsequent y/N prompt by repainting the screen with cursor-movement
+# escapes. Two patterns:
+#   1. CSI sequences whose final byte is NOT `m` — strips cursor moves
+#      (\e[A, \e[2K, \e[H, …) and mode toggles (\e[?25h, …) but keeps
+#      SGR codes (\e[31m, \e[1;32m, \e[0m) which are safe colors.
+#   2. BEL-terminated OSC sequences — strips set-title (\e]0;…\x07) and
+#      similar. ESC-\\ terminator OSC is rare and not handled.
+# Uses literal ESC/BEL bytes from bash $'…' so the regex is portable
+# between GNU sed and BSD sed (which lacks \xNN support).
+_sanitize_ansi() {
+    local esc=$'\033' bel=$'\007'
+    sed -E -e "s/${esc}\\[[0-9;?]*[^0-9;?m]//g" \
+           -e "s/${esc}\\][^${bel}]*${bel}//g"
+}
+
 show_diff_box() {
     local local_file="$1"
     local temp_file="$2"
     local label="$3"
     echo ""
     echo -e "${CYAN}╭────────────────────── Δ detected in ${label} ──────────────────────╮${NC}"
-    # GNU diff supports --color; BSD/macOS diff does not. Detect support once so the
-    # preview still renders on macOS instead of erroring into an empty box.
+    # Probe for --color rather than assuming it: macOS 26's diff supports it, but
+    # older BSD/macOS diff did not, and there it errors into an empty box.
     local diff_color=()
     diff --color=always /dev/null /dev/null >/dev/null 2>&1 && diff_color=(--color=always)
     if [[ -t 1 ]] && command -v less &>/dev/null; then
-        diff -u "${diff_color[@]+"${diff_color[@]}"}" "${local_file}" "${temp_file}" | less -RFX || true
+        diff -u "${diff_color[@]+"${diff_color[@]}"}" "${local_file}" "${temp_file}" | _sanitize_ansi | less -RFX || true
     else
-        diff -u "${diff_color[@]+"${diff_color[@]}"}" "${local_file}" "${temp_file}" || true
+        diff -u "${diff_color[@]+"${diff_color[@]}"}" "${local_file}" "${temp_file}" | _sanitize_ansi || true
     fi
     echo -e "${CYAN}╰─────────────────────────── ${label} ──────────────────────────────╯${NC}"
     echo ""
