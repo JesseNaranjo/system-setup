@@ -233,6 +233,34 @@ resolve_transfer_path() {
     [[ -d "$TRANSFER_PATH" ]] || die 66 "directory not found: $TRANSFER_PATH  (check --path)"
 }
 
+# Read the far end's protocol version into REMOTE_PROTOCOL.
+# Local capability detection cannot see the far end: a GNU rsync 3.x source
+# pushing to an openrsync target would add -A/-X and only then die at protocol
+# negotiation. The daemon announces itself the instant a client connects, so
+# read the greeting straight off the socket. `--debug=proto` would also report
+# it, but openrsync has no --debug flag — that path would break in exactly the
+# case this exists to catch.
+#
+# Costs one connection against `max connections = 1`, and closing without
+# completing the handshake leaves the daemon briefly tearing that child down.
+# Returns 1 when undeterminable (bash without net redirections, unexpected
+# greeting) — callers treat unknown as "do not block".
+probe_remote_protocol() {
+    local greeting=''
+    # The redirect must be wrapped in a group, NOT written as
+    # `exec 3<>… 2>/dev/null`: bash applies redirections left to right, so the
+    # /dev/tcp open fails and prints "Connection refused" BEFORE the 2>/dev/null
+    # takes effect, leaking two lines of raw bash error into the operator's
+    # terminal on every closed-port probe. A `{ …; } 2>/dev/null` group scopes
+    # the suppression over the whole exec while still leaving fd 3 open in this
+    # shell (a subshell would not). Verified: the un-grouped form prints
+    # "connect: Connection refused"; the grouped form prints nothing.
+    { exec 3<>"/dev/tcp/127.0.0.1/${PORT}"; } 2>/dev/null || return 1
+    IFS= read -r -t 5 greeting <&3 || true
+    exec 3<&-
+    parse_rsyncd_greeting "$greeting"
+}
+
 # Speak just enough of the rsync protocol to prove the tunnel and module exist.
 # Retries: a server child from a previous pass can still hold a connection slot
 # for a second or two after the client has already exited. The last attempt's
@@ -435,16 +463,98 @@ cmd_source_tunnel() {
 cmd_source_transfer() {
     require_rsync
     resolve_transfer_path
+    # Probe BEFORE probe_daemon, not after. The module has `max connections = 1`,
+    # so the abandoned greeting connection occupies the only slot until the
+    # daemon reaps that child; probe_daemon already retries 3x with 2s sleeps for
+    # exactly this reason, so probing first lets that loop absorb the slot.
+    # Probing after would leave the abandoned child contending with the
+    # retry-less `exec sudo rsync` transfer. A failed probe costs nothing here:
+    # probe_daemon still produces its actionable error a moment later.
+    probe_remote_protocol || true
     probe_daemon
 
+    # The archive flags are listed individually rather than bundled, so -A and -X
+    # are ADDITIVE rather than negated: openrsync has no acls/xattrs options at
+    # all, so --no-A would itself be an unknown option and hit usage(ERR_SYNTAX).
     local -a args=(
-        -aHAXS                          # archive + hardlinks + ACLs + xattrs + sparse
+        -a -H -S                        # archive + hardlinks + sparse
         --numeric-ids                   # ownership must transfer verbatim (an idmapped
                                         # container rootfs is the motivating case)
         -W                              # LAN: delta scan costs more than it saves
         --partial-dir=.rsync-migrate    # auto-excluded; resumable without half files
-        --info=progress2
     )
+
+    # Protocol 30 is required for -A/-X no matter what the local build supports.
+    # REMOTE_PROTOCOL is empty when the probe could not determine it; default to
+    # 30 so an unknown far end does not trigger the prompt — rsync will raise its
+    # own error if it turns out to be too old.
+    local remote_ok=true
+    [[ "${REMOTE_PROTOCOL:-30}" -ge 30 ]] || remote_ok=false
+
+    # -A and -X are decided independently: a build can support one and not the
+    # other, and collapsing them would drop preservation that was available.
+    local -a dropped=()
+    if [[ "$RSYNC_HAS_ACLS" == true && "$remote_ok" == true ]]; then
+        args+=(-A)
+    else
+        dropped+=("ACLs (-A)")
+    fi
+    if [[ "$RSYNC_HAS_XATTRS" == true && "$remote_ok" == true ]]; then
+        args+=(-X)
+    else
+        dropped+=("extended attributes (-X)")
+    fi
+
+    if ((${#dropped[@]})); then
+        # At most two entries, so join explicitly rather than reaching for IFS
+        # tricks: "${arr[*]}" joins on the FIRST character of IFS only, so a
+        # `local IFS=', '` would produce "a,b" and silently lose the space.
+        local dropped_list="${dropped[0]}"
+        ((${#dropped[@]} > 1)) && dropped_list+=", ${dropped[1]}"
+
+        # print_warning_box pads to a 68-character content width and does NOT
+        # truncate (utils-misc.sh), so any line longer than that blows out the
+        # right border. Every line below is kept under 68 — in particular the
+        # binary path gets its own indented line instead of being inlined into a
+        # sentence, because "/opt/homebrew/bin/rsync" alone is 23 characters.
+        local -a reason_lines
+        if [[ "$remote_ok" != true ]]; then
+            reason_lines=("The target speaks protocol ${REMOTE_PROTOCOL}; -A/-X need 30 or higher.")
+        else
+            reason_lines=("This rsync does not support ${dropped_list}:" "    $RSYNC_BIN")
+        fi
+
+        print_warning_box \
+            "METADATA CANNOT BE FULLY PRESERVED" \
+            "" \
+            "${reason_lines[@]}" \
+            "" \
+            "Dropping: ${dropped_list}" \
+            "" \
+            "This matters most for an idmapped container rootfs, where ACLs and" \
+            "xattrs are part of the data. For an ordinary directory copy it is" \
+            "usually harmless." \
+            "" \
+            "To preserve them, install rsync 3.x on BOTH hosts:" \
+            "    brew install rsync" \
+            "(macOS ships openrsync: protocol 29, no -A/-X)"
+        # prompt_yes_no returns 1 in non-interactive contexts (cron, ssh -T), so
+        # those runs abort — the correct fail-safe given the default is "n".
+        prompt_yes_no "→ Continue without ${dropped_list}?" "n" ||
+            die 69 "aborted — install rsync 3.x on both hosts to preserve ACLs/xattrs"
+    fi
+
+    # --info=FLAGS shipped in rsync 3.1.0, which is exactly protocol 31, so this
+    # is an exact test rather than a version heuristic (see parse_rsync_protocol).
+    # An unknown local protocol assumes capable: rsync then raises its own precise
+    # error, which beats silently downgrading output on a build we misread.
+    if ((${LOCAL_PROTOCOL:-31} >= 31)); then
+        args+=(--info=progress2)
+    else
+        print_warning "⚠ --info=progress2 needs rsync 3.1+ (protocol 31); falling back to --progress"
+        args+=(--progress)
+    fi
+
     ((DRY_RUN)) && args+=(--dry-run)
     ((DELETE))  && args+=(--delete)
     args+=("${EXTRA[@]+"${EXTRA[@]}"}")
@@ -453,6 +563,13 @@ cmd_source_transfer() {
     print_info "destination      : $DAEMON_URL"
     ((DRY_RUN)) && print_warning "⚠ DRY RUN — nothing will be written"
     ((DELETE))  && print_warning "⚠ --delete is ACTIVE: files absent on the source will be removed on the target"
+
+    # The flag list is composed at runtime, so the help text can only describe the
+    # always-present subset. Echo the real command so the operator can confirm at
+    # a glance whether -A/-X survived capability detection — this is the tool
+    # whose own docs tell you to verify with --itemize-changes.
+    # Display only: the transfer execs the args array, never this string.
+    print_info "running: sudo $RSYNC_BIN ${args[*]} ${TRANSFER_PATH}/ $DAEMON_URL"
 
     exec sudo "$RSYNC_BIN" "${args[@]}" "${TRANSFER_PATH}/" "$DAEMON_URL"
 }
