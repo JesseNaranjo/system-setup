@@ -212,5 +212,41 @@ resolve_transfer_path
 assert_eq "$tmpdir" "$TRANSFER_PATH" "trailing slash stripped"
 rmdir "$tmpdir"
 
+echo "== build_daemon_config =="
+# NOTE: do NOT assign SCRIPT_NAME or SCRIPT_DIR here — both are `readonly` in
+# the sourced script, so assigning aborts the suite under `set -e`. When sourced
+# from this file, SCRIPT_NAME resolves to this test's own basename, so the
+# generated header line is asserted on the injected stamp only, never the name.
+PORT=8730
+MODULE=xfer
+TRANSFER_PATH=/tmp/example
+CONF=/run/rsyncd-migrate.conf
+LOG_FILE=/dev/stdout
+
+conf_yes=$(build_daemon_config yes 2026-08-04T00:00:00Z)
+assert_contains     "$conf_yes" 'use chroot = yes'      "chroot yes honored"
+assert_contains     "$conf_yes" '[xfer]'                "module section header"
+assert_contains     "$conf_yes" 'path = /tmp/example'   "module path"
+assert_contains     "$conf_yes" 'port = 8730'           "port"
+assert_contains     "$conf_yes" 'lock file = /run/rsyncd-migrate.lock' "lock derived from CONF"
+assert_contains     "$conf_yes" '2026-08-04T00:00:00Z'  "stamp is injected, not read from clock"
+# This config grants root write access over a socket. Every directive that
+# confines it is asserted, so a careless edit to the printf block trips a test
+# rather than silently widening exposure.
+assert_contains     "$conf_yes" 'uid = root'            "runs as root (intended)"
+assert_contains     "$conf_yes" 'address = 127.0.0.1'   "binds loopback only"
+assert_contains     "$conf_yes" 'hosts allow = 127.0.0.1' "loopback allow-list"
+assert_contains     "$conf_yes" 'hosts deny = *'        "deny-by-default"
+assert_contains     "$conf_yes" 'max connections = 1'   "single connection slot"
+assert_contains     "$conf_yes" 'read only = false'     "writable (intended)"
+assert_contains     "$conf_yes" 'list = false'          "module not listable"
+assert_contains     "$conf_yes" 'numeric ids = yes'     "ownership verbatim"
+assert_contains     "$conf_yes" 'munge symlinks = no'   "symlinks preserved"
+# Regression guard for macOS bug #4: openrsync rejects unknown keys fatally.
+assert_not_contains "$conf_yes" 'reverse lookup'        "no reverse lookup directive"
+
+conf_no=$(build_daemon_config no 2026-08-04T00:00:00Z)
+assert_contains     "$conf_no"  'use chroot = no'       "chroot no honored"
+
 printf '\n%d run, %d failed\n' "$TESTS_RUN" "$TESTS_FAILED"
 [[ "$TESTS_FAILED" -eq 0 ]]
