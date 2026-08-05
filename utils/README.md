@@ -9,7 +9,7 @@ Cross-platform utility scripts for system maintenance, file synchronization, and
 | `utils-misc.sh` | Linux/macOS | Shared utilities library (colors, prompts, self-update) required by the scripts below |
 | `_download-utils-scripts.sh` | Linux/macOS | Self-updating script manager for this directory |
 | `rsync-two-way.sh` | Linux/macOS | Two-way file synchronization using rsync |
-| `rsync-over-tunnel.sh` | Linux | One-way LXC lxcpath migration to another host over an SSH tunnel via a throwaway loopback rsync daemon |
+| `rsync-over-tunnel.sh` | Linux/macOS | One-way directory-tree transfer to another host over an SSH tunnel via a throwaway loopback rsync daemon |
 | `monitor-battery.sh` | Linux | Monitors battery percentage at regular intervals |
 | `dig-all.sh` | Linux/macOS | Queries all common DNS record types for one or more domains, with optional resolver override |
 | `services-check.sh` | Linux/macOS | Checks local service availability (installation + port health) |
@@ -20,6 +20,23 @@ Cross-platform utility scripts for system maintenance, file synchronization, and
 | `compare-directories.ps1` | Windows | Compares two directory trees using PowerShell |
 | `robocopy-two-way.ps1` | Windows | Two-way file synchronization using Robocopy |
 | `troubleshooting.md` | — | Common troubleshooting notes and solutions |
+| `tests/` | Linux/macOS | Unit tests for the pure functions in this directory (see [tests/README.md](tests/README.md)) |
+
+### `rsync-over-tunnel.sh` platform notes
+
+Supported on Linux and **macOS 26+**. The runtime guard is on rsync capability, never on the macOS
+version — nothing checks `sw_vers`.
+
+macOS 15.4+ ships Apple's **openrsync** as `/usr/bin/rsync`. It works, but degraded: no `-A`
+(ACLs), no `-X` (xattrs), no `--info=`, and it is capped at protocol 29. The script detects this,
+warns, and asks before continuing without them. For full metadata fidelity run
+`brew install rsync` on **both** hosts.
+
+`use chroot = yes` is claimed only where the daemon binary can actually take it — Linux, or macOS
+running Apple's signed `/usr/bin/rsync`, which holds the `com.apple.private.vfs.chroot`
+entitlement. A Homebrew rsync on macOS runs the daemon without chroot confinement and says so.
+
+Requires bash 4+ (macOS ships 3.2 — `brew install bash`).
 
 ## Usage
 
@@ -65,6 +82,8 @@ Cross-platform utility scripts for system maintenance, file synchronization, and
 `utils-misc.sh` must be present in the same directory as the scripts; it is kept current via `check_for_updates()` (above), not by the `_download-utils-scripts.sh` download manifest.
 
 `monitor-battery.sh`, `disable-kvm-module.sh`, and the 2 `.ps1` scripts do NOT self-update (Lightweight/standalone, no shared utilities).
+
+`tests/` is development-only and is deliberately absent from `_download-utils-scripts.sh`'s `get_script_list()` — the tests are not distributed to target hosts.
 
 ## Adding New Scripts
 

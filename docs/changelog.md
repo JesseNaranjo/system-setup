@@ -4,6 +4,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), date-based, ne
 This changelog begins 2026-07-06. Entries below capture the project's major
 features as of that date; earlier history is not individually recorded.
 
+## [2026-08-05]
+
+### Changed
+
+- **`utils/rsync-over-tunnel.sh` is now a generic directory-transfer tool, not an LXC-specific one.** `LXCPATH` → `TRANSFER_PATH`, `resolve_lxcpath` → `resolve_transfer_path`, and the header, runbook, and examples now describe transferring any directory tree. An idmapped LXC container rootfs remains the *motivating* example for `-aHS --numeric-ids` (it needs every one of those), but it is no longer the definition. LXC-specific lines dropped from 35 to 6, the survivors being that motivating-example note (in the header, the `--numeric-ids` comment, and the ACL warning box) plus one cross-reference to `lxc/setup-lxc.sh`'s identical GNU/BSD `stat` branch.
+- **BREAKING: the default rsyncd module name changed from `lxc` to `xfer`.** The module name is on the wire — it appears in the generated `rsyncd.conf` section header and in the `rsync://` URL. Both hosts must run this version, or pass `--module lxc` on both. A half-updated pair fails with `probe_daemon`'s existing "no rsync daemon answering … module 'xfer'" error rather than transferring to the wrong place.
+- **The transfer's rsync flags are composed at runtime instead of hardcoded.** `--help` now advertises only the always-present flags (`-aHS --numeric-ids -W --partial-dir=.rsync-migrate`) and states that `-A`/`-X`/`--info=progress2` are added when both hosts support them. The exact composed command is printed immediately before it runs, so the operator can confirm at a glance which flags survived capability detection.
+
+### Fixed
+
+- **`utils/rsync-over-tunnel.sh` now runs on macOS.** Five platform bugs, each hidden behind the one before it: `stat -c '%U'` is GNU-only and BSD needs `-f '%Su'` (the reported crash); `date -Is` fails on BSD, which matches the `-I` format word exactly with no abbreviation; `/run` does not exist on macOS, so the throwaway config goes to `/var/run` (**not** `/var/tmp`, which `hier(7)` documents as surviving reboots and would defeat the dies-at-reboot guarantee); `reverse lookup = no` is not a valid openrsync config key and unknown keys are an unrecoverable error there; and `-A`/`-X`/`--info=` do not exist in openrsync at all.
+- **ACL/xattr loss is now detected and consented to, not discovered mid-transfer.** A single `rsync --version` read yields implementation, compiled-in capabilities, and protocol number. `-A` and `-X` are tracked independently (a build can support one and not the other) and are added rather than negated, because openrsync has no `acls`/`xattrs` options for `--no-A`/`--no-X` to negate. The far end's protocol is read from its `@RSYNCD:` greeting, since local detection cannot see the remote and openrsync has no `--debug` to ask; `-A`/`-X` require protocol 30 on both sides. When anything is unavailable, a warning box names what is being dropped and *which side* is responsible, and requires explicit confirmation defaulting to **no**. Non-interactive runs abort.
+- **`--info=progress2` is gated on protocol ≥ 31 and falls back to `--progress`.** `--info=FLAGS` shipped in rsync 3.1.0, which is exactly protocol 31, so the protocol number is an exact capability test rather than a version heuristic.
+- **`sudo rsync` could run the wrong binary.** `sudo` resolves a bare command name against its own `secure_path`, not the caller's `PATH`, so on macOS `sudo rsync` could execute `/usr/bin/rsync` (openrsync) even with Homebrew's rsync first in `PATH` — the capability probe would pass and the daemon would still be the wrong binary. rsync is now resolved once to an absolute path and invoked by that path everywhere.
+- **`use chroot` is claimed only where it can be honored.** macOS restricts `chroot(2)` to binaries holding `com.apple.private.vfs.chroot`, which only Apple's signed rsyncd carries, and an explicit `yes` makes `EPERM` fatal rather than a fallback. The daemon config now sets `use chroot = no` — with a visible warning — when running on macOS with a non-Apple rsync binary. The gate keys on the binary path, not the detected implementation, because a self-built openrsync would identify the same way and still be denied.
+- **Fail fast on bash < 4.** `prompt_yes_no` uses `${var,,}`, a bash 4.0 expansion, and this script puts that prompt on the main path. macOS ships bash 3.2, where it is a runtime "bad substitution". The script now exits 69 pointing at `brew install bash` rather than dying at the prompt.
+- **`print_warning_box` rendered every box with a ragged right edge (repo-wide).** `content_width` subtracted an extra 1, so a content row emitted 76 interior columns while the blank and border rows emitted 77. Fixed in all five copies (`utils/utils-misc.sh`, `system-setup/utils-sys.sh`, `kubernetes/utils-k8s.sh`, `lxc/utils-lxc.sh`, `llm/utils-llm.sh`).
+
+### Added
+
+- **`utils/tests/` — the repo's first automated tests.** `test-rsync-over-tunnel.sh` covers the `rsync --version` implementation/capability/protocol parsers, the `@RSYNCD:` greeting parser, `require_rsync`'s wiring, `resolve_transfer_path`'s option-injection guards, and every confinement directive in the generated `rsyncd.conf`. Pure bash — no bats, no network, no root, no second host — so a careless edit to the daemon config trips a test instead of silently widening exposure. Development-only; deliberately absent from `get_script_list()`.
+- **`detect_os` in `utils/utils-misc.sh`**, mirroring `system-setup/utils-sys.sh:detect_os`, so `utils/` scripts branch on `DETECTED_OS` instead of open-coding `$OSTYPE` comparisons.
+
 ## [2026-07-24]
 
 ### Added
