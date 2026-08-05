@@ -56,6 +56,15 @@ DAEMON_LOCK=''
 # have been validated, then shared by the probe and the transfer.
 DAEMON_URL=''
 
+# What this host's rsync is and what it can do; populated by require_rsync from a
+# single `--version` read, then consumed when the transfer flags are composed.
+RSYNC_BIN=''                    # absolute path; set by require_rsync
+RSYNC_IMPL=''                   # "openrsync" | "rsync" — advisory message only
+RSYNC_HAS_ACLS=false
+RSYNC_HAS_XATTRS=false
+LOCAL_PROTOCOL=''               # this build's protocol; set by parse_rsync_protocol
+REMOTE_PROTOCOL=''              # far-end protocol; set by probe_remote_protocol
+
 # ----------------------------------------------------------------- cleanup --
 # Superset EXIT handler. Overrides the library cleanup() BY NAME so a single EXIT
 # trap reaps both the library's tracked temps (TEMP_FILES, populated by
@@ -88,6 +97,80 @@ trap cleanup EXIT
 # die <exit_code> <message>  — sysexits.h code first, message second.
 die()  { print_error "✖ $2"; exit "$1"; }
 need() { command -v "$1" >/dev/null 2>&1 || die 69 "required command not found: $1"; }
+
+# --------------------------------------------------- rsync capability probe --
+# Classify an `rsync --version` blob. Sets RSYNC_IMPL.
+# openrsync self-identifies on line 1 ("openrsync: protocol version 29" on
+# macOS 15.4, "openrsync 2.6.9, protocol version 29" on 26) while ALSO claiming
+# "rsync version 2.6.9 compatible" on line 2 — so match the announcement and
+# never the compatibility claim, which is why this substring test comes first.
+parse_rsync_impl() {
+    local version_text="$1"
+    if [[ "$version_text" == *openrsync* ]]; then
+        RSYNC_IMPL=openrsync
+    else
+        RSYNC_IMPL=rsync
+    fi
+}
+
+# True when capability $2 is advertised as supported in the --version blob $1.
+# rsync prints a "Capabilities:" block where an UNSUPPORTED feature carries a
+# "no " prefix (usage.c: `#ifndef SUPPORT_ACLS "no " #endif "ACLs",`), so the
+# negative form must be tested FIRST — the bare word is present either way.
+# openrsync prints no Capabilities block at all, so both tests fall through to
+# "absent", which is correct.
+_rsync_cap_present() {
+    local version_text="$1" cap="$2"
+    [[ "$version_text" == *"no $cap"* ]] && return 1
+    [[ "$version_text" == *"$cap"* ]]
+}
+
+# Sets RSYNC_HAS_ACLS and RSYNC_HAS_XATTRS from an `rsync --version` blob.
+# Tracked separately, not as one flag: a build can support one and not the
+# other, and collapsing them would drop ACL preservation that was available.
+parse_rsync_caps() {
+    local version_text="$1"
+    if _rsync_cap_present "$version_text" ACLs; then
+        RSYNC_HAS_ACLS=true
+    else
+        RSYNC_HAS_ACLS=false
+    fi
+    if _rsync_cap_present "$version_text" xattrs; then
+        RSYNC_HAS_XATTRS=true
+    else
+        RSYNC_HAS_XATTRS=false
+    fi
+}
+
+# Extract this build's protocol number from an `rsync --version` blob into
+# LOCAL_PROTOCOL. Returns 1 when the blob has no protocol line.
+#
+# Why the protocol number and not the dotted release version: --info=FLAGS
+# shipped in rsync 3.1.0, which is exactly protocol 31 (OLDNEWS: 2.6.9 -> 29,
+# 3.0.0 -> 30, 3.1.0 -> 31), and protocol numbers rise monotonically with
+# releases. So `LOCAL_PROTOCOL >= 31` is an exact test for --info support, not a
+# heuristic — and it needs no two-component version comparison and no `sed`,
+# which matters here because this is the change that adds BSD support and GNU
+# and BSD sed differ. Every implementation prints this line: GNU rsync as
+# "rsync  version 3.4.4  protocol version 32", openrsync as either
+# "openrsync: protocol version 29" or "openrsync 2.6.9, protocol version 29".
+# The regex takes the FIRST match, which on openrsync 15.4 is its own line 1
+# and not the "rsync version 2.6.9 compatible" claim on line 2.
+parse_rsync_protocol() {
+    local version_text="$1"
+    [[ "$version_text" =~ protocol[[:space:]]+version[[:space:]]+([0-9]+) ]] || return 1
+    LOCAL_PROTOCOL="${BASH_REMATCH[1]}"
+}
+
+# Extract the protocol version from an rsync daemon greeting line into
+# REMOTE_PROTOCOL. rsync's own client parses this with
+# sscanf(buf, "@RSYNCD: %d.%d", …) (clientserver.c), so the shape is stable
+# across implementations. Returns 1 when the line is not a greeting.
+parse_rsyncd_greeting() {
+    local line="$1"
+    [[ "$line" =~ ^@RSYNCD:[[:space:]]+([0-9]+) ]] || return 1
+    REMOTE_PROTOCOL="${BASH_REMATCH[1]}"
+}
 
 # --path is required going forward: no auto-detection, no assumptions.
 resolve_lxcpath() {
