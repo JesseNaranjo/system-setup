@@ -267,14 +267,28 @@ download_script() {
             *)   print_error "✖ HTTP ${http_status} error"; rm -f "${output_file}"; return 1 ;;
         esac
         # Validate that we got a script, not an error page
-        # Check first 10 lines for shebang to handle files with leading comments/blank lines
-        if head -n 10 "${output_file}" | grep -q "^#!/"; then
-            return 0
-        else
-            print_error "✖ Invalid content received (not a script)"
+        # Validate that we got a script, not an error page.
+        # Stricter than the previous first-ten-lines shebang grep, which
+        # accepted a shebang on ANY of the first 10 lines - so an HTML 4xx
+        # page that merely quotes a shebang in a code snippet no longer
+        # passes. Also reject CRLF - `exec` would fail with `bash\r: not
+        # found`, after the file has already replaced the original on disk.
+        # Reading 2 lines via bash `read` also confirms the file is more
+        # than a bare shebang; `|| true` lets a 1-line file reach the
+        # explicit checks below rather than blowing up under set -e.
+        local first_line _
+        { IFS= read -r first_line && IFS= read -r _; } < "${output_file}" || true
+        if [[ "$first_line" != "#!"* ]]; then
+            print_error "✖ Invalid content (no shebang on line 1)"
             rm -f "${output_file}"
             return 1
         fi
+        if [[ "$first_line" == *$'\r' ]]; then
+            print_error "✖ Invalid content (CRLF line endings)"
+            rm -f "${output_file}"
+            return 1
+        fi
+        return 0
     elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
         local wget_exit=0
         wget --no-cache --no-cookies \
@@ -283,14 +297,28 @@ download_script() {
             || wget_exit=$?
         [[ "$wget_exit" -ne 0 ]] && { print_error "✖ Download failed (wget exit ${wget_exit})"; rm -f "${output_file}"; return 1; }
         # Validate that we got a script, not an error page
-        # Check first 10 lines for shebang to handle files with leading comments/blank lines
-        if head -n 10 "${output_file}" | grep -q "^#!/"; then
-            return 0
-        else
-            print_error "✖ Invalid content received (not a script)"
+        # Validate that we got a script, not an error page.
+        # Stricter than the previous first-ten-lines shebang grep, which
+        # accepted a shebang on ANY of the first 10 lines - so an HTML 4xx
+        # page that merely quotes a shebang in a code snippet no longer
+        # passes. Also reject CRLF - `exec` would fail with `bash\r: not
+        # found`, after the file has already replaced the original on disk.
+        # Reading 2 lines via bash `read` also confirms the file is more
+        # than a bare shebang; `|| true` lets a 1-line file reach the
+        # explicit checks below rather than blowing up under set -e.
+        local first_line _
+        { IFS= read -r first_line && IFS= read -r _; } < "${output_file}" || true
+        if [[ "$first_line" != "#!"* ]]; then
+            print_error "✖ Invalid content (no shebang on line 1)"
             rm -f "${output_file}"
             return 1
         fi
+        if [[ "$first_line" == *$'\r' ]]; then
+            print_error "✖ Invalid content (CRLF line endings)"
+            rm -f "${output_file}"
+            return 1
+        fi
+        return 0
     fi
 
     return 1
