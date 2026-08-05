@@ -152,6 +152,43 @@ OSTYPE=linux-gnu;  detect_os; assert_eq linux   "$DETECTED_OS" "linux-gnu* -> li
 OSTYPE=freebsd14;  detect_os; assert_eq unknown "$DETECTED_OS" "other -> unknown"
 OSTYPE="$_saved_ostype"; detect_os   # restore, so later assertions see the real host
 
+echo "== require_rsync =="
+# Verify the wiring, not the parsers (covered above): that require_rsync resolves
+# an ABSOLUTE path (load-bearing — `sudo` resolves bare names against its own
+# secure_path, so `sudo rsync` could run /usr/bin/rsync even with Homebrew's
+# first in PATH) and feeds one --version read into all three parsers.
+# A shim is used rather than the host's rsync because openrsync cannot be
+# installed on Linux at all, and that is the case this script exists to handle.
+_shim_dir=$(mktemp -d)
+_make_rsync_shim() {
+    printf '#!/usr/bin/env bash\ncat <<%s\n%s\n%s\n' 'SHIMEOF' "$1" 'SHIMEOF' > "${_shim_dir}/rsync"
+    chmod +x "${_shim_dir}/rsync"
+}
+_saved_path="$PATH"
+
+_make_rsync_shim "$FIXTURE_OPENRSYNC_154"
+PATH="${_shim_dir}:${_saved_path}"; require_rsync >/dev/null 2>&1
+assert_eq "${_shim_dir}/rsync" "$RSYNC_BIN"        "resolves to an absolute path"
+assert_eq openrsync "$RSYNC_IMPL"                  "openrsync shim classified"
+assert_eq 29        "$LOCAL_PROTOCOL"              "openrsync shim protocol"
+assert_eq false     "$RSYNC_HAS_ACLS"              "openrsync shim has no ACLs"
+
+_make_rsync_shim "$FIXTURE_RSYNC_344"
+PATH="${_shim_dir}:${_saved_path}"; require_rsync >/dev/null 2>&1
+assert_eq rsync "$RSYNC_IMPL"                      "GNU shim classified"
+assert_eq 32    "$LOCAL_PROTOCOL"                  "GNU shim protocol"
+assert_eq true  "$RSYNC_HAS_ACLS"                  "GNU shim has ACLs"
+
+# An rsync whose --version we cannot parse must not abort: LOCAL_PROTOCOL stays
+# empty and the caller treats unknown as "assume capable".
+LOCAL_PROTOCOL=''
+_make_rsync_shim 'some totally unknown rsync fork'
+PATH="${_shim_dir}:${_saved_path}"; require_rsync >/dev/null 2>&1
+assert_eq '' "$LOCAL_PROTOCOL"                     "unparseable --version leaves protocol empty"
+
+PATH="$_saved_path"
+rm -rf "$_shim_dir"
+
 echo "== resolve_transfer_path =="
 TRANSFER_PATH=''
 assert_eq 64 "$(rc resolve_transfer_path)" "empty path -> EX_USAGE"

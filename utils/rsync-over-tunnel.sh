@@ -31,6 +31,16 @@
 set -euo pipefail
 [[ "${TRACE-0}" == "1" ]] && set -o xtrace
 
+# prompt_yes_no in utils-misc.sh uses ${var,,}, a bash 4.0 expansion, and this
+# script puts that prompt on the main path (the ACL warning in
+# cmd_source_transfer). macOS ships bash 3.2 as /bin/bash, where ${var,,} is a
+# runtime "bad substitution". Fail here with a remedy rather than at the prompt.
+# Raw printf, not print_error: utils-misc.sh is not sourced yet.
+if ((BASH_VERSINFO[0] < 4)); then
+    printf 'bash 4+ required (found %s). macOS ships 3.2 — brew install bash\n' "$BASH_VERSION" >&2
+    exit 69
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 
@@ -185,6 +195,31 @@ parse_rsyncd_greeting() {
     REMOTE_PROTOCOL="${BASH_REMATCH[1]}"
 }
 
+# Resolve rsync once and record what this build can do.
+# Resolving to an absolute path is load-bearing: `sudo` looks a bare command
+# name up in its own secure_path, not the caller's PATH, so `sudo rsync` can
+# execute /usr/bin/rsync (openrsync) even when Homebrew's rsync is first in
+# PATH — the probe would pass and the daemon would still be the wrong binary.
+# secure_path constrains lookup only, so an absolute path is immune.
+require_rsync() {
+    RSYNC_BIN=$(command -v rsync) || die 69 "required command not found: rsync"
+
+    local version_text
+    version_text=$("$RSYNC_BIN" --version 2>&1) || true
+
+    parse_rsync_impl "$version_text"
+    parse_rsync_caps "$version_text"
+    # A --version blob with no protocol line means an rsync we do not understand.
+    # Leave LOCAL_PROTOCOL empty; cmd_source_transfer treats unknown as "assume
+    # capable" and lets rsync itself raise the authoritative error.
+    parse_rsync_protocol "$version_text" || true
+
+    if [[ "$RSYNC_IMPL" == openrsync ]]; then
+        print_warning "⚠ $RSYNC_BIN is openrsync (protocol ${LOCAL_PROTOCOL:-29}, no -A/-X, no --info=)."
+        print_warning "  For full fidelity install rsync 3.x:  brew install rsync"
+    fi
+}
+
 # --path is required going forward: no auto-detection, no assumptions.
 resolve_transfer_path() {
     [[ -n "$TRANSFER_PATH" ]] || die 64 "--path is required (no default). Pass the directory explicitly, e.g. --path ~/data"
@@ -205,7 +240,7 @@ resolve_transfer_path() {
 probe_daemon() {
     local i probe_output
     for i in 1 2 3; do
-        if probe_output=$(rsync --contimeout=5 --list-only "$DAEMON_URL" 2>&1); then
+        if probe_output=$("$RSYNC_BIN" --contimeout=5 --list-only "$DAEMON_URL" 2>&1); then
             return 0
         fi
         ((i < 3)) && sleep 2
@@ -278,7 +313,7 @@ EOF
 
 # -------------------------------------------------------- step 1: target ----
 cmd_target_tunnel() {
-    need rsync
+    require_rsync
     resolve_transfer_path
 
     print_info "destination directory : $TRANSFER_PATH"
@@ -336,7 +371,7 @@ cmd_target_tunnel() {
     print_info "wrote $CONF"
 
     print_info "daemon in foreground — Ctrl-C when the transfer is done"
-    sudo rsync --daemon --no-detach --config="$CONF"
+    sudo "$RSYNC_BIN" --daemon --no-detach --config="$CONF"
 }
 
 # --------------------------------------------------- step 2: source term 1 --
@@ -368,7 +403,7 @@ cmd_source_tunnel() {
 
 # --------------------------------------------------- step 3: source term 2 --
 cmd_source_transfer() {
-    need rsync
+    require_rsync
     resolve_transfer_path
     probe_daemon
 
@@ -389,7 +424,7 @@ cmd_source_transfer() {
     ((DRY_RUN)) && print_warning "⚠ DRY RUN — nothing will be written"
     ((DELETE))  && print_warning "⚠ --delete is ACTIVE: files absent on the source will be removed on the target"
 
-    exec sudo rsync "${args[@]}" "${TRANSFER_PATH}/" "$DAEMON_URL"
+    exec sudo "$RSYNC_BIN" "${args[@]}" "${TRANSFER_PATH}/" "$DAEMON_URL"
 }
 
 # -------------------------------------------------------------------- main --
