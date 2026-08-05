@@ -141,5 +141,16 @@ else
     assert_eq "returns 1" "returns 1" "non-greeting rejected"
 fi
 
+echo "== detect_os =="
+# Drive all three branches by overriding OSTYPE, rather than asserting that
+# detect_os agrees with the host it happens to run on — that would only ever
+# exercise one branch and would pass even if the other two were broken.
+# OSTYPE is an ordinary shell variable, so it can be set and restored.
+_saved_ostype="$OSTYPE"
+OSTYPE=darwin24.0; detect_os; assert_eq macos   "$DETECTED_OS" "darwin* -> macos"
+OSTYPE=linux-gnu;  detect_os; assert_eq linux   "$DETECTED_OS" "linux-gnu* -> linux"
+OSTYPE=freebsd14;  detect_os; assert_eq unknown "$DETECTED_OS" "other -> unknown"
+OSTYPE="$_saved_ostype"; detect_os   # restore, so later assertions see the real host
+
 printf '\n%d run, %d failed\n' "$TESTS_RUN" "$TESTS_FAILED"
 [[ "$TESTS_FAILED" -eq 0 ]]

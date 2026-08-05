@@ -9,6 +9,25 @@ readonly UTILS_MISC_SH_LOADED=true
 
 set -euo pipefail
 
+# ── Platform detection ────────────────────────────────────────────────────────
+
+DETECTED_OS=""
+
+# Detect the host OS and populate the DETECTED_OS global.
+# Mirrors system-setup/utils-sys.sh:detect_os so the per-directory libraries
+# agree on the same three values. NOT one of the canonical duplicated helpers —
+# added here per AGENTS.md's "prefer the per-suite utils file" rule.
+# shellcheck disable=SC2034  # DETECTED_OS is read by the scripts that source this
+detect_os() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        DETECTED_OS="macos"
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        DETECTED_OS="linux"
+    else
+        DETECTED_OS="unknown"
+    fi
+}
+
 # ── Output ────────────────────────────────────────────────────────────────────
 # $'\033' (real ESC): heredoc show_usage in push-ghostty/rsync needs literal-safe escapes.
 # This is the ONLY canonical-helper parity copy using $'\033' — do NOT "unify" it back to '\033'
