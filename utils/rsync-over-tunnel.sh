@@ -1,23 +1,28 @@
 #!/usr/bin/env bash
 #
-# rsync-over-tunnel.sh - Migrate an LXC lxcpath to another host over an SSH tunnel
+# rsync-over-tunnel.sh - Transfer a directory tree to another host over an SSH tunnel
 #
 # Stands up a throwaway root rsync daemon on the TARGET host, bound to loopback
 # and reachable only through an SSH local-forward tunnel from the SOURCE host.
-# Writes a root-owned (idmapped) container rootfs on a host where root SSH login
-# is disabled, leaving zero persistent privilege or config behind:
+# Writes root-owned files on a host where root SSH login is disabled, leaving
+# zero persistent privilege or config behind:
 #
 #   * No sudoers drop-in on either host.  Privilege escalation stays interactive.
-#   * No persistent config: the daemon config lives on tmpfs (/run) and is
-#     removed on exit; nothing survives a reboot even if you forget.
-#   * Numeric ownership, hardlinks, ACLs, xattrs and sparseness are preserved,
-#     which is what an unprivileged (idmapped) container rootfs actually needs.
+#   * No persistent config: the daemon config lives in the boot-scoped runtime
+#     directory (/run on Linux, /var/run on macOS) and is removed on exit;
+#     nothing survives a reboot even if you forget.
+#   * Numeric ownership, hardlinks, sparseness — and ACLs/xattrs where both
+#     rsync builds support them — are preserved. An unprivileged (idmapped) LXC
+#     container rootfs is the motivating case, since it needs every one of
+#     those, but any directory tree works.
 #
 # Single-user target hosts only. The module is unauthenticated and rsyncd's
 # `hosts allow` cannot tell local users apart, so while the daemon is up ANY
 # local user on the target can reach the module and write the destination as
 # root. `max connections = 1` means a running transfer holds the only slot and
 # the daemon is foreground/supervised, but do not run step 1 on a shared host.
+# chroot confinement of the module path is claimed only where the daemon binary
+# can actually take it: Linux, or macOS running Apple's signed /usr/bin/rsync.
 #
 # Usage: ./rsync-over-tunnel.sh <step> [options]   (no args prints the runbook)
 #
@@ -37,11 +42,11 @@ readonly SCRIPT_NAME
 
 # ---------------------------------------------------------------- defaults --
 PORT=8730                       # loopback port on BOTH hosts (tunnel is 1:1)
-MODULE=lxc                      # rsyncd module name
+MODULE=xfer                     # rsyncd module name
 CONF=/run/rsyncd-migrate.conf   # tmpfs: dies at reboot even if cleanup is missed
 LOG_FILE=/dev/stdout            # daemon log target (--no-detach => your terminal)
 CIPHER=''                       # ssh cipher; empty => let ssh negotiate (override: --cipher NAME)
-LXCPATH=''                      # REQUIRED (no default) for target-tunnel and source-transfer
+TRANSFER_PATH=''                # REQUIRED (no default) for target-tunnel and source-transfer
 REMOTE=''                       # [user@]target, source-tunnel only
 SSH_KEY=''
 DRY_RUN=0
@@ -173,17 +178,16 @@ parse_rsyncd_greeting() {
 }
 
 # --path is required going forward: no auto-detection, no assumptions.
-resolve_lxcpath() {
-    [[ -n "$LXCPATH" ]] || die 64 "--path is required (no default). Pass the lxcpath explicitly, e.g. --path ~/.local/share/lxc
-       (tip: 'lxc-config lxc.lxcpath' prints liblxc's configured path)"
+resolve_transfer_path() {
+    [[ -n "$TRANSFER_PATH" ]] || die 64 "--path is required (no default). Pass the directory explicitly, e.g. --path ~/data"
     # A leading '-' turns the path into an option bundle for every command it
     # reaches — `stat` in step 1, `sudo rsync` in step 3. rsync's man page
     # documents no `--` end-of-options marker, so guard the shape rather than
     # depend on one; same defense the ssh target gets in cmd_source_tunnel.
-    [[ "$LXCPATH" == -* ]] && die 64 "refusing lxcpath that begins with '-': $LXCPATH
-       (pass './$LXCPATH' or an absolute path instead)"
-    LXCPATH="${LXCPATH%/}"
-    [[ -d "$LXCPATH" ]] || die 66 "lxcpath not found: $LXCPATH  (check --path)"
+    [[ "$TRANSFER_PATH" == -* ]] && die 64 "refusing a path that begins with '-': $TRANSFER_PATH
+       (pass './$TRANSFER_PATH' or an absolute path instead)"
+    TRANSFER_PATH="${TRANSFER_PATH%/}"
+    [[ -d "$TRANSFER_PATH" ]] || die 66 "directory not found: $TRANSFER_PATH  (check --path)"
 }
 
 # Speak just enough of the rsync protocol to prove the tunnel and module exist.
@@ -207,7 +211,7 @@ probe_daemon() {
 # -------------------------------------------------------------------- help --
 show_usage() {
     cat <<EOF
-${CYAN}$SCRIPT_NAME${NC} — migrate an LXC lxcpath to another host over an SSH tunnel,
+${CYAN}$SCRIPT_NAME${NC} — transfer a directory tree to another host over an SSH tunnel,
 leaving zero persistent privilege or config changes behind.
 
 Run the three steps ${CYAN}in this order${NC}, each in its own shell. Steps 1 and 2 stay
@@ -215,15 +219,15 @@ running for the whole transfer — use tmux, or a dropped SSH kills the copy.
 
 ${CYAN}STEP 1 — on the TARGET host (destination): start the throwaway root rsync daemon${NC}
   $SCRIPT_NAME target-tunnel --path DIR [--port N] [--module NAME] [--conf FILE] [--log FILE]
-  -P, --path    DIR   destination lxcpath        ${CYAN}(required)${NC}
+  -P, --path    DIR   destination directory      ${CYAN}(required)${NC}
   -p, --port    N     loopback port to listen on (default: $PORT)
   -m, --module  NAME  rsyncd module name         (default: $MODULE)
   -C, --conf    FILE  generated daemon config    (default: $CONF)
   -l, --log     FILE  daemon log target          (default: $LOG_FILE)
   Prompts for sudo, runs in the foreground, deletes its config on Ctrl-C.
-  ${GRAY}The destination lxcpath must exist before the daemon starts (chroot), and
-  must be created AS THE CONTAINER OWNER, not with sudo:
-      mkdir -p ~/.local/share/lxc && chmod 0755 ~/.local/share/lxc${NC}
+  ${GRAY}The destination directory must exist before the daemon starts (chroot), and
+  must be created as the user who will own the files, not with sudo:
+      mkdir -p ~/data && chmod 0755 ~/data${NC}
 
 ${CYAN}STEP 2 — on the SOURCE host, terminal 1: open the tunnel${NC}
   $SCRIPT_NAME source-tunnel <[user@]target> [--port N] [--identity KEY] [--cipher NAME] [-- SSH_ARGS...]
@@ -236,24 +240,26 @@ ${CYAN}STEP 2 — on the SOURCE host, terminal 1: open the tunnel${NC}
 
 ${CYAN}STEP 3 — on the SOURCE host, terminal 2: run the transfer${NC}
   $SCRIPT_NAME source-transfer --path DIR [--port N] [--module NAME] [-n] [--delete] [-- RSYNC_ARGS...]
-  -P, --path    DIR   source lxcpath             ${CYAN}(required)${NC}
+  -P, --path    DIR   source directory           ${CYAN}(required)${NC}
   -p, --port    N     tunnel entrance            (default: $PORT)
   -m, --module  NAME  rsyncd module name         (default: $MODULE)
   -n, --dry-run       change nothing; pair with '-- --itemize-changes' to verify
       --delete        mirror deletions — OFF by default, think before using it
-  Runs: sudo rsync -aHAXS --numeric-ids -W --partial-dir=.rsync-migrate --info=progress2
+  Runs: sudo rsync -aHS --numeric-ids -W --partial-dir=.rsync-migrate
+        plus -A -X (ACLs/xattrs) and --info=progress2 when both hosts support them;
+        the exact command is printed before it runs.
 
 ${CYAN}Examples${NC}
   ${GRAY}# on the target${NC}
-  $SCRIPT_NAME target-tunnel --path ~/.local/share/lxc
+  $SCRIPT_NAME target-tunnel --path ~/data
   ${GRAY}# on the source, terminal 1${NC}
   $SCRIPT_NAME source-tunnel jesse@target-host
   ${GRAY}# on the source, terminal 2 — first (long) pass${NC}
-  $SCRIPT_NAME source-transfer --path ~/.local/share/lxc
+  $SCRIPT_NAME source-transfer --path ~/data
   ${GRAY}# on the source, terminal 2 — resume/delta pass: drop -W so only the tail moves${NC}
-  $SCRIPT_NAME source-transfer --path ~/.local/share/lxc -- --no-whole-file
+  $SCRIPT_NAME source-transfer --path ~/data -- --no-whole-file
   ${GRAY}# on the source, terminal 2 — verify with no writes${NC}
-  $SCRIPT_NAME source-transfer --path ~/.local/share/lxc -n -- --itemize-changes
+  $SCRIPT_NAME source-transfer --path ~/data -n -- --itemize-changes
 
 ${CYAN}Afterwards${NC}
   Ctrl-C step 3 if still running, then step 2, then step 1. Confirm the target has
@@ -265,19 +271,19 @@ EOF
 # -------------------------------------------------------- step 1: target ----
 cmd_target_tunnel() {
     need rsync
-    resolve_lxcpath
+    resolve_transfer_path
 
-    print_info "destination lxcpath : $LXCPATH"
-    print_info "listening on        : 127.0.0.1:$PORT  (module '$MODULE')"
+    print_info "destination directory : $TRANSFER_PATH"
+    print_info "listening on          : 127.0.0.1:$PORT  (module '$MODULE')"
 
     # `rsync SRC/ DST/` syncs the CONTENTS of DST, never DST itself. If this
-    # directory was created with sudo it stays root-owned and unprivileged
-    # lxc-ls will not be able to traverse it after the migration.
+    # directory was created with sudo it stays root-owned, and an unprivileged
+    # user will not be able to traverse it after the transfer.
     local owner
-    owner=$(stat -c '%U' "$LXCPATH") || die 66 "cannot stat lxcpath: $LXCPATH"
+    owner=$(stat -c '%U' "$TRANSFER_PATH") || die 66 "cannot stat lxcpath: $TRANSFER_PATH"
     if [[ "$owner" == root && "${SUDO_USER:-$(id -un)}" != root ]]; then
-        print_warning "⚠ $LXCPATH is owned by root, but containers here are unprivileged."
-        print_warning "  Fix before starting containers:  sudo chown ${SUDO_USER:-$(id -un)}: '$LXCPATH'"
+        print_warning "⚠ $TRANSFER_PATH is owned by root, but you are not running as root."
+        print_warning "  Fix before using the copy:  sudo chown ${SUDO_USER:-$(id -un)}: '$TRANSFER_PATH'"
     fi
 
     sudo -v || die 77 "sudo authentication failed"
@@ -302,8 +308,8 @@ cmd_target_tunnel() {
         "log file = $LOG_FILE" \
         "" \
         "[$MODULE]" \
-        "    path = $LXCPATH" \
-        "    comment = temporary LXC migration target" \
+        "    path = $TRANSFER_PATH" \
+        "    comment = temporary transfer target" \
         "    read only = false" \
         "    list = false"
 
@@ -350,12 +356,13 @@ cmd_source_tunnel() {
 # --------------------------------------------------- step 3: source term 2 --
 cmd_source_transfer() {
     need rsync
-    resolve_lxcpath
+    resolve_transfer_path
     probe_daemon
 
     local -a args=(
         -aHAXS                          # archive + hardlinks + ACLs + xattrs + sparse
-        --numeric-ids                   # 100000-range ownership must transfer verbatim
+        --numeric-ids                   # ownership must transfer verbatim (an idmapped
+                                        # container rootfs is the motivating case)
         -W                              # LAN: delta scan costs more than it saves
         --partial-dir=.rsync-migrate    # auto-excluded; resumable without half files
         --info=progress2
@@ -364,12 +371,12 @@ cmd_source_transfer() {
     ((DELETE))  && args+=(--delete)
     args+=("${EXTRA[@]+"${EXTRA[@]}"}")
 
-    print_info "source lxcpath : $LXCPATH/"
-    print_info "destination    : $DAEMON_URL"
+    print_info "source directory : $TRANSFER_PATH/"
+    print_info "destination      : $DAEMON_URL"
     ((DRY_RUN)) && print_warning "⚠ DRY RUN — nothing will be written"
     ((DELETE))  && print_warning "⚠ --delete is ACTIVE: files absent on the source will be removed on the target"
 
-    exec sudo rsync "${args[@]}" "${LXCPATH}/" "$DAEMON_URL"
+    exec sudo rsync "${args[@]}" "${TRANSFER_PATH}/" "$DAEMON_URL"
 }
 
 # -------------------------------------------------------------------- main --
@@ -390,7 +397,7 @@ main() {
         case "$1" in
             -p|--port)     [[ $# -ge 2 ]] || die 64 "missing value for $1"; PORT="$2";     shift 2 ;;
             -m|--module)   [[ $# -ge 2 ]] || die 64 "missing value for $1"; MODULE="$2";   shift 2 ;;
-            -P|--path)     [[ $# -ge 2 ]] || die 64 "missing value for $1"; LXCPATH="$2";  shift 2 ;;
+            -P|--path)     [[ $# -ge 2 ]] || die 64 "missing value for $1"; TRANSFER_PATH="$2";  shift 2 ;;
             -C|--conf)     [[ $# -ge 2 ]] || die 64 "missing value for $1"; CONF="$2";     shift 2 ;;
             -l|--log)      [[ $# -ge 2 ]] || die 64 "missing value for $1"; LOG_FILE="$2"; shift 2 ;;
             -i|--identity) [[ $# -ge 2 ]] || die 64 "missing value for $1"; SSH_KEY="$2";  shift 2 ;;
@@ -420,7 +427,7 @@ main() {
     # rsyncd.conf is line-oriented and has no escape syntax, so a newline in any
     # value interpolated into it injects daemon directives — a second [module], a
     # `pre-xfer exec = ...` — defeating the chroot/loopback confinement.
-    [[ "${LXCPATH}${LOG_FILE}${CONF}" == *[[:cntrl:]]* ]] &&
+    [[ "${TRANSFER_PATH}${LOG_FILE}${CONF}" == *[[:cntrl:]]* ]] &&
         die 64 "control characters are not allowed in --path/--log/--conf values"
 
     # Only source-tunnel takes a positional. Swallowing one in the other steps

@@ -152,5 +152,28 @@ OSTYPE=linux-gnu;  detect_os; assert_eq linux   "$DETECTED_OS" "linux-gnu* -> li
 OSTYPE=freebsd14;  detect_os; assert_eq unknown "$DETECTED_OS" "other -> unknown"
 OSTYPE="$_saved_ostype"; detect_os   # restore, so later assertions see the real host
 
+echo "== resolve_transfer_path =="
+TRANSFER_PATH=''
+assert_eq 64 "$(rc resolve_transfer_path)" "empty path -> EX_USAGE"
+
+# The leading-dash guard: without it this reaches `stat` and `sudo rsync` as an
+# option bundle, the same class as CVE-2023-51385 / CVE-2025-61984.
+TRANSFER_PATH='-oProxyCommand=touch /tmp/pwned'
+assert_eq 64 "$(rc resolve_transfer_path)" "leading dash -> EX_USAGE"
+
+TRANSFER_PATH='/nonexistent/definitely/not/here'
+assert_eq 66 "$(rc resolve_transfer_path)" "missing dir -> EX_NOINPUT"
+
+# Positive cases run in-process so the TRANSFER_PATH mutation is observable.
+tmpdir=$(mktemp -d)
+TRANSFER_PATH="$tmpdir"
+resolve_transfer_path
+assert_eq "$tmpdir" "$TRANSFER_PATH" "existing dir accepted"
+
+TRANSFER_PATH="${tmpdir}/"
+resolve_transfer_path
+assert_eq "$tmpdir" "$TRANSFER_PATH" "trailing slash stripped"
+rmdir "$tmpdir"
+
 printf '\n%d run, %d failed\n' "$TESTS_RUN" "$TESTS_FAILED"
 [[ "$TESTS_FAILED" -eq 0 ]]
