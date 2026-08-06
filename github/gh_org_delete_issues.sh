@@ -46,12 +46,12 @@ readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m' # No Color
 
 # Print colored output
-print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
-print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
-print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
+print_error()   { printf '%b[ ERROR   ]%b %s\n' "$RED" "$NC" "$1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
+print_info()    { printf '%b[ INFO    ]%b %s\n' "$BLUE" "$NC" "$1"; }
+print_success() { printf '%b[ SUCCESS ]%b %s\n' "$GREEN" "$NC" "$1"; }
+print_warning() { printf '%b[ WARNING ]%b %s\n' "$YELLOW" "$NC" "$1"; }
 
-print_dry_run() { echo -e "${CYAN}[ DRY-RUN ]${NC} $1"; }
+print_dry_run() { printf '%b[ DRY-RUN ]%b %s\n' "$CYAN" "$NC" "$1"; }
 
 # Display help message
 show_help() {
@@ -103,28 +103,45 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Strip every ANSI escape sequence except SGR colour.
+# Defends against terminal injection: the diff preview renders the CONTENT of a
+# file just downloaded, and a hostile file could otherwise repaint the screen
+# over the default-yes overwrite prompt that follows — drawing a fake "no
+# changes detected" line and turning one keypress into acceptance. The
+# expressions run in this order, and the order matters:
+#   1. OSC strings (\e]…) terminated by BEL or by ST (ESC \) — set-title and
+#      friends.
+#   2. The other ST-terminated string types: DCS (\eP), SOS (\eX), PM (\e^),
+#      APC (\e_). Their payloads are consumed raw by a terminal.
+#   3. CSI sequences (\e[…) whose final byte is NOT `m` — cursor moves
+#      (\e[A, \e[2K, \e[H, …) and mode toggles (\e[?25l, …) go, while SGR
+#      colour (\e[31m, \e[1;32m, \e[0m) survives, which is the point of the box.
+#   4. A CSI truncated by end-of-line, which would otherwise swallow the start
+#      of the next line as its parameters.
+#   5. Every remaining ESC not followed by `[` — the two-byte forms. This is
+#      the class the first version missed, and it held the worst of them:
+#      \ec (RIS) resets and clears the entire terminal, \e7/\e8 save and
+#      restore the cursor, \eM scrolls. Runs after 1-2 so it cannot eat the
+#      introducer of a string sequence those are still matching.
+#   6. A bare ESC at end of line.
+# Uses literal ESC/BEL bytes from bash $'…' so the regexes are portable between
+# GNU sed and BSD sed (which lacks \xNN support).
+_sanitize_ansi() {
+    local esc=$'\033' bel=$'\007'
+    sed -E -e "s/${esc}\\][^${esc}${bel}]*(${bel}|${esc}\\\\)//g" \
+           -e "s/${esc}[P^_X][^${esc}]*${esc}\\\\//g" \
+           -e "s/${esc}\\[[0-9;?]*[^0-9;?m]//g" \
+           -e "s/${esc}\\[[0-9;?]*$//" \
+           -e "s/${esc}[^[]//g" \
+           -e "s/${esc}$//"
+}
+
 # Render a unified diff between two files inside a labeled box. Pages through
 # `less -RFX` when stdout is a TTY (-R passes ANSI through, -F exits if content
 # fits one screen, -X skips alt-screen so output stays in scrollback); falls
-# back to inline `diff` when piped or `less` is missing. `--color=always`
-# forces ANSI even when piped.
-# Strip non-SGR ANSI escape sequences from input. Defends against terminal-
-# injection attacks where attacker-controlled file content could spoof the
-# subsequent y/N prompt by repainting the screen with cursor-movement
-# escapes. Two patterns:
-#   1. CSI sequences whose final byte is NOT `m` — strips cursor moves
-#      (\e[A, \e[2K, \e[H, …) and mode toggles (\e[?25h, …) but keeps
-#      SGR codes (\e[31m, \e[1;32m, \e[0m) which are safe colors.
-#   2. BEL-terminated OSC sequences — strips set-title (\e]0;…\x07) and
-#      similar. ESC-\\ terminator OSC is rare and not handled.
-# Uses literal ESC/BEL bytes from bash $'…' so the regex is portable
-# between GNU sed and BSD sed (which lacks \xNN support).
-_sanitize_ansi() {
-    local esc=$'\033' bel=$'\007'
-    sed -E -e "s/${esc}\\[[0-9;?]*[^0-9;?m]//g" \
-           -e "s/${esc}\\][^${bel}]*${bel}//g"
-}
-
+# back to inline `diff` when piped or `less` is missing. The diff is the content
+# of a file just downloaded, so it is untrusted and goes through _sanitize_ansi
+# before it reaches the terminal.
 show_diff_box() {
     local local_file="$1"
     local temp_file="$2"
@@ -133,6 +150,9 @@ show_diff_box() {
     echo -e "${CYAN}╭────────────────────── Δ detected in ${label} ──────────────────────╮${NC}"
     # Probe for --color rather than assuming it: macOS 26's diff supports it, but
     # older BSD/macOS diff did not, and there it errors into an empty box.
+    # "${arr[@]+"${arr[@]}"}" rather than a bare "${diff_color[@]}": the two are
+    # equivalent from bash 4.4 on, but the guarded form is the repo-wide way of
+    # expanding a possibly-empty array under `set -u` and every other site uses it.
     local diff_color=()
     diff --color=always /dev/null /dev/null >/dev/null 2>&1 && diff_color=(--color=always)
     if [[ -t 1 ]] && command -v less &>/dev/null; then
@@ -140,7 +160,7 @@ show_diff_box() {
     else
         diff -u "${diff_color[@]+"${diff_color[@]}"}" "${local_file}" "${temp_file}" | _sanitize_ansi || true
     fi
-    echo -e "${CYAN}╰─────────────────────────── ${label} ──────────────────────────────╯${NC}"
+    echo -e "${CYAN}╰─────────────────────────── ${label} ───────────────────────────────╯${NC}"
     echo ""
 }
 
@@ -152,6 +172,7 @@ show_diff_box() {
 sweep_stale_temps() {
     local pattern="$1"
     local stale_files=()
+    local f   # bash is dynamically scoped: an undeclared loop var leaks to the caller
     while IFS= read -r -d '' f; do
         stale_files+=("$f")
     done < <(find "$SCRIPT_DIR" -maxdepth 1 -name "$pattern" -type f -mmin +10 -print0 2>/dev/null)
@@ -273,11 +294,10 @@ download_script() {
         # page that merely quotes a shebang in a code snippet no longer
         # passes. Also reject CRLF - `exec` would fail with `bash\r: not
         # found`, after the file has already replaced the original on disk.
-        # Reading 2 lines via bash `read` also confirms the file is more
-        # than a bare shebang; `|| true` lets a 1-line file reach the
-        # explicit checks below rather than blowing up under set -e.
-        local first_line _
-        { IFS= read -r first_line && IFS= read -r _; } < "${output_file}" || true
+        # `|| true` lets an empty file reach the explicit checks below rather
+        # than blowing up under set -e.
+        local first_line
+        IFS= read -r first_line < "${output_file}" || true
         if [[ "$first_line" != "#!"* ]]; then
             print_error "✖ Invalid content (no shebang on line 1)"
             rm -f "${output_file}"
@@ -303,11 +323,10 @@ download_script() {
         # page that merely quotes a shebang in a code snippet no longer
         # passes. Also reject CRLF - `exec` would fail with `bash\r: not
         # found`, after the file has already replaced the original on disk.
-        # Reading 2 lines via bash `read` also confirms the file is more
-        # than a bare shebang; `|| true` lets a 1-line file reach the
-        # explicit checks below rather than blowing up under set -e.
-        local first_line _
-        { IFS= read -r first_line && IFS= read -r _; } < "${output_file}" || true
+        # `|| true` lets an empty file reach the explicit checks below rather
+        # than blowing up under set -e.
+        local first_line
+        IFS= read -r first_line < "${output_file}" || true
         if [[ "$first_line" != "#!"* ]]; then
             print_error "✖ Invalid content (no shebang on line 1)"
             rm -f "${output_file}"
@@ -564,7 +583,11 @@ main() {
 
     # Check for updates if download tool available
     if detect_download_cmd && [[ ${scriptUpdated:-0} -eq 0 ]]; then
-        self_update "$@"
+        # `|| true`: self_update returns 1 when the download fails or the install
+        # mv fails. Both are non-fatal by design — it prints "keeping local version"
+        # and the tool is expected to carry on — but a bare call under
+        # `set -euo pipefail` would abort here instead.
+        self_update "$@" || true
         echo ""
     fi
 

@@ -17,10 +17,10 @@ readonly RED='\033[0;31m'
 readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m'
 
-print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
-print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
-print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
+print_error()   { printf '%b[ ERROR   ]%b %s\n' "$RED" "$NC" "$1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
+print_info()    { printf '%b[ INFO    ]%b %s\n' "$BLUE" "$NC" "$1"; }
+print_success() { printf '%b[ SUCCESS ]%b %s\n' "$GREEN" "$NC" "$1"; }
+print_warning() { printf '%b[ WARNING ]%b %s\n' "$YELLOW" "$NC" "$1"; }
 
 # ── Cleanup & defense-in-depth ────────────────────────────────────────────────
 TEMP_FILES=()
@@ -44,6 +44,7 @@ trap cleanup EXIT
 sweep_stale_temps() {
     local pattern="$1"
     local stale_files=()
+    local f   # bash is dynamically scoped: an undeclared loop var leaks to the caller
     while IFS= read -r -d '' f; do
         stale_files+=("$f")
     done < <(find "$SCRIPT_DIR" -maxdepth 1 -name "$pattern" -type f -mmin +10 -print0 2>/dev/null)
@@ -73,28 +74,45 @@ sweep_stale_temps() {
     print_success "✓ Cleaned up ${#stale_files[@]} stale temp file(s)"
 }
 
+# Strip every ANSI escape sequence except SGR colour.
+# Defends against terminal injection: the diff preview renders the CONTENT of a
+# file just downloaded, and a hostile file could otherwise repaint the screen
+# over the default-yes overwrite prompt that follows — drawing a fake "no
+# changes detected" line and turning one keypress into acceptance. The
+# expressions run in this order, and the order matters:
+#   1. OSC strings (\e]…) terminated by BEL or by ST (ESC \) — set-title and
+#      friends.
+#   2. The other ST-terminated string types: DCS (\eP), SOS (\eX), PM (\e^),
+#      APC (\e_). Their payloads are consumed raw by a terminal.
+#   3. CSI sequences (\e[…) whose final byte is NOT `m` — cursor moves
+#      (\e[A, \e[2K, \e[H, …) and mode toggles (\e[?25l, …) go, while SGR
+#      colour (\e[31m, \e[1;32m, \e[0m) survives, which is the point of the box.
+#   4. A CSI truncated by end-of-line, which would otherwise swallow the start
+#      of the next line as its parameters.
+#   5. Every remaining ESC not followed by `[` — the two-byte forms. This is
+#      the class the first version missed, and it held the worst of them:
+#      \ec (RIS) resets and clears the entire terminal, \e7/\e8 save and
+#      restore the cursor, \eM scrolls. Runs after 1-2 so it cannot eat the
+#      introducer of a string sequence those are still matching.
+#   6. A bare ESC at end of line.
+# Uses literal ESC/BEL bytes from bash $'…' so the regexes are portable between
+# GNU sed and BSD sed (which lacks \xNN support).
+_sanitize_ansi() {
+    local esc=$'\033' bel=$'\007'
+    sed -E -e "s/${esc}\\][^${esc}${bel}]*(${bel}|${esc}\\\\)//g" \
+           -e "s/${esc}[P^_X][^${esc}]*${esc}\\\\//g" \
+           -e "s/${esc}\\[[0-9;?]*[^0-9;?m]//g" \
+           -e "s/${esc}\\[[0-9;?]*$//" \
+           -e "s/${esc}[^[]//g" \
+           -e "s/${esc}$//"
+}
+
 # Render a unified diff between two files inside a labeled box. Pages through
 # `less -RFX` when stdout is a TTY (-R passes ANSI through, -F exits if content
 # fits one screen, -X skips alt-screen so output stays in scrollback); falls
-# back to inline `diff` when piped or `less` is missing. `--color=always`
-# forces ANSI even when piped.
-# Strip non-SGR ANSI escape sequences from input. Defends against terminal-
-# injection attacks where attacker-controlled file content could spoof the
-# subsequent y/N prompt by repainting the screen with cursor-movement
-# escapes. Two patterns:
-#   1. CSI sequences whose final byte is NOT `m` — strips cursor moves
-#      (\e[A, \e[2K, \e[H, …) and mode toggles (\e[?25h, …) but keeps
-#      SGR codes (\e[31m, \e[1;32m, \e[0m) which are safe colors.
-#   2. BEL-terminated OSC sequences — strips set-title (\e]0;…\x07) and
-#      similar. ESC-\\ terminator OSC is rare and not handled.
-# Uses literal ESC/BEL bytes from bash $'…' so the regex is portable
-# between GNU sed and BSD sed (which lacks \xNN support).
-_sanitize_ansi() {
-    local esc=$'\033' bel=$'\007'
-    sed -E -e "s/${esc}\\[[0-9;?]*[^0-9;?m]//g" \
-           -e "s/${esc}\\][^${bel}]*${bel}//g"
-}
-
+# back to inline `diff` when piped or `less` is missing. The diff is the content
+# of a file just downloaded, so it is untrusted and goes through _sanitize_ansi
+# before it reaches the terminal.
 show_diff_box() {
     local local_file="$1"
     local temp_file="$2"
@@ -103,6 +121,9 @@ show_diff_box() {
     echo -e "${CYAN}╭────────────────────── Δ detected in ${label} ──────────────────────╮${NC}"
     # Probe for --color rather than assuming it: macOS 26's diff supports it, but
     # older BSD/macOS diff did not, and there it errors into an empty box.
+    # "${arr[@]+"${arr[@]}"}" rather than a bare "${diff_color[@]}": the two are
+    # equivalent from bash 4.4 on, but the guarded form is the repo-wide way of
+    # expanding a possibly-empty array under `set -u` and every other site uses it.
     local diff_color=()
     diff --color=always /dev/null /dev/null >/dev/null 2>&1 && diff_color=(--color=always)
     if [[ -t 1 ]] && command -v less &>/dev/null; then
@@ -110,7 +131,7 @@ show_diff_box() {
     else
         diff -u "${diff_color[@]+"${diff_color[@]}"}" "${local_file}" "${temp_file}" | _sanitize_ansi || true
     fi
-    echo -e "${CYAN}╰─────────────────────────── ${label} ──────────────────────────────╯${NC}"
+    echo -e "${CYAN}╰─────────────────────────── ${label} ───────────────────────────────╯${NC}"
     echo ""
 }
 
@@ -119,16 +140,27 @@ show_diff_box() {
 # Each line will be padded to fit within the box
 print_warning_box() {
     local box_width=77
-    local content_width=$((box_width - 8))
+    local content_width=$((box_width - 8))   # 8 = the indent inside the left border
 
     echo ""
     echo -e "            ${YELLOW}╔$(printf '═%.0s' $(seq 1 $box_width))╗${NC}"
     echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
 
-    local line padded_line
+    # Pad on CHARACTER count, not printf's "%-Ns", which pads by BYTES. Box
+    # content carries multi-byte glyphs (•, —, ✓), so byte padding rendered
+    # those rows narrower than the border — measured at 89 columns against a
+    # 91-column border. ${#line} counts characters and ${line:0:N} cuts on
+    # character boundaries in a UTF-8 locale, so an over-long line is truncated
+    # without splitting a glyph into invalid UTF-8; the slice is a no-op on a
+    # line that already fits. Under a non-UTF-8 locale both fall back to bytes,
+    # which is the previous behaviour and no worse.
+    # %b for the colour constants (they are literal '\033…' in most copies),
+    # %s for the caller's text so a backslash escape in it stays literal.
+    local line pad
     for line in "$@"; do
-        printf -v padded_line "%-${content_width}s" "$line"
-        echo -e "            ${YELLOW}║        ${padded_line}║${NC}"
+        line="${line:0:content_width}"
+        pad=$((content_width - ${#line}))
+        printf '            %b║        %s%*s║%b\n' "$YELLOW" "$line" "$pad" '' "$NC"
     done
 
     echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
@@ -242,11 +274,10 @@ download_script() {
                 # page that merely quotes a shebang in a code snippet no longer
                 # passes. Also reject CRLF - `exec` would fail with `bash\r: not
                 # found`, after the file has already replaced the original on disk.
-                # Reading 2 lines via bash `read` also confirms the file is more
-                # than a bare shebang; `|| true` lets a 1-line file reach the
-                # explicit checks below rather than blowing up under set -e.
-                local first_line _
-                { IFS= read -r first_line && IFS= read -r _; } < "${output_file}" || true
+                # `|| true` lets an empty file reach the explicit checks below rather
+                # than blowing up under set -e.
+                local first_line
+                IFS= read -r first_line < "${output_file}" || true
                 if [[ "$first_line" != "#!"* ]]; then
                     print_error "✖ Invalid content (no shebang on line 1)"
                     rm -f "${output_file}"
@@ -280,11 +311,10 @@ download_script() {
         # page that merely quotes a shebang in a code snippet no longer
         # passes. Also reject CRLF - `exec` would fail with `bash\r: not
         # found`, after the file has already replaced the original on disk.
-        # Reading 2 lines via bash `read` also confirms the file is more
-        # than a bare shebang; `|| true` lets a 1-line file reach the
-        # explicit checks below rather than blowing up under set -e.
-        local first_line _
-        { IFS= read -r first_line && IFS= read -r _; } < "${output_file}" || true
+        # `|| true` lets an empty file reach the explicit checks below rather
+        # than blowing up under set -e.
+        local first_line
+        IFS= read -r first_line < "${output_file}" || true
         if [[ "$first_line" != "#!"* ]]; then
             print_error "✖ Invalid content (no shebang on line 1)"
             rm -f "${output_file}"
@@ -301,6 +331,10 @@ download_script() {
     return 1
 }
 
+# Never returns non-zero. Every caller invokes this bare under `set -euo
+# pipefail`, so returning 1 for an update that could not be installed would
+# abort the whole tool at the exact moment the message says "keeping local
+# version". Failures are reported and the run continues with the copy on disk.
 check_for_updates() {
     local caller_script="$1"
     shift
@@ -327,13 +361,13 @@ check_for_updates() {
             show_diff_box "${_UTILS_DIR}/${utils_basename}" "$temp_file" "$utils_basename"
             if prompt_yes_no "→ Update ${utils_basename}?" "y"; then
                 chmod 644 "$temp_file"
-                if ! mv -f "$temp_file" "${_UTILS_DIR}/${utils_basename}"; then
+                if mv -f "$temp_file" "${_UTILS_DIR}/${utils_basename}"; then
+                    print_success "✓ Updated ${utils_basename}"
+                    any_updated=true
+                else
                     rm -f "$temp_file"
                     print_error "✖ Failed to install update — keeping local version"
-                    return 1
                 fi
-                print_success "✓ Updated ${utils_basename}"
-                any_updated=true
             else
                 print_info "Skipped ${utils_basename}"
                 rm -f "$temp_file"
@@ -357,13 +391,13 @@ check_for_updates() {
             show_diff_box "$caller_abs" "$temp_file" "$caller_relpath"
             if prompt_yes_no "→ Update ${caller_relpath}?" "y"; then
                 chmod +x "$temp_file"
-                if ! mv -f "$temp_file" "$caller_abs"; then
+                if mv -f "$temp_file" "$caller_abs"; then
+                    print_success "✓ Updated ${caller_relpath}"
+                    any_updated=true
+                else
                     rm -f "$temp_file"
                     print_error "✖ Failed to install update — keeping local version"
-                    return 1
                 fi
-                print_success "✓ Updated ${caller_relpath}"
-                any_updated=true
             else
                 print_info "Skipped ${caller_relpath}"
                 rm -f "$temp_file"

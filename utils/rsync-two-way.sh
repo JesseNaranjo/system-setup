@@ -34,7 +34,7 @@ readonly LOG_FILE="${HOME}/.rsync-two-way.log"
 # Single-use section-banner helper kept inline (not provided by utils-misc.sh).
 print_section() {
     echo -e "${CYAN}╭────────────────────────────────────────────────────────────────────────╮${NC}"
-    echo -e "${CYAN}│${NC} $1"
+    printf '%b│%b %s\n' "$CYAN" "$NC" "$1"
     echo -e "${CYAN}╰────────────────────────────────────────────────────────────────────────╯${NC}"
 }
 

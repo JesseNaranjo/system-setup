@@ -192,7 +192,12 @@ main() {
     if [[ "$SKIP_UPDATE" != true ]]; then
         check_for_updates "${BASH_SOURCE[0]}" "${original_args[@]+"${original_args[@]}"}"
         if [[ -n "$DOWNLOAD_CMD" ]]; then
-            update_modules
+            # `|| true`: update_modules documents itself as "continues processing
+            # all modules even if some downloads fail" and RETURNS 1 to signal
+            # that partial failure. Called bare under `set -euo pipefail`, that
+            # signal would instead abort the whole setup over one unreachable
+            # module. The function has already printed its per-file failure count.
+            update_modules || true
             cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
         fi
     fi
