@@ -47,7 +47,10 @@ main() {
         [[ "$a" == "-h" || "$a" == "--help" ]] && { show_usage; exit 0; }
     done
 
-    [[ "$OSTYPE" == darwin* ]] || { print_error "macOS only"; exit 1; }
+    # detect_os (utils-misc.sh), not a raw $OSTYPE test — one way to decide the
+    # platform across utils/.
+    detect_os
+    [[ "$DETECTED_OS" == macos ]] || { print_error "✖ macOS only"; exit 1; }
 
     sweep_stale_temps '~*.tmp.??????'
     check_for_updates "${BASH_SOURCE[0]}" "$@"

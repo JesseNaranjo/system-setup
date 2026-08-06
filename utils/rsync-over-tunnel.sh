@@ -23,32 +23,40 @@
 # the daemon is foreground/supervised, but do not run step 1 on a shared host.
 # chroot confinement of the module path is claimed only where the daemon binary
 # can actually take it: Linux, or macOS running Apple's signed /usr/bin/rsync.
+# Anywhere else the operator is shown what that costs and must consent to it.
 #
 # Usage: ./rsync-over-tunnel.sh <step> [options]   (no args prints the runbook)
 #
+# Requires bash 5+ (enforced by utils-misc.sh).
+#
 # Exit codes (sysexits.h): 0 OK | 64 usage | 66 cannot open input |
-#                          69 unavailable | 77 no permission
+#                          69 unavailable | 73 cannot create output |
+#                          77 no permission
 set -euo pipefail
 [[ "${TRACE-0}" == "1" ]] && set -o xtrace
-
-# prompt_yes_no in utils-misc.sh uses ${var,,}, a bash 4.0 expansion, and this
-# script puts that prompt on the main path (the ACL warning in
-# cmd_source_transfer). macOS ships bash 3.2 as /bin/bash, where ${var,,} is a
-# runtime "bad substitution". Fail here with a remedy rather than at the prompt.
-# Raw printf, not print_error: utils-misc.sh is not sourced yet.
-if ((BASH_VERSINFO[0] < 4)); then
-    printf 'bash 4+ required (found %s). macOS ships 3.2 — brew install bash\n' "$BASH_VERSION" >&2
-    exit 69
-fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 
+# utils-misc.sh enforces the bash 5+ baseline for every utils/ script.
 # shellcheck source=utils-misc.sh
 source "${SCRIPT_DIR}/utils-misc.sh"
 
 SCRIPT_NAME="$(basename "$0")"
 readonly SCRIPT_NAME
+
+# detect_os arrived in utils-misc.sh alongside this script's macOS support, and
+# check_for_updates updates the library and the caller as two separate prompts —
+# so a library predating it is a reachable state, not a hypothetical. A bare call
+# would die right here at file scope under `set -e` with "detect_os: command not
+# found", before main() runs. Self-repairing is not possible: the repair
+# machinery lives in the same file that is stale. Raw printf, not print_error,
+# because a library that old may not have that either.
+if ! declare -F detect_os >/dev/null; then
+    printf 'stale utils-misc.sh in %s: detect_os() is missing.\n' "$SCRIPT_DIR" >&2
+    printf 'Update it first:  %s/_download-utils-scripts.sh\n' "$SCRIPT_DIR" >&2
+    exit 69
+fi
 
 # Must run before the defaults block below: CONF branches on DETECTED_OS, and
 # the defaults execute at file scope.
@@ -62,6 +70,12 @@ CONF=/run/rsyncd-migrate.conf   # boot-scoped: dies at reboot even if cleanup is
 # NOT /var/tmp — hier(7) documents that one as surviving reboots, which would
 # defeat the "dies at reboot even if cleanup is missed" property above.
 [[ "$DETECTED_OS" == macos ]] && CONF=/var/run/rsyncd-migrate.conf
+# rsyncd's `max connections` lock. Derived from CONF here and re-derived once in
+# main() after --conf is parsed — and NOWHERE else. Three independent copies of
+# this expression previously fed three different consumers (the generated
+# config, cleanup(), and the help text); a divergence between the first two
+# orphans a root-owned lock file that cleanup() then never removes.
+LOCK_FILE="${CONF%.conf}.lock"
 LOG_FILE=/dev/stdout            # daemon log target (--no-detach => your terminal)
 CIPHER=''                       # ssh cipher; empty => let ssh negotiate (override: --cipher NAME)
 TRANSFER_PATH=''                # REQUIRED (no default) for target-tunnel and source-transfer
@@ -88,6 +102,12 @@ RSYNC_HAS_XATTRS=false
 LOCAL_PROTOCOL=''               # this build's protocol; set by parse_rsync_protocol
 REMOTE_PROTOCOL=''              # far-end protocol; set by probe_remote_protocol
 
+# The transfer argv and the capability decisions behind it; all three are set by
+# compose_transfer_args and consumed by cmd_source_transfer.
+TRANSFER_ARGS=()                # rsync argv, minus the source path and the URL
+DROPPED_CAPS=()                 # human-readable list of what could not be preserved
+DROPPED_BY_REMOTE=false         # true when the far end forced the drop, not this build
+
 # ----------------------------------------------------------------- cleanup --
 # Superset EXIT handler. Overrides the library cleanup() BY NAME so a single EXIT
 # trap reaps both the library's tracked temps (TEMP_FILES, populated by
@@ -107,7 +127,7 @@ cleanup() {
         # script's own "leaves nothing behind" guarantee while a root-owned
         # config quietly survives in /run.
         if sudo rm -f -- "$DAEMON_CONF" "$DAEMON_LOCK"; then
-            print_info "Removed $DAEMON_CONF and $DAEMON_LOCK"
+            print_success "✓ Removed $DAEMON_CONF and $DAEMON_LOCK"
         else
             print_warning "⚠ Could NOT remove the daemon config — delete it by hand:"
             print_warning "      sudo rm -f -- '$DAEMON_CONF' '$DAEMON_LOCK'"
@@ -181,6 +201,12 @@ parse_rsync_caps() {
 # and not the "rsync version 2.6.9 compatible" claim on line 2.
 parse_rsync_protocol() {
     local version_text="$1"
+    # Clear before matching, the way parse_rsync_impl and parse_rsync_caps
+    # unconditionally assign theirs. Without this a failed parse leaves the
+    # PREVIOUS call's number standing, so an unreadable --version silently
+    # inherits an unrelated build's protocol — and require_rsync's own comment
+    # ("Leave LOCAL_PROTOCOL empty") would be false.
+    LOCAL_PROTOCOL=''
     [[ "$version_text" =~ protocol[[:space:]]+version[[:space:]]+([0-9]+) ]] || return 1
     LOCAL_PROTOCOL="${BASH_REMATCH[1]}"
 }
@@ -191,6 +217,9 @@ parse_rsync_protocol() {
 # across implementations. Returns 1 when the line is not a greeting.
 parse_rsyncd_greeting() {
     local line="$1"
+    # Cleared before matching for the same reason as parse_rsync_protocol above:
+    # a failed probe must report "unknown", not the last host's protocol.
+    REMOTE_PROTOCOL=''
     [[ "$line" =~ ^@RSYNCD:[[:space:]]+([0-9]+) ]] || return 1
     REMOTE_PROTOCOL="${BASH_REMATCH[1]}"
 }
@@ -204,8 +233,14 @@ parse_rsyncd_greeting() {
 require_rsync() {
     RSYNC_BIN=$(command -v rsync) || die 69 "required command not found: rsync"
 
+    # No `|| true` here. A non-zero --version means this is not an rsync we can
+    # reason about, and version_text would then hold an ERROR STRING that the
+    # parsers below happily turn into a fabricated capability profile — which
+    # decides the flags a root-privileged rsync runs with. Fail loudly instead.
     local version_text
-    version_text=$("$RSYNC_BIN" --version 2>&1) || true
+    version_text=$("$RSYNC_BIN" --version 2>&1) ||
+        die 69 "'$RSYNC_BIN --version' failed — cannot determine rsync capabilities:
+       $(printf '%s' "$version_text" | head -2 | _sanitize_ansi)"
 
     parse_rsync_impl "$version_text"
     parse_rsync_caps "$version_text"
@@ -265,6 +300,9 @@ probe_remote_protocol() {
 # Retries: a server child from a previous pass can still hold a connection slot
 # for a second or two after the client has already exited. The last attempt's
 # output is kept for the failure message, so the diagnostic costs no extra probe.
+# That output comes from the far end, so it is untrusted: it goes through
+# _sanitize_ansi before reaching the terminal (print_error uses printf, not
+# `echo -e`, so backslash escapes in it stay literal).
 probe_daemon() {
     local i probe_output
     for i in 1 2 3; do
@@ -276,7 +314,7 @@ probe_daemon() {
     die 69 "no rsync daemon answering on 127.0.0.1:${PORT} module '${MODULE}'.
        Check that '$SCRIPT_NAME source-tunnel <target>' is running in another shell,
        that '$SCRIPT_NAME target-tunnel' is running on the target, and that --port/--module match.
-       Raw error: $(printf '%s\n' "$probe_output" | tail -2)"
+       Raw error: $(printf '%s\n' "$probe_output" | tail -2 | _sanitize_ansi)"
 }
 
 # -------------------------------------------------------------------- help --
@@ -296,6 +334,9 @@ ${CYAN}STEP 1 — on the TARGET host (destination): start the throwaway root rsy
   -C, --conf    FILE  generated daemon config    (default: $CONF)
   -l, --log     FILE  daemon log target          (default: $LOG_FILE)
   Prompts for sudo, runs in the foreground, deletes its config on Ctrl-C.
+  ${GRAY}--conf must name a path that does NOT exist: the file is a throwaway and is
+  DELETED on exit, along with the '.lock' beside it. Pointing it at a real
+  rsyncd.conf is refused rather than obeyed.${NC}
   ${GRAY}The destination directory must exist before the daemon starts (chroot), and
   must be created as the user who will own the files, not with sudo:
       mkdir -p ~/data && chmod 0755 ~/data${NC}
@@ -317,8 +358,17 @@ ${CYAN}STEP 3 — on the SOURCE host, terminal 2: run the transfer${NC}
   -n, --dry-run       change nothing; pair with '-- --itemize-changes' to verify
       --delete        mirror deletions — OFF by default, think before using it
   Runs: sudo rsync -aHS --numeric-ids -W --partial-dir=.rsync-migrate
-        plus -A -X (ACLs/xattrs) and --info=progress2 when both hosts support them;
-        the exact command is printed before it runs.
+        plus -A -X (ACLs/xattrs) when BOTH hosts support them — this host's rsync
+        must be built with them and the target must speak protocol 30+ — and
+        --info=progress2 when THIS host's rsync is 3.1+ (protocol 31; the target
+        is not consulted for that one). The exact command is printed before it runs.
+
+${CYAN}Both hosts must run the same version of this script${NC}
+  The module name travels on the wire — it is the rsyncd.conf section header on
+  the target and the last path element of the rsync:// URL on the source. It
+  changed from 'lxc' to '$MODULE' when this script stopped being LXC-specific, so a
+  half-upgraded pair fails with "no rsync daemon answering … module '$MODULE'".
+  Escape hatch until both sides are updated: pass ${CYAN}--module lxc${NC} on BOTH hosts.
 
 ${CYAN}Examples${NC}
   ${GRAY}# on the target${NC}
@@ -334,7 +384,7 @@ ${CYAN}Examples${NC}
 
 ${CYAN}Afterwards${NC}
   Ctrl-C step 3 if still running, then step 2, then step 1. Confirm the target has
-  no leftovers:  ls $CONF ${CONF%.conf}.lock ; pgrep -af 'rsync [-][-]daemon'
+  no leftovers:  ls $CONF $LOCK_FILE ; pgrep -af 'rsync [-][-]daemon'
   (bracketed so the pattern cannot match the pgrep command line itself)
 EOF
 }
@@ -343,26 +393,53 @@ EOF
 # Extracted from cmd_target_tunnel so the generated config is directly
 # assertable in tests — no root, no daemon, no second host. The timestamp is a
 # parameter rather than an internal `date` call so output is deterministic.
-# Reads globals: SCRIPT_NAME, PORT, MODULE, TRANSFER_PATH, CONF, LOG_FILE.
+# Reads globals: SCRIPT_NAME, PORT, MODULE, TRANSFER_PATH, LOCK_FILE, LOG_FILE.
 #
 # Single source of truth for daemon settings: everything lives in the file,
 # nothing is duplicated on the rsync command line.
 #
-# There is deliberately NO "reverse lookup" directive: openrsync's parser has no
-# such key and treats an unknown key as an unrecoverable error (daemon_cfg.c),
-# and with a loopback-only `address` and a numeric `hosts allow` there is no
+# EVERY key here must exist in openrsync's parameter table as well as GNU
+# rsyncd's: openrsync treats an unknown key as an UNRECOVERABLE error, so one
+# stray directive kills step 1 on every macOS host running Apple's
+# /usr/bin/rsync. Check any new key against `rsync_daemon_params[]` in
+# openrsync/daemon_cfg.c (apple-oss-distributions/rsync) BEFORE adding it.
+#
+# Verified 2026-08-06 against that table: all 16 keys emitted below — uid, gid,
+# use chroot, munge symlinks, numeric ids, max connections, lock file, address,
+# port, hosts allow, hosts deny, log file, path, comment, read only, list — are
+# present. "reverse lookup" is NOT, which is why it is deliberately absent here;
+# and with a loopback-only `address` and a numeric `hosts allow` there was no
 # hostname to resolve, so it bought nothing on GNU rsync either.
 build_daemon_config() {
     local use_chroot="$1" stamp="$2"
+
+    # `munge symlinks` is emitted ONLY when chroot is off, and it is the one
+    # directive here that is a deliberate security trade rather than a hardening.
+    #
+    # rsyncd's default is "disabled when 'use chroot' is on with an inside-chroot
+    # path of '/' … otherwise it is enabled" (rsyncd.conf(5)). Under
+    # `use chroot = yes` the daemon chroots to the module path, so the
+    # inside-chroot path IS '/' and munging is already off — emitting it there
+    # is a no-op that only adds a key for openrsync's parser to reject.
+    #
+    # Under `use chroot = no` the default flips ON, and munging rewrites every
+    # received symlink to "/rsyncd-munged/<target>". For this tool that is not
+    # protection, it is corruption: the motivating payload is a container rootfs
+    # whose symlinks ARE the data. So munging is turned off explicitly — which
+    # leaves the no-chroot daemon with no symlink confinement at all, and is
+    # exactly why cmd_target_tunnel makes the operator consent to that path.
+    local -a munge=()
+    [[ "$use_chroot" == no ]] && munge=("munge symlinks = no")
+
     printf '%s\n' \
         "# generated by $SCRIPT_NAME on ${stamp} — safe to delete" \
         "uid = root" \
         "gid = root" \
         "use chroot = ${use_chroot}" \
-        "munge symlinks = no" \
+        "${munge[@]+"${munge[@]}"}" \
         "numeric ids = yes" \
         "max connections = 1" \
-        "lock file = ${CONF%.conf}.lock" \
+        "lock file = ${LOCK_FILE}" \
         "address = 127.0.0.1" \
         "port = $PORT" \
         "hosts allow = 127.0.0.1" \
@@ -400,6 +477,19 @@ cmd_target_tunnel() {
         print_warning "  Fix before using the copy:  sudo chown ${SUDO_USER:-$(id -un)}: '$TRANSFER_PATH'"
     fi
 
+    # cleanup() DELETES both of these on exit, so writing over an existing file
+    # destroys it outright. --conf is operator-supplied and previously validated
+    # only for control characters, which made `--conf /etc/rsyncd.conf` clobber
+    # and then remove the host's real daemon config — plus /etc/rsyncd.lock, a
+    # path the operator never named and which is only derived from theirs.
+    # Refuse rather than back up: this file is a throwaway by design, and a
+    # backup would still leave the operator's daemon pointing at a deleted file.
+    # Checked before `sudo -v` so the refusal costs no password prompt.
+    [[ -e "$CONF" ]] && die 73 "refusing to overwrite an existing file: $CONF
+       This config is a throwaway and is DELETED on exit. Point --conf at a path that does not exist."
+    [[ -e "$LOCK_FILE" ]] && die 73 "refusing to reuse an existing lock file: $LOCK_FILE
+       Derived from --conf, and DELETED on exit like the config. Point --conf somewhere else."
+
     sudo -v || die 77 "sudo authentication failed"
 
     # macOS restricts chroot(2) to binaries holding com.apple.private.vfs.chroot,
@@ -411,22 +501,44 @@ cmd_target_tunnel() {
     local use_chroot='yes'
     if [[ "$DETECTED_OS" == macos && "$RSYNC_BIN" != /usr/bin/rsync ]]; then
         use_chroot='no'
-        print_warning "⚠ macOS + non-Apple rsync: daemon runs WITHOUT chroot confinement."
-        print_warning "  The module path is still the only exposed tree, but symlinks inside"
-        print_warning "  it are no longer confined to it. Single-user target hosts only."
+        print_warning_box \
+            "DAEMON WILL RUN WITHOUT CHROOT CONFINEMENT" \
+            "" \
+            "macOS grants chroot(2) only to binaries carrying Apple's private" \
+            "entitlement, which just /usr/bin/rsync holds. This one does not:" \
+            "    $RSYNC_BIN" \
+            "" \
+            "While the daemon is up:" \
+            "  • the module path is still the only exposed tree, but symlinks" \
+            "    inside it are no longer confined to it" \
+            "  • symlink munging stays OFF on purpose — turning it on would" \
+            "    rewrite every symlink written to the destination" \
+            "  • the module is unauthenticated, so any local user on this host" \
+            "    can follow such a symlink and write as root" \
+            "" \
+            "Single-user target hosts only. To keep chroot, run step 1 with" \
+            "Apple's /usr/bin/rsync instead — at the cost of -A/-X."
+        # Same consent shape as the ACL/xattr degradation in cmd_source_transfer,
+        # and for a stronger reason: that one costs fidelity, this one costs
+        # confinement. prompt_yes_no returns 1 in non-interactive contexts, so
+        # cron/ssh -T runs abort — the correct fail-safe when the default is "n".
+        prompt_yes_no "→ Start the daemon without chroot confinement?" "n" ||
+            die 69 "aborted — chroot confinement is unavailable for $RSYNC_BIN"
     fi
 
     local conf
     conf=$(build_daemon_config "$use_chroot" "$(date -Iseconds)")
 
     # Arm cleanup BEFORE writing, so an interrupt between tee and daemon start
-    # still reaps the config on EXIT (see the cleanup() override above).
+    # still reaps the config on EXIT (see the cleanup() override above). Arming
+    # unconditionally is safe now that both paths are proven not to pre-exist:
+    # anything the trap finds there was created by this run.
     DAEMON_CONF="$CONF"
-    DAEMON_LOCK="${CONF%.conf}.lock"
+    DAEMON_LOCK="$LOCK_FILE"
 
     printf '%s\n' "$conf" | sudo tee "$CONF" >/dev/null
     sudo chmod 0600 "$CONF"
-    print_info "wrote $CONF"
+    print_success "✓ wrote $CONF"
 
     print_info "daemon in foreground — Ctrl-C when the transfer is done"
     sudo "$RSYNC_BIN" --daemon --no-detach --config="$CONF"
@@ -460,23 +572,21 @@ cmd_source_tunnel() {
 }
 
 # --------------------------------------------------- step 3: source term 2 --
-cmd_source_transfer() {
-    require_rsync
-    resolve_transfer_path
-    # Probe BEFORE probe_daemon, not after. The module has `max connections = 1`,
-    # so the abandoned greeting connection occupies the only slot until the
-    # daemon reaps that child; probe_daemon already retries 3x with 2s sleeps for
-    # exactly this reason, so probing first lets that loop absorb the slot.
-    # Probing after would leave the abandoned child contending with the
-    # retry-less `exec sudo rsync` transfer. A failed probe costs nothing here:
-    # probe_daemon still produces its actionable error a moment later.
-    probe_remote_protocol || true
-    probe_daemon
-
+# Compose the transfer argv into TRANSFER_ARGS and record what could not be
+# included in DROPPED_CAPS / DROPPED_BY_REMOTE.
+#
+# Extracted from cmd_source_transfer for the same reason build_daemon_config was
+# extracted from cmd_target_tunnel: these are the flags a ROOT-privileged rsync
+# is about to run with, and pulling them out makes them assertable with no
+# daemon, no sudo and no second host. Decides only — it prompts for nothing and
+# touches nothing, so the caller keeps ownership of the consent decision.
+# Reads: RSYNC_HAS_ACLS, RSYNC_HAS_XATTRS, REMOTE_PROTOCOL, LOCAL_PROTOCOL,
+#        DRY_RUN, DELETE, EXTRA.
+compose_transfer_args() {
     # The archive flags are listed individually rather than bundled, so -A and -X
     # are ADDITIVE rather than negated: openrsync has no acls/xattrs options at
     # all, so --no-A would itself be an unknown option and hit usage(ERR_SYNTAX).
-    local -a args=(
+    TRANSFER_ARGS=(
         -a -H -S                        # archive + hardlinks + sparse
         --numeric-ids                   # ownership must transfer verbatim (an idmapped
                                         # container rootfs is the motivating case)
@@ -490,35 +600,70 @@ cmd_source_transfer() {
     # own error if it turns out to be too old.
     local remote_ok=true
     [[ "${REMOTE_PROTOCOL:-30}" -ge 30 ]] || remote_ok=false
+    DROPPED_BY_REMOTE=false
+    [[ "$remote_ok" == true ]] || DROPPED_BY_REMOTE=true
 
     # -A and -X are decided independently: a build can support one and not the
     # other, and collapsing them would drop preservation that was available.
-    local -a dropped=()
+    DROPPED_CAPS=()
     if [[ "$RSYNC_HAS_ACLS" == true && "$remote_ok" == true ]]; then
-        args+=(-A)
+        TRANSFER_ARGS+=(-A)
     else
-        dropped+=("ACLs (-A)")
+        DROPPED_CAPS+=("ACLs (-A)")
     fi
     if [[ "$RSYNC_HAS_XATTRS" == true && "$remote_ok" == true ]]; then
-        args+=(-X)
+        TRANSFER_ARGS+=(-X)
     else
-        dropped+=("extended attributes (-X)")
+        DROPPED_CAPS+=("extended attributes (-X)")
     fi
 
-    if ((${#dropped[@]})); then
+    # --info=FLAGS shipped in rsync 3.1.0, which is exactly protocol 31, so this
+    # is an exact test rather than a version heuristic (see parse_rsync_protocol).
+    # THIS host's rsync formats the progress output, so only LOCAL_PROTOCOL is
+    # consulted — the target has no say. An unknown local protocol assumes
+    # capable: rsync then raises its own precise error, which beats silently
+    # downgrading output on a build we misread.
+    if ((${LOCAL_PROTOCOL:-31} >= 31)); then
+        TRANSFER_ARGS+=(--info=progress2)
+    else
+        print_warning "⚠ --info=progress2 needs rsync 3.1+ (protocol 31); falling back to --progress"
+        TRANSFER_ARGS+=(--progress)
+    fi
+
+    ((DRY_RUN)) && TRANSFER_ARGS+=(--dry-run)
+    ((DELETE))  && TRANSFER_ARGS+=(--delete)
+    TRANSFER_ARGS+=("${EXTRA[@]+"${EXTRA[@]}"}")
+}
+
+cmd_source_transfer() {
+    require_rsync
+    resolve_transfer_path
+    # Probe BEFORE probe_daemon, not after. The module has `max connections = 1`,
+    # so the abandoned greeting connection occupies the only slot until the
+    # daemon reaps that child; probe_daemon already retries 3x with 2s sleeps for
+    # exactly this reason, so probing first lets that loop absorb the slot.
+    # Probing after would leave the abandoned child contending with the
+    # retry-less `exec sudo rsync` transfer. A failed probe costs nothing here:
+    # probe_daemon still produces its actionable error a moment later.
+    probe_remote_protocol || true
+    probe_daemon
+
+    compose_transfer_args
+
+    if ((${#DROPPED_CAPS[@]})); then
         # At most two entries, so join explicitly rather than reaching for IFS
         # tricks: "${arr[*]}" joins on the FIRST character of IFS only, so a
         # `local IFS=', '` would produce "a,b" and silently lose the space.
-        local dropped_list="${dropped[0]}"
-        ((${#dropped[@]} > 1)) && dropped_list+=", ${dropped[1]}"
+        local dropped_list="${DROPPED_CAPS[0]}"
+        ((${#DROPPED_CAPS[@]} > 1)) && dropped_list+=", ${DROPPED_CAPS[1]}"
 
-        # print_warning_box pads to a 68-character content width and does NOT
-        # truncate (utils-misc.sh), so any line longer than that blows out the
-        # right border. Every line below is kept under 68 — in particular the
-        # binary path gets its own indented line instead of being inlined into a
-        # sentence, because "/opt/homebrew/bin/rsync" alone is 23 characters.
+        # print_warning_box pads to a 69-character content width and truncates
+        # anything longer (utils-misc.sh), so keep every line below that or it
+        # loses its tail. In particular the binary path gets its own indented
+        # line rather than being inlined into a sentence, because
+        # "/opt/homebrew/bin/rsync" alone is 23 characters.
         local -a reason_lines
-        if [[ "$remote_ok" != true ]]; then
+        if [[ "$DROPPED_BY_REMOTE" == true ]]; then
             reason_lines=("The target speaks protocol ${REMOTE_PROTOCOL}; -A/-X need 30 or higher.")
         else
             reason_lines=("This rsync does not support ${dropped_list}:" "    $RSYNC_BIN")
@@ -544,21 +689,6 @@ cmd_source_transfer() {
             die 69 "aborted — install rsync 3.x on both hosts to preserve ACLs/xattrs"
     fi
 
-    # --info=FLAGS shipped in rsync 3.1.0, which is exactly protocol 31, so this
-    # is an exact test rather than a version heuristic (see parse_rsync_protocol).
-    # An unknown local protocol assumes capable: rsync then raises its own precise
-    # error, which beats silently downgrading output on a build we misread.
-    if ((${LOCAL_PROTOCOL:-31} >= 31)); then
-        args+=(--info=progress2)
-    else
-        print_warning "⚠ --info=progress2 needs rsync 3.1+ (protocol 31); falling back to --progress"
-        args+=(--progress)
-    fi
-
-    ((DRY_RUN)) && args+=(--dry-run)
-    ((DELETE))  && args+=(--delete)
-    args+=("${EXTRA[@]+"${EXTRA[@]}"}")
-
     print_info "source directory : $TRANSFER_PATH/"
     print_info "destination      : $DAEMON_URL"
     ((DRY_RUN)) && print_warning "⚠ DRY RUN — nothing will be written"
@@ -569,12 +699,39 @@ cmd_source_transfer() {
     # a glance whether -A/-X survived capability detection — this is the tool
     # whose own docs tell you to verify with --itemize-changes.
     # Display only: the transfer execs the args array, never this string.
-    print_info "running: sudo $RSYNC_BIN ${args[*]} ${TRANSFER_PATH}/ $DAEMON_URL"
+    print_info "running: sudo $RSYNC_BIN ${TRANSFER_ARGS[*]} ${TRANSFER_PATH}/ $DAEMON_URL"
 
-    exec sudo "$RSYNC_BIN" "${args[@]}" "${TRANSFER_PATH}/" "$DAEMON_URL"
+    exec sudo "$RSYNC_BIN" "${TRANSFER_ARGS[@]}" "${TRANSFER_PATH}/" "$DAEMON_URL"
 }
 
 # -------------------------------------------------------------------- main --
+# Validate every operator-supplied value that reaches a config file, a URL or a
+# privileged command line. Split out of main() so it is testable without the
+# self-update and stale-temp sweep main() performs first — same seam as
+# build_daemon_config and compose_transfer_args.
+# Reads: PORT, MODULE, TRANSFER_PATH, LOG_FILE, CONF. Exits on any failure.
+validate_options() {
+    # ^[1-9] (not ^[0-9]) rejects a leading zero outright: bash arithmetic reads
+    # 08/077 as octal, so `((PORT < 1))` errored out — and, sitting in an `if`
+    # condition where set -e does not fire, let the bad port through to the daemon
+    # config, the ssh forward and the rsync URL. Capping at 5 digits also keeps
+    # the comparison clear of integer overflow.
+    if [[ ! "$PORT" =~ ^[1-9][0-9]{0,4}$ ]] || ((PORT > 65535)); then
+        die 64 "invalid port: $PORT  (expected 1-65535, no leading zeros)"
+    fi
+
+    # MODULE lands in an rsyncd.conf section header AND in the rsync:// URL.
+    [[ "$MODULE" =~ ^[A-Za-z0-9._-]+$ ]] || die 64 "invalid module name: $MODULE  (allowed: A-Z a-z 0-9 . _ -)"
+
+    # rsyncd.conf is line-oriented and has no escape syntax, so a newline in any
+    # value interpolated into it injects daemon directives — a second [module], a
+    # `pre-xfer exec = ...` — defeating the chroot/loopback confinement.
+    [[ "${TRANSFER_PATH}${LOG_FILE}${CONF}" == *[[:cntrl:]]* ]] &&
+        die 64 "control characters are not allowed in --path/--log/--conf values"
+
+    return 0
+}
+
 main() {
     # Help / no-args fast-path BEFORE any network/self-update work.
     if [[ $# -eq 0 ]]; then show_usage; exit 0; fi
@@ -607,23 +764,7 @@ main() {
         esac
     done
 
-    # ^[1-9] (not ^[0-9]) rejects a leading zero outright: bash arithmetic reads
-    # 08/077 as octal, so `((PORT < 1))` errored out — and, sitting in an `if`
-    # condition where set -e does not fire, let the bad port through to the daemon
-    # config, the ssh forward and the rsync URL. Capping at 5 digits also keeps
-    # the comparison clear of integer overflow.
-    if [[ ! "$PORT" =~ ^[1-9][0-9]{0,4}$ ]] || ((PORT > 65535)); then
-        die 64 "invalid port: $PORT  (expected 1-65535, no leading zeros)"
-    fi
-
-    # MODULE lands in an rsyncd.conf section header AND in the rsync:// URL.
-    [[ "$MODULE" =~ ^[A-Za-z0-9._-]+$ ]] || die 64 "invalid module name: $MODULE  (allowed: A-Z a-z 0-9 . _ -)"
-
-    # rsyncd.conf is line-oriented and has no escape syntax, so a newline in any
-    # value interpolated into it injects daemon directives — a second [module], a
-    # `pre-xfer exec = ...` — defeating the chroot/loopback confinement.
-    [[ "${TRANSFER_PATH}${LOG_FILE}${CONF}" == *[[:cntrl:]]* ]] &&
-        die 64 "control characters are not allowed in --path/--log/--conf values"
+    validate_options
 
     # Only source-tunnel takes a positional. Swallowing one in the other steps
     # hides a wrong-terminal mistake in the middle of a migration.
@@ -631,6 +772,10 @@ main() {
         die 64 "unexpected argument '$REMOTE' — only 'source-tunnel' takes an ssh target"
     fi
 
+    # Re-derive after parsing: --conf may have replaced CONF since the defaults
+    # block set these. This and the defaults block are the ONLY two places the
+    # lock path is computed (see the LOCK_FILE comment above).
+    LOCK_FILE="${CONF%.conf}.lock"
     DAEMON_URL="rsync://127.0.0.1:${PORT}/${MODULE}/"
 
     case "$mode" in

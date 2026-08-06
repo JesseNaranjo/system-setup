@@ -72,8 +72,11 @@ show_usage() {
 detect_dig() {
     command -v dig &>/dev/null && return 0
     print_error "✖ 'dig' not found."
-    case "$OSTYPE" in
-        linux-gnu*)
+    # detect_os (utils-misc.sh), not a raw $OSTYPE case: utils/ has one way to
+    # decide the platform, and open-coding the comparison here made it two.
+    detect_os
+    case "$DETECTED_OS" in
+        linux)
             if command -v apt &>/dev/null; then
                 echo "Install with: sudo apt install dnsutils" >&2
             elif command -v dnf &>/dev/null; then
@@ -84,7 +87,7 @@ detect_dig() {
                 echo "Install your distribution's DNS utilities package." >&2
             fi
             ;;
-        darwin*)
+        macos)
             echo "Install with: brew install bind" >&2
             ;;
         *)
