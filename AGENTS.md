@@ -124,9 +124,9 @@ Apply the DRY principle when code duplication creates maintenance risk. Extract 
    readonly NC='\033[0m'
 
    # Output functions - extracted because pattern repeats
-   print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
-   print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
-   print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
+   print_error()   { printf '%b[ ERROR   ]%b %s\n' "$RED" "$NC" "$1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
+   print_info()    { printf '%b[ INFO    ]%b %s\n' "$BLUE" "$NC" "$1"; }
+   print_success() { printf '%b[ SUCCESS ]%b %s\n' "$GREEN" "$NC" "$1"; }
    ```
 
 #### When NOT to Extract
@@ -202,6 +202,35 @@ result=`cmd`          # ✖ NEVER
 #!/usr/bin/env bash
 set -euo pipefail     # ALWAYS at script top
 ```
+
+#### Runtime Baseline: bash 5+
+
+**bash 5+ is the baseline everywhere — Linux and macOS alike.** Write for bash 5:
+`${var,,}`, `declare -A`, `mapfile`, negative array indices, and `"${arr[@]}"` on
+an empty array under `set -u` are all fair game.
+
+- Do NOT add bash-3.2 fallbacks or POSIX rewrites of bash-4 expansions.
+- Do NOT add per-script `BASH_VERSINFO` guards. The `utils/` suite asserts the
+  baseline once, at the top of `utils/utils-misc.sh`, which every script in that
+  directory sources.
+- Do NOT justify code with "macOS ships bash 3.2" — macOS hosts are expected to
+  run Homebrew bash. If you find such a justification in a comment, it is stale;
+  correct it rather than propagating it.
+- `"${arr[@]+"${arr[@]}"}"` is kept anyway. It is equivalent to a bare
+  `"${arr[@]}"` from bash 4.4 on, but it is the repo-wide form for expanding a
+  possibly-empty array and every site uses it — consistency, not necessity.
+
+#### Linting
+
+Run `shellcheck -x` on every `*.sh` you touch. **Warnings are errors: the target
+is 0.** Use `-x` (follow `source`) or a sourced library's symbols show up as
+SC2154 false positives. Where a warning is genuinely wrong, silence it with a
+narrow `# shellcheck disable=SCxxxx` on the line plus a comment saying why —
+never a file-wide disable.
+
+Several pre-existing files are not yet at 0; they are inventoried in
+`docs/future-todos.md`. Do NOT let a file you touch get worse: compare the count
+before and after your change.
 
 #### Common Conditionals
 
@@ -502,14 +531,29 @@ done
 
 ### Helper Library Duplication (Intentional)
 
-The canonical helper functions — `download_script`, `prompt_yes_no`, `print_error`, `print_success`, `print_warning`, `cleanup`, `sweep_stale_temps`, `show_diff_box` — are **deliberately duplicated** across:
+These helper functions are **deliberately duplicated**. The roster is exhaustive — if a function is not listed here, the all-copies rule does not cover it, so ADD IT to this table when you duplicate anything new:
 
-- `system-setup/utils-sys.sh`
-- `kubernetes/utils-k8s.sh`
-- `lxc/utils-lxc.sh`
-- `llm/utils-llm.sh`
-- `utils/utils-misc.sh`
-- `github/gh_org_copy.sh`, `github/gh_org_delete_repos.sh`, `github/gh_org_delete_issues.sh` (defined inline; standalones)
+| Helper | Copies | Where |
+|--------|--------|-------|
+| `print_error`, `print_info`, `print_success`, `print_warning` | 8 | all 5 libraries + the 3 `github/gh_org_*.sh` standalones |
+| `prompt_yes_no` | 8 | same |
+| `download_script` | 8 | same |
+| `cleanup` (EXIT-trap temp reaper) | 8 | same |
+| `sweep_stale_temps` | 8 | same |
+| `show_diff_box` | 8 | same |
+| `_sanitize_ansi` | 8 | same — composed by `show_diff_box`, so it travels with it |
+| `print_warning_box` | 5 | the 5 libraries only (the `github/` standalones do not use it) |
+| `detect_os` | 3 | `system-setup/utils-sys.sh`, `utils/utils-misc.sh`, `kubernetes/utils-k8s.sh` |
+
+The 5 libraries are `system-setup/utils-sys.sh`, `kubernetes/utils-k8s.sh`,
+`lxc/utils-lxc.sh`, `llm/utils-llm.sh`, `utils/utils-misc.sh`. The 3 standalones
+are `github/gh_org_copy.sh`, `github/gh_org_delete_repos.sh`,
+`github/gh_org_delete_issues.sh` (helpers defined inline).
+
+**Known deliberate variants** — do NOT "unify" these away:
+
+- `utils/utils-misc.sh` defines its colour constants with `$'\033…'` (real ESC bytes) rather than `'\033…'`. The `cat`-heredoc `show_usage` in `utils/push-ghostty-terminfo.sh` and `utils/rsync-over-tunnel.sh` needs real bytes or it prints literal escapes. Every `print_*` body uses `%b` for the colour and `%s` for the message precisely so ONE body works with either constant form.
+- `utils/rsync-over-tunnel.sh` overrides `cleanup` BY NAME with a superset that also removes its throwaway daemon config. It is a 9th copy of the roster helper and must be re-audited whenever the canonical `cleanup` changes; the file says so at the definition.
 
 **This is INTENTIONAL.** The suite-isolation architecture requires every directory to be independently downloadable: a user pulling `lxc/script.sh` must get a working script without also fetching `system-setup/utils-sys.sh`. The `github/gh_org_*.sh` standalones go further — they MUST work as a single-file copy/paste with zero external dependencies.
 
@@ -517,6 +561,7 @@ The canonical helper functions — `download_script`, `prompt_yes_no`, `print_er
 
 - **Do NOT extract these helpers to a single shared library.** That would break the standalone invariant the `github/` scripts depend on and the suite-isolation invariant the per-directory `_download-*-scripts.sh` flows depend on.
 - When fixing a bug or adjusting behavior in one of these helpers, **update every copy in the same change**. `utils/utils-misc.sh` is the 5th per-directory parity copy for this audit. The pattern letters (A–J) used in the self-update backport plans exist precisely so cross-copy parity can be audited mechanically.
+- **Verify parity by hashing the function bodies across BOTH repositories**, not just within one. A check that hashes only the copies inside a single repo cannot detect a public-vs-private divergence, and one such divergence went unnoticed for exactly that reason. Extract each body from its `name() {` line through its closing `}` and compare digests; every copy must produce one digest.
 - Drift between copies is managed by **careful code review**, not tooling. Every PR that touches one helper must justify why the others were or were not also touched.
 
 When adding a NEW helper that is genuinely shared logic (not an existing canonical helper), prefer adding it to the per-suite utils file rather than promoting to a new shared library.
@@ -902,9 +947,9 @@ readonly RED='\033[0;31m'
 readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m'
 
-print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
-print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
-print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
+print_error()   { printf '%b[ ERROR   ]%b %s\n' "$RED" "$NC" "$1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
+print_info()    { printf '%b[ INFO    ]%b %s\n' "$BLUE" "$NC" "$1"; }
+print_success() { printf '%b[ SUCCESS ]%b %s\n' "$GREEN" "$NC" "$1"; }
 
 main() {
     print_info "Starting..."
@@ -1488,13 +1533,13 @@ done
 ### Standard Output Functions
 
 ```bash
-print_backup()  { echo -e "${GRAY}[ BACKUP  ] $1${NC}"; }
-print_debug()   { echo -e "${MAGENTA}[ DEBUG   ] $1${NC}"; }
-print_error()   { echo -e "${RED}[ ERROR   ]${NC} $1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
-print_info()    { echo -e "${BLUE}[ INFO    ]${NC} $1"; }
-print_success() { echo -e "${GREEN}[ SUCCESS ]${NC} $1"; }
-print_summary() { echo -e "${BLUE}[ SUMMARY ]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[ WARNING ]${NC} $1"; }
+print_backup()  { printf '%b[ BACKUP  ] %s%b\n' "$GRAY" "$1" "$NC"; }
+print_debug()   { printf '%b[ DEBUG   ] %s%b\n' "$MAGENTA" "$1" "$NC"; }
+print_error()   { printf '%b[ ERROR   ]%b %s\n' "$RED" "$NC" "$1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
+print_info()    { printf '%b[ INFO    ]%b %s\n' "$BLUE" "$NC" "$1"; }
+print_success() { printf '%b[ SUCCESS ]%b %s\n' "$GREEN" "$NC" "$1"; }
+print_summary() { printf '%b[ SUMMARY ]%b %s\n' "$BLUE" "$NC" "$1"; }
+print_warning() { printf '%b[ WARNING ]%b %s\n' "$YELLOW" "$NC" "$1"; }
 ```
 
 **Stream rules:**
@@ -1530,22 +1575,27 @@ Exceptions to the glyph requirement: decorative banners (`print_warning "══�
 # Usage: print_warning_box "line1" "line2" "line3" ...
 print_warning_box() {
     local box_width=77
-    local padding=8
-    local content_width=$((box_width - padding - 1))
+    local content_width=$((box_width - 8))   # 8 = the indent inside the left border
 
     echo ""
     echo -e "            ${YELLOW}╔$(printf '═%.0s' $(seq 1 $box_width))╗${NC}"
     echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
 
+    # Pad on CHARACTER count, not printf's "%-Ns", which pads by BYTES. Box
+    # content carries multi-byte glyphs (•, —, ✓), so byte padding rendered
+    # those rows narrower than the border — measured at 89 columns against a
+    # 91-column border. ${#line} counts characters and ${line:0:N} cuts on
+    # character boundaries in a UTF-8 locale, so an over-long line is truncated
+    # without splitting a glyph into invalid UTF-8; the slice is a no-op on a
+    # line that already fits. Under a non-UTF-8 locale both fall back to bytes,
+    # which is the previous behaviour and no worse.
+    # %b for the colour constants (they are literal '\033…' in most copies),
+    # %s for the caller's text so a backslash escape in it stays literal.
+    local line pad
     for line in "$@"; do
-        local line_len=${#line}
-        local right_pad=$((content_width - line_len))
-        if [[ $right_pad -lt 0 ]]; then
-            right_pad=0
-            line="${line:0:$content_width}"
-        fi
-        printf -v padded_line "%-${content_width}s" "$line"
-        echo -e "            ${YELLOW}║        ${padded_line}║${NC}"
+        line="${line:0:content_width}"
+        pad=$((content_width - ${#line}))
+        printf '            %b║        %s%*s║%b\n' "$YELLOW" "$line" "$pad" '' "$NC"
     done
 
     echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
@@ -1554,33 +1604,74 @@ print_warning_box() {
 }
 ```
 
+`content_width` is `box_width - 8`, NOT `box_width - padding - 1`: a content row
+emits the left border, then 8 spaces, then `content_width` padded characters,
+then the right border, so it must total `box_width` interior columns to line up
+with the blank and border rows. The extra `-1` left every box one column short.
+
 ### Diff Display Pattern
 
-Use the `show_diff_box` helper. It is defined once in every helper library (`utils-sys.sh`, `utils-k8s.sh`, `utils-lxc.sh`, `utils-llm.sh`, `utils-misc.sh`) and inlined in every standalone (`gh_org_*.sh`):
+Use the `show_diff_box` helper. It is defined once in every helper library (`utils-sys.sh`, `utils-k8s.sh`, `utils-lxc.sh`, `utils-llm.sh`, `utils-misc.sh`) and inlined in every standalone (`gh_org_*.sh`). It composes `_sanitize_ansi`, which MUST be present in the same file — the diff renders the content of a file just downloaded, and that content is untrusted:
 
 ```bash
-# Pretty-print a unified diff between two files inside a labeled box. Use
-# `less` when stdout is a TTY (so multi-page diffs don't flood scrollback);
-# fall back to inline output otherwise. GNU diff's `--color=always` forces
-# ANSI even when piped to `less`, but BSD/macOS diff lacks it — so detect
-# support once and omit the flag where unavailable. `-RFX` keeps less from
-# clearing the screen.
+# Strip every ANSI escape sequence except SGR colour.
+# Defends against terminal injection: the diff preview renders the CONTENT of a
+# file just downloaded, and a hostile file could otherwise repaint the screen
+# over the default-yes overwrite prompt that follows — drawing a fake "no
+# changes detected" line and turning one keypress into acceptance. The
+# expressions run in this order, and the order matters:
+#   1. OSC strings (\e]…) terminated by BEL or by ST (ESC \) — set-title and
+#      friends.
+#   2. The other ST-terminated string types: DCS (\eP), SOS (\eX), PM (\e^),
+#      APC (\e_). Their payloads are consumed raw by a terminal.
+#   3. CSI sequences (\e[…) whose final byte is NOT `m` — cursor moves
+#      (\e[A, \e[2K, \e[H, …) and mode toggles (\e[?25l, …) go, while SGR
+#      colour (\e[31m, \e[1;32m, \e[0m) survives, which is the point of the box.
+#   4. A CSI truncated by end-of-line, which would otherwise swallow the start
+#      of the next line as its parameters.
+#   5. Every remaining ESC not followed by `[` — the two-byte forms. This is
+#      the class the first version missed, and it held the worst of them:
+#      \ec (RIS) resets and clears the entire terminal, \e7/\e8 save and
+#      restore the cursor, \eM scrolls. Runs after 1-2 so it cannot eat the
+#      introducer of a string sequence those are still matching.
+#   6. A bare ESC at end of line.
+# Uses literal ESC/BEL bytes from bash $'…' so the regexes are portable between
+# GNU sed and BSD sed (which lacks \xNN support).
+_sanitize_ansi() {
+    local esc=$'\033' bel=$'\007'
+    sed -E -e "s/${esc}\\][^${esc}${bel}]*(${bel}|${esc}\\\\)//g" \
+           -e "s/${esc}[P^_X][^${esc}]*${esc}\\\\//g" \
+           -e "s/${esc}\\[[0-9;?]*[^0-9;?m]//g" \
+           -e "s/${esc}\\[[0-9;?]*$//" \
+           -e "s/${esc}[^[]//g" \
+           -e "s/${esc}$//"
+}
+
+# Render a unified diff between two files inside a labeled box. Pages through
+# `less -RFX` when stdout is a TTY (-R passes ANSI through, -F exits if content
+# fits one screen, -X skips alt-screen so output stays in scrollback); falls
+# back to inline `diff` when piped or `less` is missing. The diff is the content
+# of a file just downloaded, so it is untrusted and goes through _sanitize_ansi
+# before it reaches the terminal.
 show_diff_box() {
     local local_file="$1"
     local temp_file="$2"
     local label="$3"
     echo ""
     echo -e "${CYAN}╭────────────────────── Δ detected in ${label} ──────────────────────╮${NC}"
-    # GNU diff supports --color; BSD/macOS diff does not. Detect support once so the
-    # preview still renders on macOS instead of erroring into an empty box.
+    # Probe for --color rather than assuming it: macOS 26's diff supports it, but
+    # older BSD/macOS diff did not, and there it errors into an empty box.
+    # "${arr[@]+"${arr[@]}"}" rather than a bare "${diff_color[@]}": the two are
+    # equivalent from bash 4.4 on, but the guarded form is the repo-wide way of
+    # expanding a possibly-empty array under `set -u` and every other site uses it.
     local diff_color=()
     diff --color=always /dev/null /dev/null >/dev/null 2>&1 && diff_color=(--color=always)
     if [[ -t 1 ]] && command -v less &>/dev/null; then
-        diff -u "${diff_color[@]+"${diff_color[@]}"}" "${local_file}" "${temp_file}" | less -RFX || true
+        diff -u "${diff_color[@]+"${diff_color[@]}"}" "${local_file}" "${temp_file}" | _sanitize_ansi | less -RFX || true
     else
-        diff -u "${diff_color[@]+"${diff_color[@]}"}" "${local_file}" "${temp_file}" || true
+        diff -u "${diff_color[@]+"${diff_color[@]}"}" "${local_file}" "${temp_file}" | _sanitize_ansi || true
     fi
-    echo -e "${CYAN}╰─────────────────────────── ${label} ──────────────────────────────╯${NC}"
+    echo -e "${CYAN}╰─────────────────────────── ${label} ───────────────────────────────╯${NC}"
     echo ""
 }
 ```
@@ -1593,7 +1684,8 @@ show_diff_box "${LOCAL_FILE}" "${TEMP_FILE}" "${SCRIPT_FILE}"
 
 **Flag rationale:**
 
-- **`--color=always` (NOT `--color` alone).** `diff --color` defaults to `--color=auto`, which suppresses ANSI when stdout is not a TTY. Pipes to `less`, redirects to a file, and CI capture all strip color in `auto` mode. `always` forces ANSI; `less -R` (below) interprets it correctly.
+- **`--color=always` (NOT `--color` alone), and feature-probed rather than assumed.** `diff --color` defaults to `--color=auto`, which suppresses ANSI when stdout is not a TTY. Pipes to `less`, redirects to a file, and CI capture all strip color in `auto` mode. `always` forces ANSI; `less -R` (below) interprets it correctly. Do NOT claim BSD/macOS `diff` lacks `--color` — macOS 26's does support it; only older releases do not, which is exactly why the flag is probed into an array instead of hardcoded.
+- **`_sanitize_ansi` is not optional.** The diff carries freshly downloaded, untrusted content straight to the terminal through `less -R`, which passes ANSI through by design. Every `show_diff_box` call site MUST pipe through `_sanitize_ansi` first.
 - **`less -RFX`:**
   - **`-R`** passes raw ANSI control sequences through (so the colors from `--color=always` reach the terminal).
   - **`-F`** quits automatically if the entire content fits on one screen — short diffs print inline with no pager interaction.
@@ -1647,7 +1739,7 @@ These functions provide enhanced formatting for specific use cases. Not part of 
 ```bash
 print_section() {
     echo -e "${CYAN}╭────────────────────────────────────────────────────────────────────────╮${NC}"
-    echo -e "${CYAN}│${NC} $1"
+    printf '%b│%b %s\n' "$CYAN" "$NC" "$1"
     echo -e "${CYAN}╰────────────────────────────────────────────────────────────────────────╯${NC}"
 }
 ```
@@ -1657,7 +1749,7 @@ print_section() {
 print_header() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}[$(date +'%H:%M:%S')] $1${NC}"
+    printf '%b[$(date +'%H:%M:%S')] %s%b\n' "$CYAN" "$1" "$NC"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
 ```
@@ -1665,7 +1757,7 @@ print_header() {
 **print_step** - Indented step indicator:
 ```bash
 print_step() {
-    echo -e "${BLUE}  →${NC} $1"
+    printf '%b  →%b %s\n' "$BLUE" "$NC" "$1"
 }
 ```
 
@@ -2420,16 +2512,31 @@ download_script() {
         [[ -z "$http_status" ]] && http_status="000"
         case "$http_status" in
             200)
-                if head -n 10 "${output_file}" | grep -q "^#!/"; then
-                    return 0
-                else
-                    print_error "✖ Invalid content received (not a script)"
+                # Validate that we got a script, not an error page.
+                # Stricter than the previous first-ten-lines shebang grep, which
+                # accepted a shebang on ANY of the first 10 lines - so an HTML 4xx
+                # page that merely quotes a shebang in a code snippet no longer
+                # passes. Also reject CRLF - `exec` would fail with `bash\r: not
+                # found`, after the file has already replaced the original on disk.
+                # `|| true` lets an empty file reach the explicit checks below rather
+                # than blowing up under set -e.
+                local first_line
+                IFS= read -r first_line < "${output_file}" || true
+                if [[ "$first_line" != "#!"* ]]; then
+                    print_error "✖ Invalid content (no shebang on line 1)"
+                    rm -f "${output_file}"
                     return 1
                 fi
+                if [[ "$first_line" == *$'\r' ]]; then
+                    print_error "✖ Invalid content (CRLF line endings)"
+                    rm -f "${output_file}"
+                    return 1
+                fi
+                return 0
                 ;;
-            429) print_error "✖ Rate limited by GitHub (HTTP 429)"; return 1 ;;
-            000) print_error "✖ Download failed (network/timeout)"; return 1 ;;
-            *)   print_error "✖ HTTP ${http_status} error"; return 1 ;;
+            429) print_error "✖ Rate limited by GitHub (HTTP 429)"; rm -f "${output_file}"; return 1 ;;
+            000) print_error "✖ Download failed (network/timeout)"; rm -f "${output_file}"; return 1 ;;
+            *)   print_error "✖ HTTP ${http_status} error"; rm -f "${output_file}"; return 1 ;;
         esac
     elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
         local wget_exit=0
@@ -2439,23 +2546,48 @@ download_script() {
             || wget_exit=$?
         if [[ "$wget_exit" -ne 0 ]]; then
             print_error "✖ Download failed (wget exit ${wget_exit})"
+            rm -f "${output_file}"
             return 1
         fi
-        if head -n 10 "${output_file}" | grep -q "^#!/"; then
-            return 0
-        else
-            print_error "✖ Invalid content received (not a script)"
+        # Same strict gate as the curl branch above; keep the two identical.
+        local first_line
+        IFS= read -r first_line < "${output_file}" || true
+        if [[ "$first_line" != "#!"* ]]; then
+            print_error "✖ Invalid content (no shebang on line 1)"
+            rm -f "${output_file}"
             return 1
         fi
+        if [[ "$first_line" == *$'\r' ]]; then
+            print_error "✖ Invalid content (CRLF line endings)"
+            rm -f "${output_file}"
+            return 1
+        fi
+        return 0
     fi
 
     return 1
 }
 ```
 
+**The content gate is a security boundary, not a sanity check.** The downloaded
+file is about to be `chmod +x`'d, `mv`'d over the running script, and `exec`'d.
+Only these forms are acceptable:
+
+- **Read line 1 and only line 1.** `head -n 10 … | grep -q "^#!/"` accepted a
+  shebang on ANY of the first ten lines, so an HTML error page quoting
+  `#!/bin/sh` inside a code snippet passed validation. Do NOT reintroduce it.
+- **Reject a CRLF-terminated shebang.** It passes a naive `#!`-prefix test and
+  then fails at `exec` with `bash\r: not found` — after the download has already
+  replaced the original on disk.
+- **`rm -f "${output_file}"` on EVERY rejection path**, so a rejected body is
+  never left behind for something else to pick up.
+- Do NOT add a second `read` to "confirm the file has more than one line": its
+  status is swallowed by the `|| true` and nothing checks it, so it validates
+  nothing.
+
 **Critical changes from the older template:**
 
-- **`-fsSL` → `-sSL`** (drop the `-f`). With `-f`, curl exits non-zero on 4xx/5xx BEFORE `%{http_code}` is written to the output, so the captured `http_status` is empty and the old `|| echo "000"` fallback turns every HTTP error into `"000"` (and on some platforms, the concatenation `404` + `000` produced visible `"404000"` strings in error messages). Without `-f`, curl writes the body (the GitHub error page) to `output_file`, exits 0, and `%{http_code}` is captured cleanly. The shebang validation downstream rejects the error-page body. The sister-repo audit traced an "HTTP 404000 error" message to this exact bug.
+- **`-fsSL` → `-sSL`** (drop the `-f`). With `-f`, curl exits non-zero on 4xx/5xx BEFORE `%{http_code}` is written to the output, so the captured `http_status` is empty and the old `|| echo "000"` fallback turns every HTTP error into `"000"` (and on some platforms, the concatenation `404` + `000` produced visible `"404000"` strings in error messages). Without `-f`, curl writes the body (the GitHub error page) to `output_file`, exits 0, and `%{http_code}` is captured cleanly. The `case` arm for that status then reports the error and deletes the body — the strict shebang gate above is a second line of defence, not the primary one, because an HTML error page CAN begin with a line that looks like a shebang. The sister-repo audit traced an "HTTP 404000 error" message to this exact bug.
 - **`--max-time 15`** caps total transfer time. Without it, a sinkholed/black-hole network can hang for 5+ minutes (curl's default connect/read timeouts are very generous). 15 seconds is enough for a slow GitHub raw fetch and short enough that an interactive user notices and Ctrl+C's. Verified via [everything.curl.dev/usingcurl/timeouts.html](https://everything.curl.dev/usingcurl/timeouts.html).
 - **`[[ -z "$http_status" ]] && http_status="000"`** runs only when curl produced no status — true network failure, NOT HTTP error. The old `|| echo "000"` ran on any non-zero curl exit including HTTP-4xx-with-`-f`, conflating two different failures.
 - **`case` statement** replaces the if/elif chain so each branch is one line and the failure-message wording is uniform.
@@ -2724,9 +2856,11 @@ OBSOLETE_SCRIPTS=()
 # Include: prompt_yes_no (with { : </dev/tty; } open-probe guard)
 # Include: cleanup + trap cleanup EXIT (file-scope, NOT inside main)
 # Include: sweep_stale_temps (with { : </dev/tty; } open-probe)
-# Include: show_diff_box (with --color=always + less -RFX)
+# Include: _sanitize_ansi (required by show_diff_box; copy it verbatim)
+# Include: show_diff_box (probed --color + _sanitize_ansi + less -RFX)
 # Include: detect_download_cmd (with print_warning_box inline or simplified)
-# Include: download_script (with --max-time 15, -sSL not -fsSL, case statement)
+# Include: download_script (--max-time 15, -sSL not -fsSL, case statement, and
+#          the STRICT line-1 shebang + CRLF gate with rm -f on every rejection)
 # Include: cleanup_obsolete_scripts
 # Include: self_update (Pattern E adjacent mktemp + Pattern D mv handler)
 # Include: update_modules (Pattern E2 path-aware mktemp + Pattern D mv handler)
@@ -2779,6 +2913,7 @@ Each significant folder contains a `README.md` that documents its contents, patt
 | `git/README.md` | Git-related scripts | ❌ |
 | `raspberry-pi/README.md` | Raspberry Pi setup scripts | ❌ |
 | `utils/README.md` | Cross-platform utilities | ✅ |
+| `utils/tests/README.md` | Unit tests for the pure functions in `utils/` | ✅ |
 
 #### Documentation Folders
 

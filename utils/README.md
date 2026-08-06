@@ -2,11 +2,13 @@
 
 Cross-platform utility scripts for system maintenance, file synchronization, and developer tool management. Most scripts are Modular Standalone: they source the shared `utils-misc.sh` library and self-update via `check_for_updates`, managed by `_download-utils-scripts.sh`. `monitor-battery.sh` and `disable-kvm-module.sh` are trivial one-offs kept as Lightweight scripts (no shared utilities, no self-update). The 2 `.ps1` scripts are Windows PowerShell and remain standalone.
 
+**Requires bash 5+.** `utils-misc.sh` checks it once at source time and exits 69 with a remedy, so every script that sources it inherits the check. On macOS, `/bin/bash` is 3.2 and will never be updated — install a current one with `brew install bash` and make sure it is ahead of `/bin` on `PATH`.
+
 ## Scripts
 
 | Script | Platform | Purpose |
 |--------|----------|---------|
-| `utils-misc.sh` | Linux/macOS | Shared utilities library (colors, prompts, self-update) required by the scripts below |
+| `utils-misc.sh` | Linux/macOS | Shared utilities library (colors, prompts, self-update) required by the scripts below; also asserts the **bash 5+** baseline for the whole directory |
 | `_download-utils-scripts.sh` | Linux/macOS | Self-updating script manager for this directory |
 | `rsync-two-way.sh` | Linux/macOS | Two-way file synchronization using rsync |
 | `rsync-over-tunnel.sh` | Linux/macOS | One-way directory-tree transfer to another host over an SSH tunnel via a throwaway loopback rsync daemon |
@@ -34,9 +36,21 @@ warns, and asks before continuing without them. For full metadata fidelity run
 
 `use chroot = yes` is claimed only where the daemon binary can actually take it — Linux, or macOS
 running Apple's signed `/usr/bin/rsync`, which holds the `com.apple.private.vfs.chroot`
-entitlement. A Homebrew rsync on macOS runs the daemon without chroot confinement and says so.
+entitlement. A Homebrew rsync on macOS runs the daemon without chroot confinement; step 1 spells
+out what that costs (symlinks written into the destination are no longer confined to the module
+path, and the module is unauthenticated) and requires an explicit confirmation, defaulting to
+**no**. Non-interactive runs abort rather than proceed unconfined.
 
-Requires bash 4+ (macOS ships 3.2 — `brew install bash`).
+**BREAKING — the default module name is `xfer`, not `lxc`.** The module name travels *on the wire*:
+it is the `rsyncd.conf` section header on the target and the last path element of the `rsync://`
+URL on the source, so **both hosts must run the same version of this script**. It changed when the
+script stopped being LXC-specific. A half-upgraded pair does not transfer to the wrong place — it
+fails with `no rsync daemon answering on 127.0.0.1:8730 module 'xfer'`. Until both sides are
+updated, pass `--module lxc` on **both** hosts.
+
+**`--conf` must name a path that does not exist.** The generated daemon config is a throwaway and
+is *deleted on exit*, together with the `.lock` file derived from it. Pointing `--conf` at a real
+`rsyncd.conf` is refused (exit 73) rather than obeyed.
 
 ## Usage
 
