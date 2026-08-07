@@ -4,6 +4,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), date-based, ne
 This changelog begins 2026-07-06. Entries below capture the project's major
 features as of that date; earlier history is not individually recorded.
 
+## [2026-08-07]
+
+### Fixed
+
+- **The generated `rsyncd.conf` used `gid = root`, which does not exist on macOS — every macOS target daemon refused the transfer.** macOS has no group named `root`; gid 0 is `wheel`. Steps 1 and 2 both completed normally and the failure surfaced only in step 3, on the *source* host, as `@ERROR <module>: gid 'root' invalid` — the daemon resolves the module's user and group when a client attaches, not when the config is parsed, so the error pointed at the wrong machine and read like a tunnel fault. `uid` and `gid` are now numeric `0`, the superuser id on both platforms, which needs no name lookup at all. Both daemons accept a number: `rsyncd.conf(5)` documents `uid` as "the user name or user ID" and `gid` as "group names/IDs", and openrsync's `daemon_chuser_resolve_name` tries `getpwnam`/`getgrnam` first and falls back to `strtoll`. Found by the first real macOS ↔ macOS run; now pinned by four assertions, two of which reject a name-valued `uid`/`gid` outright.
+
 ## [2026-08-06]
 
 Post-implementation review of the 2026-08-05 work. Findings are numbered F1–F33

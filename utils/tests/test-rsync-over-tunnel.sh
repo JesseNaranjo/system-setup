@@ -301,7 +301,15 @@ assert_contains     "$conf_yes" '2026-08-04T00:00:00Z'  "stamp is injected, not 
 # This config grants root write access over a socket. Every directive that
 # confines it is asserted, so a careless edit to the printf block trips a test
 # rather than silently widening exposure.
-assert_contains     "$conf_yes" 'uid = root'            "runs as root (intended)"
+assert_contains     "$conf_yes" 'uid = 0'               "runs as root (intended)"
+assert_contains     "$conf_yes" 'gid = 0'               "runs as the superuser group (intended)"
+# Regression guard for the macOS↔macOS acceptance run: macOS has no group named
+# "root" (gid 0 is "wheel"), so a name here made every macOS target daemon
+# answer "@ERROR <module>: gid 'root' invalid" at connect time — long after
+# step 1 had started and reported success. Numeric 0 needs no name lookup and
+# resolves on both platforms via openrsync's strtoll fallback.
+assert_not_contains "$conf_yes" 'uid = root'            "uid is numeric, not a name"
+assert_not_contains "$conf_yes" 'gid = root'            "gid is numeric, not a name"
 assert_contains     "$conf_yes" 'address = 127.0.0.1'   "binds loopback only"
 assert_contains     "$conf_yes" 'hosts allow = 127.0.0.1' "loopback allow-list"
 assert_contains     "$conf_yes" 'hosts deny = *'        "deny-by-default"
