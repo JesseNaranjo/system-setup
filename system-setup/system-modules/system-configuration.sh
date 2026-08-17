@@ -142,7 +142,7 @@ configure_tmux() {
     add_config_if_needed "tmux" "$config_file" "set -g pane-border-lines" "double" "double-line pane borders"
     add_config_if_needed "tmux" "$config_file" "set -g pane-border-status" "top" "pane border status location"
     add_config_if_needed "tmux" "$config_file" "set -g pane-border-format" '"#{?pane_active,#[fg=#ff0051]#[bg=#4a93b8] ●#[fg=#000000],#[fg=#686868] ○} #{pane_title} // #{pane_current_command} "' "pane border format"
-    add_config_if_needed "tmux" "$config_file" "set -g status-left" "#{session_name} // " "session name in status bar"
+    add_config_if_needed "tmux" "$config_file" "set -g status-left" '"Session: #{session_name} // "' "session name in status bar"
     add_config_if_needed "tmux" "$config_file" "set -g status-left-length" "0" "status-left max length"
     add_config_if_needed "tmux" "$config_file" "set -g status-right" '"%a %b %d %I:%M"' "current date and time in status bar"
     add_config_if_needed "tmux" "$config_file" "set -g status-right-length" "0" "status-right max length"
