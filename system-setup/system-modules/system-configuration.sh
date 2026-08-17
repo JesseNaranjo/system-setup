@@ -137,8 +137,8 @@ configure_tmux() {
     #add_config_if_needed "tmux" "$config_file" "set -g remain-on-exit" "on" "keep panes open after process exits"
 
     # Appearance
-    add_config_if_needed "tmux" "$config_file" "set -g window-style" "'bg=color235'" "inactive window background"
-    add_config_if_needed "tmux" "$config_file" "set -g window-active-style" "'bg=color233'" "active window background"
+    add_config_if_needed "tmux" "$config_file" "set -g window-style" '"bg=color235"' "inactive window background"
+    add_config_if_needed "tmux" "$config_file" "set -g window-active-style" '"bg=color233"' "active window background"
     add_config_if_needed "tmux" "$config_file" "set -g pane-border-lines" "double" "double-line pane borders"
     add_config_if_needed "tmux" "$config_file" "set -g pane-border-status" "top" "pane border status location"
     add_config_if_needed "tmux" "$config_file" "set -g pane-border-format" '"#{?pane_active,#[fg=#ff0051]#[bg=#4a93b8] ●#[fg=#000000],#[fg=#686868] ○} #{pane_title} // #{pane_current_command} "' "pane border format"
