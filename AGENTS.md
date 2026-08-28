@@ -1,9 +1,7 @@
 # AI Agent Instructions
 
 <!-- DRIFT GUARD — Do not remove the audience line below. -->
-> **Audience: AI coding agents only.** This file is written for LLM-based coding assistants (Claude Code, GitHub Copilot, etc.), not human developers. You MUST follow these guidelines. It assumes you already know general programming principles (SOLID, DRY, YAGNI, etc.) and focuses on project-specific conventions.
-
-> **Sync note:** [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md), [GEMINI.md](GEMINI.md), and [.github/copilot-instructions.md](.github/copilot-instructions.md) are exact clones - all must symlink to AGENTS.md. Only read the ONE relevant to you. Do NOT read or load any of the others into context since that would be wasteful context usage.
+> **Audience: AI coding agents only.** This file is written for LLM-based coding assistants (Claude Code, GitHub Copilot, etc.), not human developers. This file IS the project constitution, and it is the only copy on disk: the repo-root `CLAUDE.md` (the name Claude Code's loader enters through), the repo-root `GEMINI.md`, and `.github/copilot-instructions.md` are all symlinks to it, so every agent enters the same document under whichever name its loader expects. Edit `AGENTS.md`, never a symlink. Never `Read` a name you did not enter through: all four paths are one file, and loading a second duplicates the entire constitution in context. Pinned by `test/constitution-symlink-drift-guard.test.ts`. Auto-loaded into every Claude Code session; optimized for directive density and operational safety, not human onboarding. Do not rewrite it into README prose. Keep lines load-bearing; delete anything that does not change agent behavior.
 
 Personal system configuration repository with bash scripts for setting up Linux and macOS systems. Modular architecture with package management, system configuration, LXC containers, Kubernetes setup, and utilities.
 
