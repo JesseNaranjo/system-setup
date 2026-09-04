@@ -4,6 +4,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), date-based, ne
 This changelog begins 2026-07-06. Entries below capture the project's major
 features as of that date; earlier history is not individually recorded.
 
+## [2026-09-04]
+
+### Added
+
+- **`docs/lessons.md`** — a log of standing lessons and decision records, holding durable facts that outlive the work which surfaced them, per the entry schema in `~/.claude/CLAUDE.md` §Lessons Log. Seeded with one entry: `grep --exclude` silently no-ops on `.md` files in this repository. Claude Code replaces `grep` with a shell function running ugrep with `--ignore-files`, and this repo's `.gitignore` ends with the negation `!**/*.md`, which ugrep turns into a forced include that overrides `--exclude` — no warning, no error. Any repo-wide sweep relying on that flag to protect a file fails open; filter the output instead. `docs/README.md` gains the matching row.
+
 ## [2026-08-07]
 
 ### Fixed
