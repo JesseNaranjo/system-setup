@@ -1,7 +1,7 @@
 # AI Agent Instructions
 
 <!-- DRIFT GUARD — Do not remove the audience line below. -->
-> **Audience: AI coding agents only.** This file is written for LLM-based coding assistants (Claude Code, GitHub Copilot, etc.), not human developers. This file IS the project constitution, and it is the only copy on disk: the repo-root `CLAUDE.md` (the name Claude Code's loader enters through), the repo-root `GEMINI.md`, and `.github/copilot-instructions.md` are all symlinks to it, so every agent enters the same document under whichever name its loader expects. Edit `AGENTS.md`, never a symlink. Never `Read` a name you did not enter through: all four paths are one file, and loading a second duplicates the entire constitution in context. Pinned by `test/constitution-symlink-drift-guard.test.ts`. Auto-loaded into every Claude Code session; optimized for directive density and operational safety, not human onboarding. Do not rewrite it into README prose. Keep lines load-bearing; delete anything that does not change agent behavior.
+> **Audience: AI coding agents only.** This file is written for LLM-based coding assistants (Claude Code, GitHub Copilot, etc.), not human developers. This file IS the project constitution, and it is the only copy on disk: the repo-root `CLAUDE.md` (the name Claude Code's loader enters through), the repo-root `GEMINI.md`, and `.github/copilot-instructions.md` are all symlinks to it, so every agent enters the same document under whichever name its loader expects. Edit `AGENTS.md`, never a symlink. Never `Read` a name you did not enter through: all four paths are one file, and loading a second duplicates the entire constitution in context. Auto-loaded into every Claude Code session; optimized for directive density and operational safety, not human onboarding. Do not rewrite it into README prose. Keep lines load-bearing; delete anything that does not change agent behavior.
 
 Personal system configuration repository with bash scripts for setting up Linux and macOS systems. Modular architecture with package management, system configuration, LXC containers, Kubernetes setup, and utilities.
 
@@ -3061,19 +3061,17 @@ Brief description of what documentation this folder contains.
 
 ### Worktree Directory
 
-Create worktrees in `.worktrees/<branch-name>/` relative to the repository root. This directory is gitignored.
+Create worktrees with `EnterWorktree` (or `claude --worktree`), which places them in `.claude/worktrees/<name>/` on a branch named `worktree-<name>`. That path is gitignored. Do NOT hand-roll `git worktree add` — the native tool owns placement, branch naming, and cleanup, and a hand-made worktree carries no Claude Code marker.
 
-### Required Files to Copy
+### Files Carried Into a Worktree
 
-| File/Folder | Purpose |
+`.worktreeinclude` at the repo root lists them, and Claude Code copies each match when it creates the worktree. Only files that match a pattern **and** are gitignored are copied, so never list a tracked file; always name the directory in the pattern, never a bare `**/` glob. A path ignored only by your personal global excludes file does NOT qualify on someone else's clone — give it a repo-level `.gitignore` entry before listing it here.
+
+| Path | Purpose |
 |-------------|---------|
-| `.claude/` | Claude Code settings and session data |
+| `.claude/settings.local.json` | Sets `autoMemoryDirectory`; a worktree session without it silently loses shared auto-memory. |
 
-### Quick Setup
-
-```bash
-cp -r .claude <worktree-path>/
-```
+Do NOT `cp -r .claude` into a worktree — that copies `.claude/worktrees/` over itself.
 
 ### Files NOT to Copy
 
@@ -3081,15 +3079,16 @@ No generated/cached directories need copying — this project has no build step 
 
 ### Worktree Cleanup
 
-ALWAYS delete the worktree **before** the branch:
+`ExitWorktree` with `remove`. By hand, ALWAYS delete the worktree **before** the branch, and mind the `worktree-` branch prefix:
 ```bash
-git worktree remove --force .worktrees/<branch-name>
-git branch -d <branch-name>
+git worktree remove .claude/worktrees/<name>
+git branch -d worktree-<name>
 ```
+A worktree you created yourself with `git worktree add` carries no Claude Code marker, so the `cleanupPeriodDays` sweep never reclaims it — remove it by hand.
 
 ### Verification
 
-Scripts are standalone bash — no install step needed. Verify with: `ls .worktrees/<branch-name>/system-setup/system-setup.sh`
+Scripts are standalone bash — no install step needed. Verify with: `ls .claude/worktrees/<name>/system-setup/system-setup.sh`
 
 ---
 

@@ -47,8 +47,9 @@ Desktop.ini
 $RECYCLE.BIN/
 *.lnk
 
-# Worktrees
-.worktrees/
+# Claude Code
+.claude/worktrees/
+.claude/settings.local.json
 
 # Caches / temps
 .cache/

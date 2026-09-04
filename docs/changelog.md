@@ -10,6 +10,10 @@ features as of that date; earlier history is not individually recorded.
 
 - **`docs/lessons.md`** — a log of standing lessons and decision records, holding durable facts that outlive the work which surfaced them, per the entry schema in `~/.claude/CLAUDE.md` §Lessons Log. Seeded with one entry: `grep --exclude` silently no-ops on `.md` files in this repository. Claude Code replaces `grep` with a shell function running ugrep with `--ignore-files`, and this repo's `.gitignore` ends with the negation `!**/*.md`, which ugrep turns into a forced include that overrides `--exclude` — no warning, no error. Any repo-wide sweep relying on that flag to protect a file fails open; filter the output instead. `docs/README.md` gains the matching row.
 
+### Changed
+
+- **§Git Worktrees adopts Claude Code's native worktree convention.** Worktrees are created by `EnterWorktree` / `claude --worktree` in `.claude/worktrees/<name>/` on branch `worktree-<name>`. `.gitignore` gains that path — it was **not** previously ignored, so the next native worktree would have dropped a full second checkout into the repository as untracked files — plus a repo-level `.claude/settings.local.json` entry, which had been ignored only by a personal global excludes file and so would not have qualified for `.worktreeinclude` on anyone else's clone. A new root `.worktreeinclude` replaces the "copy `.claude/` into the worktree" instruction and carries `settings.local.json`, which sets `autoMemoryDirectory` — a worktree session without it silently loses shared auto-memory. The retired `.worktrees/` directory and its `.gitignore` entry are gone. The audience blockquote also drops a stale claim that the symlink invariant is pinned by `test/constitution-symlink-drift-guard.test.ts`; no such test, and no `test/` directory or `package.json`, exists in this repo. The symlink claim itself is true (all four paths share one inode) and stays.
+
 ## [2026-08-07]
 
 ### Fixed

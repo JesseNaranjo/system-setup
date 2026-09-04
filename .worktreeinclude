@@ -1,0 +1,5 @@
+# Gitignored files copied into each worktree Claude Code creates.
+# .gitignore syntax. Only files that match AND are gitignored are copied,
+# so never list a tracked file. Name the directory; a bare **/ glob will not
+# reach into a wholly-ignored directory.
+.claude/settings.local.json
