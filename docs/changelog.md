@@ -14,10 +14,14 @@ features as of that date; earlier history is not individually recorded.
 ### Changed
 
 - **`check_for_updates` is a byte-identical parity copy across the five libraries.** The five suite-specific guard names (`SYS_SCRIPTS_UPDATED`, `K8S_SCRIPTS_UPDATED`, `LXC_SCRIPTS_UPDATED`, `LLM_SCRIPTS_UPDATED`, `UTILS_SCRIPTS_UPDATED`) are retired in favour of one shared `SCRIPTS_UPDATED`; nothing outside the libraries read them. One `sha256sum` now audits all five; the function joins the AGENTS.md roster, and `private`'s `utils-tmux.sh` is recorded there as a deliberate variant. One-time transition: a host whose old library restarts under a retired name sees the new library repeat the self-check once (two extra fetches, both `is up-to-date`; a caller update declined before the restart is offered once more) before the module updates run — no loop, because a second restart runs under `SCRIPTS_UPDATED`, which the new library consumes.
-- **`kubernetes-setup.sh` parses `--help`, `--skip-update`, and `--debug` like `system-setup.sh`.** BREAKING: the `SKIP_UPDATE` environment variable is no longer read; use `--skip-update`. `--debug` no longer has to be the first argument.
+- **`kubernetes-setup.sh` parses `--help`, `--skip-update`, and `--debug` like `system-setup.sh`.** `--debug` no longer has to be the first argument.
 - **The github standalones' restart guard is `GH_SCRIPTS_UPDATED`** (was camelCase `scriptUpdated`).
 - **AGENTS.md** §Orchestrator Pattern and §Complete Download Script Template show the real `check_for_updates` + `DOWNLOAD_CMD`-gate shape instead of `self_update`/`scriptUpdated`/a caller-side `REMOTE_BASE`; §check_for_updates Pattern codifies detect-before-guard and the one-shot shared guard; §Key Directories and §README Locations gain the `tests/` rows and the missing `docs/` rows.
 - **`system-setup/README.md`** now describes the line-1 shebang gate and the restart-then-continue flow accurately, and §Skipping Self-Update points at `--skip-update` instead of uninstalling curl/wget.
+
+### Removed
+
+- **BREAKING: `kubernetes-setup.sh` no longer reads the `SKIP_UPDATE` environment variable.** Use the `--skip-update` flag instead.
 
 ### Fixed
 

@@ -531,7 +531,7 @@ done
 
 ### Helper Library Duplication (Intentional)
 
-These helper functions are **deliberately duplicated**. The roster is exhaustive — if a function is not listed here, the all-copies rule does not cover it, so ADD IT to this table when you duplicate anything new:
+These helper functions are **deliberately duplicated**. The roster is exhaustive for distributed code — if a function is not listed here, the all-copies rule does not cover it, so ADD IT to this table when you duplicate anything new. Development-only files that are never distributed (`tests/`, `utils/tests/`) are outside the roster; the assertion trio they share is tracked in `tests/README.md` instead:
 
 | Helper | Copies | Where |
 |--------|--------|-------|
@@ -563,8 +563,8 @@ are `github/gh_org_copy.sh`, `github/gh_org_delete_repos.sh`,
 
 - **Do NOT extract these helpers to a single shared library.** That would break the standalone invariant the `github/` scripts depend on and the suite-isolation invariant the per-directory `_download-*-scripts.sh` flows depend on.
 - When fixing a bug or adjusting behavior in one of these helpers, **update every copy in the same change**. `utils/utils-misc.sh` is the 5th per-directory parity copy for this audit. The pattern letters (A–J) used in the self-update backport plans exist precisely so cross-copy parity can be audited mechanically.
-- **Verify parity by hashing the function bodies across BOTH repositories**, not just within one. A check that hashes only the copies inside a single repo cannot detect a public-vs-private divergence, and one such divergence went unnoticed for exactly that reason. Extract each body from its `name() {` line through its closing `}` and compare digests; every copy must produce one digest.
-- Drift between copies is managed by **careful code review**, not tooling. Every PR that touches one helper must justify why the others were or were not also touched.
+- **Verify parity by hashing the function bodies across BOTH repositories**, not just within one. A check that hashes only the copies inside a single repo cannot detect a public-vs-private divergence, and one such divergence went unnoticed for exactly that reason. Extract each body from its `name() {` line through its closing `}` and compare digests; every copy must produce one digest, except where a **Known deliberate variant** above declares otherwise.
+- Drift between copies is managed by **careful code review**, not tooling — the sole exception is `check_for_updates`, whose five public copies are pinned to one digest by `tests/test-self-update.sh`. Every PR that touches one helper must justify why the others were or were not also touched.
 
 When adding a NEW helper that is genuinely shared logic (not an existing canonical helper), prefer adding it to the per-suite utils file rather than promoting to a new shared library.
 

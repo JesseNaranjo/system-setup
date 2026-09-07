@@ -10,6 +10,7 @@
 # - Shows diffs for changed files before updating
 # - Prompts for confirmation before overwriting local files
 # - Preserves executable permissions on downloaded scripts
+# - Removes obsolete scripts on request, and exits 1 if any download failed
 #
 # The script checks for curl or wget and uses whichever is available.
 # If neither is installed, it displays installation instructions and continues

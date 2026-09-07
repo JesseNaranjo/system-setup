@@ -191,15 +191,18 @@ echo "== kubernetes-setup.sh: flags parsed before the update check =="
 # check_privileges returning 1 stops main after the banner even when the suite
 # runs as root; print_error's 2s pause only fires on a TTY, and stderr is
 # captured here.
-_k8s_main() {   # $1 = flag → "<rc>|<output>"
+# The check_for_updates stub echoes the arguments it was handed AFTER the caller
+# path ("${*:2}"), because forwarding them is the whole point of main()'s
+# original_args copy — the parse loop consumes $@ before the call.
+_k8s_main() {   # "$@" = flags, possibly none → "<rc>|<output>"
     local rc=0 out
     out=$(bash -c 'source "$1" || true   # harmless here (if-form guard returns 0); required for the &&-form downloaders in section 3
-            check_for_updates() { echo CHECK_FOR_UPDATES; DOWNLOAD_CMD=curl; }
+            check_for_updates() { echo "CHECK_FOR_UPDATES args=${*:2}"; DOWNLOAD_CMD=curl; }
             update_modules() { echo UPDATE_MODULES; }
             cleanup_obsolete_scripts() { :; }
             check_privileges() { return 1; }
             sweep_stale_temps() { :; }
-            main "$2"' _ "${REPO_DIR}/kubernetes/kubernetes-setup.sh" "$1" 2>&1) || rc=$?
+            main "${@:2}"' _ "${REPO_DIR}/kubernetes/kubernetes-setup.sh" "$@" 2>&1) || rc=$?
     printf '%s|%s' "$rc" "$out"
 }
 res=$(_k8s_main --help)
@@ -217,6 +220,11 @@ res=$(_k8s_main --debug)
 assert_contains "${res#*|}" 'DEBUG MODE ENABLED'         "kubernetes-setup.sh --debug enables debug output"
 assert_contains "${res#*|}" 'CHECK_FOR_UPDATES'          "kubernetes-setup.sh --debug still runs the self-check"
 assert_contains "${res#*|}" 'UPDATE_MODULES'             "kubernetes-setup.sh --debug still runs module updates"
+assert_contains "${res#*|}" 'CHECK_FOR_UPDATES args=--debug' "kubernetes-setup.sh --debug survives to the exec restart (original_args)"
+res=$(_k8s_main)
+assert_contains "${res#*|}" 'CHECK_FOR_UPDATES args='    "kubernetes-setup.sh with no flags still runs the self-check"
+assert_contains "${res#*|}" 'UPDATE_MODULES'             "kubernetes-setup.sh with no flags runs module updates"
+assert_contains "${res#*|}" 'Kubernetes Setup and Configuration Script' "kubernetes-setup.sh with no flags reaches the banner"
 
 echo "== _download-*-scripts.sh: cleanup runs and partial failure is the exit status =="
 readonly DOWNLOADERS=(lxc/_download-lxc-scripts.sh llm/_download-ollama-scripts.sh utils/_download-utils-scripts.sh)
