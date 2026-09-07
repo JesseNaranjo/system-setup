@@ -390,7 +390,7 @@ self_update() {
         fi
         print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
         echo ""
-        export scriptUpdated=1
+        export GH_SCRIPTS_UPDATED=1
         exec "${LOCAL_SCRIPT}" "$@"
     else
         print_warning "⚠ Skipped update - continuing with local version"
@@ -582,7 +582,7 @@ main() {
     sweep_stale_temps '~*.tmp.??????'
 
     # Check for updates if download tool available
-    if detect_download_cmd && [[ ${scriptUpdated:-0} -eq 0 ]]; then
+    if detect_download_cmd && [[ ${GH_SCRIPTS_UPDATED:-0} -eq 0 ]]; then
         # `|| true`: self_update returns 1 when the download fails or the install
         # mv fails. Both are non-fatal by design — it prints "keeping local version"
         # and the tool is expected to carry on — but a bare call under
@@ -590,6 +590,9 @@ main() {
         self_update "$@" || true
         echo ""
     fi
+
+    # One-shot: consumed so the gh/git children of this run do not inherit it.
+    unset GH_SCRIPTS_UPDATED
 
     verify_gh_auth
     display_configuration
