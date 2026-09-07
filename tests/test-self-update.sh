@@ -218,6 +218,33 @@ assert_contains "${res#*|}" 'DEBUG MODE ENABLED'         "kubernetes-setup.sh --
 assert_contains "${res#*|}" 'CHECK_FOR_UPDATES'          "kubernetes-setup.sh --debug still runs the self-check"
 assert_contains "${res#*|}" 'UPDATE_MODULES'             "kubernetes-setup.sh --debug still runs module updates"
 
+echo "== _download-*-scripts.sh: cleanup runs and partial failure is the exit status =="
+readonly DOWNLOADERS=(lxc/_download-lxc-scripts.sh llm/_download-ollama-scripts.sh utils/_download-utils-scripts.sh)
+# Each downloader ends in `[[ … ]] && main "$@"`, which is false when sourced and
+# would exit the child under the file's own set -e — hence `|| true`. The
+# DOWNLOAD_CMD the stubbed check leaves behind is captured into dl_cmd first,
+# because inside the stub `$2` would be the stub's own (empty) argument.
+_dl_main() {   # $1 = downloader (repo-relative), $2 = DOWNLOAD_CMD after the stubbed check → "<rc>|<output>"
+    local rc=0 out
+    out=$(bash -c 'source "$1" || true
+            dl_cmd="$2"
+            sweep_stale_temps() { :; }
+            check_for_updates() { DOWNLOAD_CMD="$dl_cmd"; }
+            update_modules() { echo UPDATE_MODULES; return 1; }
+            cleanup_obsolete_scripts() { echo CLEANUP; }
+            main' _ "${REPO_DIR}/$1" "$2" 2>&1) || rc=$?
+    printf '%s|%s' "$rc" "$out"
+}
+for dl in "${DOWNLOADERS[@]}"; do
+    res=$(_dl_main "$dl" curl)
+    assert_contains "${res#*|}" 'UPDATE_MODULES' "${dl}: module update runs"
+    assert_contains "${res#*|}" 'CLEANUP'        "${dl}: obsolete cleanup runs despite a failed module"
+    assert_eq '1' "${res%%|*}"                   "${dl}: partial failure is exit status 1"
+    res=$(_dl_main "$dl" "")
+    assert_eq '0' "${res%%|*}"                   "${dl}: no download tool → exit 0"
+    assert_not_contains "${res#*|}" 'CLEANUP'    "${dl}: no download tool → nothing runs"
+done
+
 echo ""
 echo "${TESTS_RUN} assertions, ${TESTS_FAILED} failed"
 [[ "$TESTS_FAILED" -eq 0 ]]

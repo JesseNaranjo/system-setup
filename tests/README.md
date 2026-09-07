@@ -6,7 +6,7 @@ Repo-wide tests: behaviour that spans several suites and so has no single folder
 
 | File | Covers |
 |------|--------|
-| `test-self-update.sh` | `check_for_updates` in all five helper libraries (`system-setup/utils-sys.sh`, `kubernetes/utils-k8s.sh`, `lxc/utils-lxc.sh`, `llm/utils-llm.sh`, `utils/utils-misc.sh`): `DOWNLOAD_CMD` is populated on the post-restart path and the `SCRIPTS_UPDATED` guard is consumed there, the up-to-date path fetches exactly twice and leaves no `~*.tmp.??????` temps, and the accept path exec-restarts the new caller with `SCRIPTS_UPDATED=1` exported. Also pins the five bodies to a single `check_for_updates` digest (the AGENTS.md §Helper Library Duplication roster audit, as an assertion); `kubernetes-setup.sh`'s `--help`, `--skip-update`, `--debug`, and unknown-flag handling. |
+| `test-self-update.sh` | `check_for_updates` in all five helper libraries (`system-setup/utils-sys.sh`, `kubernetes/utils-k8s.sh`, `lxc/utils-lxc.sh`, `llm/utils-llm.sh`, `utils/utils-misc.sh`): `DOWNLOAD_CMD` is populated on the post-restart path and the `SCRIPTS_UPDATED` guard is consumed there, the up-to-date path fetches exactly twice and leaves no `~*.tmp.??????` temps, and the accept path exec-restarts the new caller with `SCRIPTS_UPDATED=1` exported. Also pins the five bodies to a single `check_for_updates` digest (the AGENTS.md §Helper Library Duplication roster audit, as an assertion); `kubernetes-setup.sh`'s `--help`, `--skip-update`, `--debug`, and unknown-flag handling; the three `_download-*-scripts.sh` run `cleanup_obsolete_scripts` after a partial `update_modules` failure and exit 1. |
 
 ## Running
 

@@ -120,10 +120,16 @@ update_modules() {
 main() {
     sweep_stale_temps '~*.tmp.??????'
     check_for_updates "${BASH_SOURCE[0]}" "$@"
-    if [[ -n "$DOWNLOAD_CMD" ]]; then
-        update_modules
-        cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
-    fi
+    [[ -n "$DOWNLOAD_CMD" ]] || return 0
+
+    # update_modules keeps going past individual download failures and RETURNS
+    # 1 to report them. Run the obsolete-script cleanup regardless, then surface
+    # the failure as this script's exit status — called bare under `set -e` it
+    # aborted here and skipped the cleanup.
+    local update_rc=0
+    update_modules || update_rc=1
+    cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
+    return "$update_rc"
 }
 
 [[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"
