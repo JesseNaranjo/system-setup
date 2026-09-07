@@ -2675,7 +2675,7 @@ self_update() {
 **Pattern callouts** (cross-references — see [Inline mktemp + TEMP_FILES](#inline-mktemp--temp_files), [Defense-in-depth Cleanup](#defense-in-depth-cleanup), and [Diff Display Pattern](#diff-display-pattern)):
 
 - **Pattern E** (adjacent `mktemp` + `TEMP_FILES+=()`) replaces the older `local TEMP_SCRIPT="$(mktemp)"` form, which landed in `$TMPDIR` (tmpfs) and made `mv -f` a cross-FS `copy + unlink` rather than an atomic `rename(2)`. SIGKILL or power-loss mid-copy could leave a truncated script.
-- **Pattern D** (`if ! mv -f`) replaces the bare `mv -f` so a read-only or cross-FS destination produces a typed error and the local file is preserved.
+- **Pattern D** (`if ! mv -f`, or the positive `if <cmd> && mv -f …; then … else` chain when a mode change must gate the install — the same pattern) replaces the bare `mv -f` so a read-only or cross-FS destination produces a typed error and the local file is preserved.
 - **Pattern H** (`show_diff_box`) replaces the inline diff border + `diff -u --color` block. Color is now `--color=always` and multi-page diffs page through `less -RFX`.
 - The function is inlined in the three `github/gh_org_*.sh` standalones, whose `main()` runs `if detect_download_cmd && [[ -z "${SELF_UPDATE_RESTARTED:-}" ]]` — detection first, guard second — and `unset SELF_UPDATE_RESTARTED` **after** the block, outside the `if`, so the guard is consumed even on a host with no download tool. Same literal as the libraries: one name for one meaning. Test the guard as a STRING: `[[ ${GUARD:-0} -eq 0 ]]` evaluates both operands as arithmetic, so a `$(…)` smuggled in through the environment is executed by the test itself. Modular Standalone directories use `check_for_updates` instead.
 - No `exit 0` after the `exec`. `exec` replaces the process; a following line is dead code (§No Dead Code / Legacy / Back-Compat Shims), and none of the three standalones has one.
@@ -2703,14 +2703,14 @@ The two `mktemp` sites use the two Pattern E variants:
 # Utils file temp (utils path always known via _UTILS_DIR):
 temp_file=$(mktemp "${_UTILS_DIR}/~${utils_basename}.tmp.XXXXXX")
 TEMP_FILES+=("$temp_file")
-# ... download_script + show_diff_box + prompt_yes_no + chmod 644 (sourced lib) + Pattern D mv ...
+# ... download_script + show_diff_box + prompt_yes_no + Pattern D `if chmod 644 … && mv -f …; then … else` (sourced lib) ...
 
 # Caller script temp — resolve the caller to an absolute path first; the raw
 # ${BASH_SOURCE[0]} is a bare name when started as `bash <name>` from its own directory:
 caller_abs="$(cd "$(dirname "$caller_script")" && pwd)/$(basename "$caller_script")"
 temp_file=$(mktemp "$(dirname "$caller_abs")/~$(basename "$caller_abs").tmp.XXXXXX")
 TEMP_FILES+=("$temp_file")
-# ... download_script + show_diff_box + prompt_yes_no + chmod +x (executable) + Pattern D mv ...
+# ... download_script + show_diff_box + prompt_yes_no + Pattern D `if chmod +x … && mv -f …; then … else` (executable) ...
 ```
 
 The install step sets the mode explicitly: the utils-file branch uses `chmod 644` (a sourced library, never executed directly); the caller branch uses `chmod +x` (an executable script). This is the only substantive difference between the two branches — do not copy `chmod +x` into the utils branch. Both `chmod`s sit INSIDE the Pattern D chain (`if chmod … && mv -f …; then`): `check_for_updates` is invoked bare under `set -e`, so a bare `chmod` that failed would abort the tool at the moment the message promises "keeping local version"; `&&` short-circuits, so a failed `chmod` never installs, and the existing `else` branch removes the temp and reports.

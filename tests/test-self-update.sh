@@ -470,7 +470,7 @@ done
 # the retired identifiers on purpose — in this very assertion.
 assert_eq '0' "$(grep -rlE 'scriptUpdated|GH_SCRIPTS_UPDATED|(SYS|K8S|LXC|LLM|UTILS)_SCRIPTS_UPDATED' --include='*.sh' --exclude-dir=tests --exclude-dir=.claude "${REPO_DIR}" | wc -l | tr -d ' ')" 'no retired guard name survives in distributed *.sh'
 
-echo "== executable bits: every launched *.sh is 100755 in the index =="
+echo "== executable bits: launchers are 100755 in the index, sourced files 100644 =="
 # Every tracked *.sh is launched as a program — `./x.sh` by a user, or
 # `exec "$caller_abs"` by check_for_updates — except the six named below, so
 # git must record it as 100755: on a clone, `./script.sh` otherwise fails with
@@ -478,22 +478,25 @@ echo "== executable bits: every launched *.sh is 100755 in the index =="
 # AFTER the library has already been replaced. Reads the INDEX
 # (`git ls-files -s`), not the working tree, so a stray local chmod cannot mask
 # a wrong commit. The allowlist is the record of what is deliberately not
-# executable — a new sourced library goes here; a new launcher needs nothing:
+# executable, and it is asserted BOTH ways — an allowlisted file must be
+# 100644, everything else 100755 — so a launcher that drifts to 644 and a
+# library that drifts to 755 both fail, with the offending "<mode> <path>"
+# printed. A new sourced library goes here; a new launcher needs nothing:
 #   the five utils-*.sh libraries   sourced, never launched; check_for_updates
 #                                   installs them with `chmod 644` on purpose
 #   github/gh_org_copy-backup.sh    a retained Legacy backup of gh_org_copy.sh
 #                                   (github/README.md), not a launcher
 if ! mode_offenders=$(git -C "$REPO_DIR" ls-files -s -- '*.sh' \
-        | awk '$1 != "100755" &&
-               $4 != "system-setup/utils-sys.sh" && $4 != "kubernetes/utils-k8s.sh" &&
-               $4 != "lxc/utils-lxc.sh" && $4 != "llm/utils-llm.sh" && $4 != "utils/utils-misc.sh" &&
-               $4 != "github/gh_org_copy-backup.sh" {print $4}' \
+        | awk 'BEGIN { a["system-setup/utils-sys.sh"] = 1; a["kubernetes/utils-k8s.sh"] = 1
+                       a["lxc/utils-lxc.sh"] = 1; a["llm/utils-llm.sh"] = 1; a["utils/utils-misc.sh"] = 1
+                       a["github/gh_org_copy-backup.sh"] = 1 }
+               $1 != (($4 in a) ? "100644" : "100755") { print $1, $4 }' \
         | tr '\n' ' '); then
     printf '  FAIL executable bits: git ls-files failed (not a git checkout?)\n'
     ((TESTS_RUN++)) || true
     ((TESTS_FAILED++)) || true
 else
-    assert_eq '' "$mode_offenders" 'every tracked *.sh is 100755 in the index (except the five libraries and the Legacy backup)'
+    assert_eq '' "$mode_offenders" 'every tracked *.sh has its intended index mode: 100755, or 100644 for the five libraries and the Legacy backup'
 fi
 
 echo ""
