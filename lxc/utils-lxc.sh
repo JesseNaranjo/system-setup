@@ -409,8 +409,7 @@ check_for_updates() {
         if ! diff -q "${_UTILS_DIR}/${utils_basename}" "$temp_file" > /dev/null 2>&1; then
             show_diff_box "${_UTILS_DIR}/${utils_basename}" "$temp_file" "$utils_basename"
             if prompt_yes_no "→ Update ${utils_basename}?" "y"; then
-                chmod 644 "$temp_file"
-                if mv -f "$temp_file" "${_UTILS_DIR}/${utils_basename}"; then
+                if chmod 644 "$temp_file" && mv -f "$temp_file" "${_UTILS_DIR}/${utils_basename}"; then
                     print_success "✓ Updated ${utils_basename}"
                     any_updated=true
                 else
@@ -430,9 +429,13 @@ check_for_updates() {
     fi
 
     # Check calling script. Use caller_abs (already resolved) for path-sensitive
-    # operations — the raw ${BASH_SOURCE[0]} caller_script may be a bare basename
-    # when invoked via PATH or bash <name>, breaking ${caller_script%/*} dirname
-    # extraction and PATH-resolved exec. Two conditions skip this half WITHOUT
+    # operations — the raw ${BASH_SOURCE[0]} caller_script is a bare basename
+    # when the script is started as `bash <name>` from its own directory, which
+    # breaks ${caller_script%/*} dirname extraction and PATH-resolved exec. Probed
+    # 2026-09-07: bash's own PATH search hands over an absolute path and a
+    # `.`/empty PATH element gives `./<name>`, but `env <name>` with an empty PATH
+    # element is bare again — so resolve rather than reason about how we were
+    # launched. Two conditions skip this half WITHOUT
     # skipping the restart the utils half may already have earned: a caller
     # outside _UTILS_DIR, whose caller_relpath is still absolute and would fetch
     # ${REMOTE_BASE}//abs/path (HTTP 404) on every run, and a caller directory
@@ -447,8 +450,7 @@ check_for_updates() {
             if ! diff -q "$caller_abs" "$temp_file" > /dev/null 2>&1; then
                 show_diff_box "$caller_abs" "$temp_file" "$caller_relpath"
                 if prompt_yes_no "→ Update ${caller_relpath}?" "y"; then
-                    chmod +x "$temp_file"
-                    if mv -f "$temp_file" "$caller_abs"; then
+                    if chmod +x "$temp_file" && mv -f "$temp_file" "$caller_abs"; then
                         print_success "✓ Updated ${caller_relpath}"
                         any_updated=true
                     else

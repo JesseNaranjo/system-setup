@@ -2229,8 +2229,8 @@ local temp_file
 temp_file=$(mktemp "${_UTILS_DIR}/~${utils_basename}.tmp.XXXXXX")
 TEMP_FILES+=("$temp_file")
 
-# Caller script self-update — resolve the caller to an absolute path first; the
-# raw ${BASH_SOURCE[0]} may be a bare name when invoked via PATH or `bash <name>`:
+# Caller script self-update — resolve the caller to an absolute path first; the raw
+# ${BASH_SOURCE[0]} is a bare name when started as `bash <name>` from its own directory:
 local caller_abs
 local temp_file
 caller_abs="$(cd "$(dirname "$caller_script")" && pwd)/$(basename "$caller_script")"
@@ -2706,14 +2706,14 @@ TEMP_FILES+=("$temp_file")
 # ... download_script + show_diff_box + prompt_yes_no + chmod 644 (sourced lib) + Pattern D mv ...
 
 # Caller script temp — resolve the caller to an absolute path first; the raw
-# ${BASH_SOURCE[0]} may be a bare name when invoked via PATH or `bash <name>`:
+# ${BASH_SOURCE[0]} is a bare name when started as `bash <name>` from its own directory:
 caller_abs="$(cd "$(dirname "$caller_script")" && pwd)/$(basename "$caller_script")"
 temp_file=$(mktemp "$(dirname "$caller_abs")/~$(basename "$caller_abs").tmp.XXXXXX")
 TEMP_FILES+=("$temp_file")
 # ... download_script + show_diff_box + prompt_yes_no + chmod +x (executable) + Pattern D mv ...
 ```
 
-The install step sets the mode explicitly: the utils-file branch uses `chmod 644` (a sourced library, never executed directly); the caller branch uses `chmod +x` (an executable script). This is the only substantive difference between the two branches — do not copy `chmod +x` into the utils branch.
+The install step sets the mode explicitly: the utils-file branch uses `chmod 644` (a sourced library, never executed directly); the caller branch uses `chmod +x` (an executable script). This is the only substantive difference between the two branches — do not copy `chmod +x` into the utils branch. Both `chmod`s sit INSIDE the Pattern D chain (`if chmod … && mv -f …; then`): `check_for_updates` is invoked bare under `set -e`, so a bare `chmod` that failed would abort the tool at the moment the message promises "keeping local version"; `&&` short-circuits, so a failed `chmod` never installs, and the existing `else` branch removes the temp and reports.
 
 Each non-success branch (download fail, no-diff, user decline, mv fail) carries its own `rm -f "$temp_file"` per [Layer 1 of the cleanup architecture](#defense-in-depth-cleanup). When the success branch runs, `mv` consumes the temp and no `rm` is needed.
 

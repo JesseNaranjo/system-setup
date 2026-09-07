@@ -4,6 +4,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), date-based, ne
 This changelog begins 2026-07-06. Entries below capture the project's major
 features as of that date; earlier history is not individually recorded.
 
+## [2026-09-07]
+
+### Fixed
+
+- **`check_for_updates` no longer aborts the tool when the install-step `chmod` fails.** Both `chmod` calls — 644 for the library, `+x` for the caller — were bare inside the otherwise-guarded install chain. Every caller invokes the function bare under `set -euo pipefail`, so a `chmod` that failed killed the run at the moment the message promised "keeping local version" — the same class the `mktemp` and `mv` guards closed on 2026-09-06. Both now sit inside the `if chmod … && mv -f …` chain: `&&` short-circuits, so a failed `chmod` never installs, and the `else` branch removes the temp and keeps the local copy. Found by the private repository's review of its `utils-tmux.sh` variant; applied to all five libraries.
+
 ## [2026-09-06]
 
 ### Added
