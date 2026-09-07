@@ -370,6 +370,9 @@ res=$(FAKE_MISSING=1 _k8s_main)
 assert_eq '1' "${res%%|*}"                               "kubernetes-setup.sh missing module → exits 1"
 assert_contains "${res#*|}" 'Missing module(s)'          "kubernetes-setup.sh missing module → typed error"
 assert_contains "${res#*|}" 'kubernetes-modules/nope.sh' "kubernetes-setup.sh missing module → names the file"
+# --skip-update is exactly when the gap survives: no download ran to fill it.
+res=$(FAKE_MISSING=1 _k8s_main --skip-update)
+assert_contains "${res#*|}" 'Missing module(s)'          "kubernetes-setup.sh missing module → caught under --skip-update too"
 
 echo "== system-setup.sh: same orchestrator contract =="
 # Same stub set. detect_os returning "unknown" is this orchestrator's own early
@@ -414,6 +417,8 @@ res=$(FAKE_MISSING=1 _sys_main)
 assert_eq '1' "${res%%|*}"                              "system-setup.sh missing module → exits 1"
 assert_contains "${res#*|}" 'Missing module(s)'         "system-setup.sh missing module → typed error"
 assert_contains "${res#*|}" 'system-modules/nope.sh'    "system-setup.sh missing module → names the file"
+res=$(FAKE_MISSING=1 _sys_main --skip-update)
+assert_contains "${res#*|}" 'Missing module(s)'         "system-setup.sh missing module → caught under --skip-update too"
 
 echo "== _download-*-scripts.sh: cleanup runs and partial failure is the exit status =="
 readonly DOWNLOADERS=(lxc/_download-lxc-scripts.sh llm/_download-ollama-scripts.sh utils/_download-utils-scripts.sh)
