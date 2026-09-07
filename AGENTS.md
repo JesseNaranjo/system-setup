@@ -436,6 +436,8 @@ Personal system configuration repository containing bash scripts and documentati
 | `github/` | Standalone | GitHub CLI automation scripts |
 | `llm/` | Modular Standalone | Ollama/LLM management scripts |
 | `utils/` | Modular Standalone | Cross-platform utilities (2 trivial Lightweight + 2 Windows .ps1 remain standalone) |
+| `tests/` | Tests | Repo-wide tests for behaviour that spans several suites (bash, no framework; development-only, never distributed) |
+| `docs/` | Documentation | Project-level docs: changelog, lessons, backlog, future-todos (markdown) |
 | `configs/` | Documentation | Configuration documentation (markdown) |
 | `walkthroughs/` | Documentation | Step-by-step guides (markdown) |
 
@@ -541,6 +543,7 @@ These helper functions are **deliberately duplicated**. The roster is exhaustive
 | `show_diff_box` | 8 | same |
 | `_sanitize_ansi` | 8 | same — composed by `show_diff_box`, so it travels with it |
 | `print_warning_box` | 5 | the 5 libraries only (the `github/` standalones do not use it) |
+| `check_for_updates` | 5 | the 5 libraries only |
 | `detect_os` | 3 | `system-setup/utils-sys.sh`, `utils/utils-misc.sh`, `kubernetes/utils-k8s.sh` |
 
 The 5 libraries are `system-setup/utils-sys.sh`, `kubernetes/utils-k8s.sh`,
@@ -552,6 +555,7 @@ are `github/gh_org_copy.sh`, `github/gh_org_delete_repos.sh`,
 
 - `utils/utils-misc.sh` defines its colour constants with `$'\033…'` (real ESC bytes) rather than `'\033…'`. The `cat`-heredoc `show_usage` in `utils/push-ghostty-terminfo.sh` and `utils/rsync-over-tunnel.sh` needs real bytes or it prints literal escapes. Every `print_*` body uses `%b` for the colour and `%s` for the message precisely so ONE body works with either constant form.
 - `utils/rsync-over-tunnel.sh` overrides `cleanup` BY NAME with a superset that also removes its throwaway daemon config. It is a 9th copy of the roster helper and must be re-audited whenever the canonical `cleanup` changes; the file says so at the definition.
+- `private/tmux/utils-tmux.sh` defines a `check_for_updates` of the same name that is token-gated (`_TOKEN_FILE`), downloads through `download_file … "$token"`, and uses the literal `TMUX_SCRIPTS_UPDATED`. It shares the detect-before-guard and one-shot rules but is NOT a parity copy — a cross-repo hash of `check_for_updates` legitimately yields two digests.
 
 **This is INTENTIONAL.** The suite-isolation architecture requires every directory to be independently downloadable: a user pulling `lxc/script.sh` must get a working script without also fetching `system-setup/utils-sys.sh`. The `github/gh_org_*.sh` standalones go further — they MUST work as a single-file copy/paste with zero external dependencies.
 
@@ -764,29 +768,45 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Source utilities first
 source "${SCRIPT_DIR}/utils-sys.sh"
 
-# Remote repository for self-update
-readonly REMOTE_BASE="https://raw.githubusercontent.com/USER/REPO/refs/heads/main/path"
-
 # List of module scripts to download/update
 get_script_list() {
     echo "system-modules/module-a.sh"
     echo "system-modules/module-b.sh"
 }
 
+# List of obsolete scripts to clean up (renamed or removed from repository)
+OBSOLETE_SCRIPTS=()
+
 main() {
-    # Self-update check first
-    if detect_download_cmd; then
-        if [[ ${scriptUpdated:-0} -eq 0 ]]; then
-            self_update "$@"
+    sweep_stale_temps '~*.tmp.??????'
+
+    # Save original args for the check_for_updates exec restart; the parse loop consumes $@.
+    local -a original_args=("$@")
+
+    local SKIP_UPDATE=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --help)        echo "Usage: $(basename "$0") [--skip-update] [--debug]"; exit 0 ;;
+            --skip-update) SKIP_UPDATE=true; shift ;;
+            --debug)       DEBUG_MODE=true; shift ;;
+            *)             print_error "✖ Unknown option: $1"; exit 1 ;;
+        esac
+    done
+
+    if [[ "$SKIP_UPDATE" != true ]]; then
+        # Checks utils + self, exec-restarts if either changed. DOWNLOAD_CMD is
+        # populated on every return path where a download tool exists, INCLUDING
+        # the post-restart one — the gate below relies on that.
+        check_for_updates "${BASH_SOURCE[0]}" "${original_args[@]+"${original_args[@]}"}"
+        if [[ -n "$DOWNLOAD_CMD" ]]; then
+            update_modules || true   # reports per-file failures itself; never abort setup over one
+            cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
         fi
-        update_modules
     fi
 
-    # Detect environment
     detect_os
     detect_container
 
-    # Source and run modules as needed
     source "${SCRIPT_DIR}/system-modules/module-a.sh"
     main_module_a "$scope"
 
@@ -2203,9 +2223,12 @@ local temp_file
 temp_file=$(mktemp "${_UTILS_DIR}/~${utils_basename}.tmp.XXXXXX")
 TEMP_FILES+=("$temp_file")
 
-# Caller script self-update (caller_script is an absolute path):
+# Caller script self-update — resolve the caller to an absolute path first; the
+# raw ${BASH_SOURCE[0]} may be a bare name when invoked via PATH or `bash <name>`:
+local caller_abs
 local temp_file
-temp_file=$(mktemp "${caller_script%/*}/~${caller_script##*/}.tmp.XXXXXX")
+caller_abs="$(cd "$(dirname "$caller_script")" && pwd)/$(basename "$caller_script")"
+temp_file=$(mktemp "$(dirname "$caller_abs")/~$(basename "$caller_abs").tmp.XXXXXX")
 TEMP_FILES+=("$temp_file")
 
 # Standalone self-update (gh_org_*) where SCRIPT_FILE is a
@@ -2631,7 +2654,7 @@ self_update() {
         fi
         print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
         echo ""
-        export scriptUpdated=1
+        export GH_SCRIPTS_UPDATED=1
         exec "${LOCAL_SCRIPT}" "$@"
         exit 0
     else
@@ -2647,7 +2670,7 @@ self_update() {
 - **Pattern E** (adjacent `mktemp` + `TEMP_FILES+=()`) replaces the older `local TEMP_SCRIPT="$(mktemp)"` form, which landed in `$TMPDIR` (tmpfs) and made `mv -f` a cross-FS `copy + unlink` rather than an atomic `rename(2)`. SIGKILL or power-loss mid-copy could leave a truncated script.
 - **Pattern D** (`if ! mv -f`) replaces the bare `mv -f` so a read-only or cross-FS destination produces a typed error and the local file is preserved.
 - **Pattern H** (`show_diff_box`) replaces the inline diff border + `diff -u --color` block. Color is now `--color=always` and multi-page diffs page through `less -RFX`.
-- The function is called by every `_download-*-scripts.sh` updater and the standalones (`github/gh_org_*.sh`).
+- The function is inlined in the three `github/gh_org_*.sh` standalones, whose `main()` runs `if detect_download_cmd && [[ ${GH_SCRIPTS_UPDATED:-0} -eq 0 ]]` — detection first, guard second — and `unset GH_SCRIPTS_UPDATED` after the block. Modular Standalone directories use `check_for_updates` instead.
 
 ### check_for_updates Pattern (per-directory utils)
 
@@ -2658,7 +2681,11 @@ Used by individual scripts and modules in lxc/, llm/, kubernetes/, system-setup/
 check_for_updates "${BASH_SOURCE[0]}" "$@"
 ```
 
-Flow: detect download cmd → adjacent-`mktemp` utils temp → download utils → diff/prompt → adjacent-`mktemp` caller temp → download caller → diff/prompt → exec restart if updated. Uses per-directory env var guards (`LXC_SCRIPTS_UPDATED`, `LLM_SCRIPTS_UPDATED`, `K8S_SCRIPTS_UPDATED`, `SYS_SCRIPTS_UPDATED`, `UTILS_SCRIPTS_UPDATED`) to prevent infinite restart loops.
+Flow: `detect_download_cmd` → one-shot restart guard → adjacent-`mktemp` utils temp → download utils → diff/prompt → adjacent-`mktemp` caller temp → download caller → diff/prompt → `export SCRIPTS_UPDATED=1` + exec restart if updated.
+
+> **`detect_download_cmd` MUST run before the restart guard.** After the exec restart the library is sourced fresh with `DOWNLOAD_CMD=""`, and `system-setup.sh`, `kubernetes-setup.sh`, and the three `_download-*-scripts.sh` gate `update_modules` on `[[ -n "$DOWNLOAD_CMD" ]]` right after the call. Contract: on every return path where curl or wget exists, including the post-restart one, `DOWNLOAD_CMD` is populated. `tests/test-self-update.sh` pins it for all five libraries.
+>
+> **The guard is the single exported name `SCRIPTS_UPDATED`, shared by all five libraries (so the body is byte-identical — §Helper Library Duplication). It tells the exec'd process that its parent already checked both files and replaced at least one, so the post-restart self-check is skipped (without it the restart would repeat the two fetches once; an up-to-date pair never restarts again, so no loop is possible either way). It is one-shot: the restarted process `unset`s it as soon as it has tested it, so no child (a package manager, a tmux server) inherits it and skips its own check.** The github standalones' `GH_SCRIPTS_UPDATED`: §Self-Update Function.
 
 The two `mktemp` sites use the two Pattern E variants:
 
@@ -2668,8 +2695,10 @@ temp_file=$(mktemp "${_UTILS_DIR}/~${utils_basename}.tmp.XXXXXX")
 TEMP_FILES+=("$temp_file")
 # ... download_script + show_diff_box + prompt_yes_no + chmod 644 (sourced lib) + Pattern D mv ...
 
-# Caller script temp (caller_script is an absolute path):
-temp_file=$(mktemp "${caller_script%/*}/~${caller_script##*/}.tmp.XXXXXX")
+# Caller script temp — resolve the caller to an absolute path first; the raw
+# ${BASH_SOURCE[0]} may be a bare name when invoked via PATH or `bash <name>`:
+caller_abs="$(cd "$(dirname "$caller_script")" && pwd)/$(basename "$caller_script")"
+temp_file=$(mktemp "$(dirname "$caller_abs")/~$(basename "$caller_abs").tmp.XXXXXX")
 TEMP_FILES+=("$temp_file")
 # ... download_script + show_diff_box + prompt_yes_no + chmod +x (executable) + Pattern D mv ...
 ```
@@ -2816,69 +2845,44 @@ Use this template for `_download-*-scripts.sh` files:
 # Usage: ./_download-DOMAIN-scripts.sh
 #
 # This script:
-# - Self-updates from the remote repository before running
-# - Downloads the latest versions of all DOMAIN management scripts
-# - Shows diffs for changed files before updating
-# - Prompts for confirmation before overwriting local files
+# - Self-updates (utils-DOMAIN.sh and itself) from the remote repository before running
+# - Downloads the latest versions of all DOMAIN scripts, showing a diff and prompting first
+# - Preserves executable permissions on downloaded scripts
+# - Removes obsolete scripts on request, and exits 1 if any download failed
 
 set -euo pipefail
 
-# Colors for output
-readonly BLUE='\033[0;34m'
-readonly CYAN="\033[0;36m"
-readonly GRAY='\033[0;90m'
-readonly GREEN='\033[0;32m'
-readonly RED='\033[0;31m'
-readonly YELLOW='\033[1;33m'
-readonly NC='\033[0m'
-
-# Remote repository configuration
-readonly REMOTE_BASE="https://raw.githubusercontent.com/USER/REPO/refs/heads/main/DOMAIN"
-
-# Resolve script directory for adjacent-mktemp templates and the sweep root.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Tracked temp files for the EXIT-trap cleanup. MUST be at file scope.
-TEMP_FILES=()
+# shellcheck source=utils-DOMAIN.sh
+source "${SCRIPT_DIR}/utils-DOMAIN.sh"
 
-# List of script files to download/update
+# List of script files to download/update (excludes this script and utils-DOMAIN.sh)
 get_script_list() {
     echo "script-a.sh"
     echo "script-b.sh"
 }
 
-# List of obsolete scripts to clean up
+# List of obsolete scripts to clean up (renamed or removed from repository)
 OBSOLETE_SCRIPTS=()
 
-# Include: print_info, print_success, print_warning, print_error (>&2)
-# Include: prompt_yes_no (with { : </dev/tty; } open-probe guard)
-# Include: cleanup + trap cleanup EXIT (file-scope, NOT inside main)
-# Include: sweep_stale_temps (with { : </dev/tty; } open-probe)
-# Include: _sanitize_ansi (required by show_diff_box; copy it verbatim)
-# Include: show_diff_box (probed --color + _sanitize_ansi + less -RFX)
-# Include: detect_download_cmd (with print_warning_box inline or simplified)
-# Include: download_script (--max-time 15, -sSL not -fsSL, case statement, and
-#          the STRICT line-1 shebang + CRLF gate with rm -f on every rejection)
-# Include: cleanup_obsolete_scripts
-# Include: self_update (Pattern E adjacent mktemp + Pattern D mv handler)
-# Include: update_modules (Pattern E2 path-aware mktemp + Pattern D mv handler)
+# update_modules — Pattern E2 body, see §Module Update Function.
 
-# Main execution
 main() {
     sweep_stale_temps '~*.tmp.??????'
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
+    [[ -n "$DOWNLOAD_CMD" ]] || return 0
 
-    if detect_download_cmd; then
-        if [[ ${scriptUpdated:-0} -eq 0 ]]; then
-            self_update "$@"
-        fi
-        update_modules
-        cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
-    fi
+    # update_modules keeps going past individual download failures and RETURNS
+    # 1 to report them. Run the obsolete-script cleanup regardless, then surface
+    # the failure as this script's exit status.
+    local update_rc=0
+    update_modules || update_rc=1
+    cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
+    return "$update_rc"
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
-fi
+[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"
 ```
 
 ---
@@ -2912,12 +2916,14 @@ Each significant folder contains a `README.md` that documents its contents, patt
 | `raspberry-pi/README.md` | Raspberry Pi setup scripts | ❌ |
 | `utils/README.md` | Cross-platform utilities | ✅ |
 | `utils/tests/README.md` | Unit tests for the pure functions in `utils/` | ✅ |
+| `tests/README.md` | Repo-wide self-update mechanism tests | ✅ |
 
 #### Documentation Folders
 
 | Path | Documents | Status |
 |------|-----------|--------|
 | `AGENTS.md` | LLM coding standards (this document) | ✅ |
+| `docs/README.md` | Project-level docs: changelog, lessons, backlog, future-todos | ✅ |
 | `configs/README.md` | Configuration documentation files | ❌ |
 | `walkthroughs/README.md` | Step-by-step guides | ❌ |
 
