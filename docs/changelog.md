@@ -4,6 +4,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), date-based, ne
 This changelog begins 2026-07-06. Entries below capture the project's major
 features as of that date; earlier history is not individually recorded.
 
+## [2026-09-06]
+
+### Added
+
+- **`tests/`** — repo-wide tests; `tests/test-self-update.sh` covers the five libraries' restarted/up-to-date/accept paths, pins their `check_for_updates` bodies to a single digest, and covers `kubernetes-setup.sh`'s flags and the three downloaders' cleanup-then-exit-status contract. Sandboxed with a recording `curl` shim: no network, no root, no writes to the repository.
+- **`docs/backlog.md`** — deferred plan/review work, per `~/.claude/CLAUDE.md` §Backlog, opened with one entry (the execution-guard form contradicting AGENTS.md §Important Implementation Notes #1). `docs/future-todos.md` keeps concrete feature gaps.
+
+### Changed
+
+- **`check_for_updates` is a byte-identical parity copy across the five libraries.** The five suite-specific guard names (`SYS_SCRIPTS_UPDATED`, `K8S_SCRIPTS_UPDATED`, `LXC_SCRIPTS_UPDATED`, `LLM_SCRIPTS_UPDATED`, `UTILS_SCRIPTS_UPDATED`) are retired in favour of one shared `SCRIPTS_UPDATED`; nothing outside the libraries read them. One `sha256sum` now audits all five; the function joins the AGENTS.md roster, and `private`'s `utils-tmux.sh` is recorded there as a deliberate variant. One-time transition: a host whose old library restarts under a retired name sees the new library repeat the self-check once (two extra fetches, both `is up-to-date`; a caller update declined before the restart is offered once more) before the module updates run — no loop, because a second restart runs under `SCRIPTS_UPDATED`, which the new library consumes.
+- **`kubernetes-setup.sh` parses `--help`, `--skip-update`, and `--debug` like `system-setup.sh`.** BREAKING: the `SKIP_UPDATE` environment variable is no longer read; use `--skip-update`. `--debug` no longer has to be the first argument.
+- **The github standalones' restart guard is `GH_SCRIPTS_UPDATED`** (was camelCase `scriptUpdated`).
+- **AGENTS.md** §Orchestrator Pattern and §Complete Download Script Template show the real `check_for_updates` + `DOWNLOAD_CMD`-gate shape instead of `self_update`/`scriptUpdated`/a caller-side `REMOTE_BASE`; §check_for_updates Pattern codifies detect-before-guard and the one-shot shared guard; §Key Directories and §README Locations gain the `tests/` rows and the missing `docs/` rows.
+- **`system-setup/README.md`** now describes the line-1 shebang gate and the restart-then-continue flow accurately, and §Skipping Self-Update points at `--skip-update` instead of uninstalling curl/wget.
+
+### Fixed
+
+- **A self-update restart no longer skips the module update check.** `check_for_updates` tested its restart guard before `detect_download_cmd`. The exec'd process sources the library fresh with `DOWNLOAD_CMD=""`, the guard returned first, and `system-setup.sh`, `kubernetes-setup.sh`, and the three `_download-*-scripts.sh` — all of which gate `update_modules` on `[[ -n "$DOWNLOAD_CMD" ]]` — silently skipped every module update and the obsolete-script cleanup until a second run. Detection now runs first in all five libraries (`utils-sys.sh`, `utils-k8s.sh`, `utils-lxc.sh`, `utils-llm.sh`, `utils-misc.sh`); `github/gh_org_*.sh` already detected before testing their guard. Pinned by the new `tests/test-self-update.sh`, including the exec path.
+- **Restart guards are one-shot.** The exported guard used to stay in the restarted process's environment for the whole run, so every child inherited it; `check_for_updates` and the three github standalones now `unset` it as soon as it has been tested.
+- **`kubernetes-setup.sh` no longer aborts the whole setup when one module download fails.** `update_modules` returns 1 to report a partial failure it has already printed; called bare under `set -e` that ended the run. It now matches `system-setup.sh` (`|| true`).
+- **`_download-lxc-scripts.sh`, `_download-ollama-scripts.sh`, `_download-utils-scripts.sh` run the obsolete-script cleanup after a partial failure and exit 1.** Previously `set -e` aborted before `cleanup_obsolete_scripts`.
+
 ## [2026-09-04]
 
 ### Added

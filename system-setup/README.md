@@ -53,7 +53,7 @@ Main orchestrator that coordinates all configuration modules.
 
 **Execution Flow:**
 1. Detect download tool (curl/wget) and check for script updates
-2. Update `system-setup.sh` itself and restart if changed
+2. Update `utils-sys.sh` and `system-setup.sh`, then restart if either changed
 3. Update all module scripts
 4. Detect OS and container environment
 5. Migrate network to systemd-networkd (if ifupdown present, Linux only)
@@ -74,7 +74,7 @@ Main orchestrator that coordinates all configuration modules.
 - Shows unified diff for each changed file
 - Prompts to accept or skip each update
 - Validates downloaded files are valid bash scripts
-- Restarts with updated version if main script changed
+- Restarts with the updated scripts if `utils-sys.sh` or `system-setup.sh` changed, then continues with the module updates
 
 ### utils-sys.sh
 
@@ -835,10 +835,10 @@ All operations are safe to run multiple times:
 4. Shows colored unified diff of changes
 5. Prompts user to accept or skip each update
 6. Validates downloaded content is a valid bash script
-7. Restarts if `system-setup.sh` itself is updated
+7. Restarts if `utils-sys.sh` or `system-setup.sh` was updated, then continues with the module updates
 
 **Validation:**
-- Checks for shebang (`#!/`) in first 10 lines
+- Checks that line 1 is a shebang (`#!`) and rejects CRLF line endings
 - Verifies HTTP 200 response
 - Detects GitHub rate limiting (HTTP 429)
 
@@ -897,7 +897,7 @@ Enables verbose output for troubleshooting.
 
 ### Skipping Self-Update
 
-Run without curl/wget installed, or modify script to comment out update functions.
+Run `./system-setup.sh --skip-update` to skip both the self-update check and the module update check.
 
 ### Custom Package List
 
