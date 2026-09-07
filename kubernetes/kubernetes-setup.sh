@@ -2,7 +2,7 @@
 
 # kubernetes-setup.sh - Kubernetes cluster configuration and package management orchestrator
 #
-# Usage: sudo ./kubernetes-setup.sh
+# Usage: sudo ./kubernetes-setup.sh [--help] [--skip-update] [--debug]
 #
 # This script orchestrates multiple focused configuration modules:
 # - Role selection (control-plane, worker, kubectl-only, skip)
@@ -261,21 +261,56 @@ check_step_prerequisites() {
 main() {
     sweep_stale_temps '~*.tmp.??????'
 
-    if [[ "${SKIP_UPDATE:-false}" != true ]]; then
-        check_for_updates "${BASH_SOURCE[0]}" "$@"
+    # Save original args for the check_for_updates exec restart; the parse loop
+    # below consumes $@.
+    local -a original_args=("$@")
+
+    local SKIP_UPDATE=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --help)
+                echo "Usage: $(basename "$0") [OPTIONS]"
+                echo ""
+                echo "Kubernetes cluster setup and configuration (Linux, requires root)."
+                echo ""
+                echo "Options:"
+                echo "  --help          Show this help message and exit"
+                echo "  --skip-update   Skip self-update and module update checks"
+                echo "  --debug         Enable debug output"
+                echo ""
+                exit 0
+                ;;
+            --skip-update)
+                SKIP_UPDATE=true
+                shift
+                ;;
+            --debug)
+                DEBUG_MODE=true
+                print_debug "- DEBUG MODE ENABLED"
+                shift
+                ;;
+            *)
+                print_error "✖ Unknown option: $1"
+                print_info "Use --help for usage information"
+                exit 1
+                ;;
+        esac
+    done
+
+    if [[ "$SKIP_UPDATE" != true ]]; then
+        check_for_updates "${BASH_SOURCE[0]}" "${original_args[@]+"${original_args[@]}"}"
         if [[ -n "$DOWNLOAD_CMD" ]]; then
-            update_modules
+            # `|| true`: update_modules keeps going past individual download
+            # failures and RETURNS 1 to report them. Called bare under
+            # `set -euo pipefail`, that would abort the whole setup over one
+            # unreachable module; it has already printed its per-file failure count.
+            update_modules || true
             cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
         fi
     fi
 
     print_info "Kubernetes Setup and Configuration Script (Idempotent Mode)"
     echo "            ======================================================="
-
-    if [[ $# -ne 0 && $1 == "--debug" ]]; then
-        DEBUG_MODE=true
-        print_debug "- DEBUG MODE ENABLED"
-    fi
 
     detect_os
     echo "            - Detected OS: $DETECTED_OS"

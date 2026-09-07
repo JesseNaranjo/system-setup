@@ -185,6 +185,39 @@ assert_eq '1' "$(for lib_rel in "${LIBRARIES[@]}"; do
         awk '/^check_for_updates\(\) \{/{f=1} f{print} f&&/^\}/{exit}' "${REPO_DIR}/${lib_rel}" | sha256sum
     done | sort -u | wc -l | tr -d ' ')" 'check_for_updates: one digest across the five libraries'
 
+echo "== kubernetes-setup.sh: flags parsed before the update check =="
+# Source the orchestrator (its BASH_SOURCE guard keeps main() from running) and
+# stub every side effect with a marker so each flag's path is observable:
+# check_privileges returning 1 stops main after the banner even when the suite
+# runs as root; print_error's 2s pause only fires on a TTY, and stderr is
+# captured here.
+_k8s_main() {   # $1 = flag → "<rc>|<output>"
+    local rc=0 out
+    out=$(bash -c 'source "$1" || true   # harmless here (if-form guard returns 0); required for the &&-form downloaders in section 3
+            check_for_updates() { echo CHECK_FOR_UPDATES; DOWNLOAD_CMD=curl; }
+            update_modules() { echo UPDATE_MODULES; }
+            cleanup_obsolete_scripts() { :; }
+            check_privileges() { return 1; }
+            sweep_stale_temps() { :; }
+            main "$2"' _ "${REPO_DIR}/kubernetes/kubernetes-setup.sh" "$1" 2>&1) || rc=$?
+    printf '%s|%s' "$rc" "$out"
+}
+res=$(_k8s_main --help)
+assert_eq '0' "${res%%|*}"                              "kubernetes-setup.sh --help exits 0"
+assert_contains "${res#*|}" 'Usage:'                     "kubernetes-setup.sh --help prints usage"
+assert_contains "${res#*|}" '--skip-update'              "kubernetes-setup.sh --help lists --skip-update"
+res=$(_k8s_main --bogus)
+assert_eq '1' "${res%%|*}"                              "kubernetes-setup.sh --bogus exits 1"
+assert_contains "${res#*|}" 'Unknown option: --bogus'    "kubernetes-setup.sh --bogus is rejected"
+res=$(_k8s_main --skip-update)
+assert_not_contains "${res#*|}" 'CHECK_FOR_UPDATES'      "kubernetes-setup.sh --skip-update skips the self-check"
+assert_not_contains "${res#*|}" 'UPDATE_MODULES'         "kubernetes-setup.sh --skip-update skips module updates"
+assert_contains "${res#*|}" 'Kubernetes Setup and Configuration Script' "kubernetes-setup.sh --skip-update reaches the banner"
+res=$(_k8s_main --debug)
+assert_contains "${res#*|}" 'DEBUG MODE ENABLED'         "kubernetes-setup.sh --debug enables debug output"
+assert_contains "${res#*|}" 'CHECK_FOR_UPDATES'          "kubernetes-setup.sh --debug still runs the self-check"
+assert_contains "${res#*|}" 'UPDATE_MODULES'             "kubernetes-setup.sh --debug still runs module updates"
+
 echo ""
 echo "${TESTS_RUN} assertions, ${TESTS_FAILED} failed"
 [[ "$TESTS_FAILED" -eq 0 ]]

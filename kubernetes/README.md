@@ -5,8 +5,10 @@ Kubernetes cluster setup and configuration suite. Uses an orchestrator pattern w
 ## Running
 
 ```bash
-sudo ./kubernetes-setup.sh           # Interactive mode
-sudo ./kubernetes-setup.sh --debug   # Debug mode
+sudo ./kubernetes-setup.sh                 # Interactive mode
+sudo ./kubernetes-setup.sh --debug         # Debug mode
+sudo ./kubernetes-setup.sh --skip-update   # Skip self-update and module update checks
+./kubernetes-setup.sh --help               # Usage
 ```
 
 The Kubernetes version is set via `K8S_VERSION` in `kubernetes-setup.sh` (currently `v1.35`). This controls the APT repository version for both Kubernetes packages and CRI-O. To target a different version, edit the constant before running.
