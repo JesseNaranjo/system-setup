@@ -778,22 +778,26 @@ get_script_list() {
 OBSOLETE_SCRIPTS=()
 
 main() {
-    sweep_stale_temps '~*.tmp.??????'
-
     # Save original args for the check_for_updates exec restart; the parse loop consumes $@.
     local -a original_args=("$@")
 
-    local SKIP_UPDATE=false
+    # Parse FIRST: sweep_stale_temps below can stop for a confirmation, and
+    # --help or a rejected option must answer immediately. Lowercase local —
+    # UPPER_CASE is for globals and constants (§Naming Conventions), and this
+    # one is deliberately NOT an environment variable.
+    local skip_update=false
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --help)        echo "Usage: $(basename "$0") [--skip-update] [--debug]"; exit 0 ;;
-            --skip-update) SKIP_UPDATE=true; shift ;;
+            --skip-update) skip_update=true; shift ;;
             --debug)       DEBUG_MODE=true; shift ;;
             *)             print_error "✖ Unknown option: $1"; exit 1 ;;
         esac
     done
 
-    if [[ "$SKIP_UPDATE" != true ]]; then
+    sweep_stale_temps '~*.tmp.??????'
+
+    if [[ "$skip_update" != true ]]; then
         # Checks utils + self, exec-restarts if either changed. DOWNLOAD_CMD is
         # populated on every return path where a download tool exists, INCLUDING
         # the post-restart one — the gate below relies on that.
@@ -806,6 +810,8 @@ main() {
 
     detect_os
     detect_container
+
+    local scope="user"   # "user" or "system"; real orchestrators prompt for it
 
     source "${SCRIPT_DIR}/system-modules/module-a.sh"
     main_module_a "$scope"
@@ -2424,7 +2430,9 @@ sweep_stale_temps() {
     fi
 
     for f in "${stale_files[@]}"; do
-        rm -f "$f"
+        # `|| true`: a temp that cannot be removed (root-owned leftover, unwritable
+        # directory) must not abort the run under `set -e` mid-cleanup.
+        rm -f "$f" || true
     done
     print_success "✓ Cleaned up ${#stale_files[@]} stale temp file(s)"
 }
@@ -2656,7 +2664,6 @@ self_update() {
         echo ""
         export GH_SCRIPTS_UPDATED=1
         exec "${LOCAL_SCRIPT}" "$@"
-        exit 0
     else
         rm -f "$TEMP_SCRIPT_FILE"
         print_warning "⚠ Skipped update - continuing with local version"
@@ -2670,7 +2677,8 @@ self_update() {
 - **Pattern E** (adjacent `mktemp` + `TEMP_FILES+=()`) replaces the older `local TEMP_SCRIPT="$(mktemp)"` form, which landed in `$TMPDIR` (tmpfs) and made `mv -f` a cross-FS `copy + unlink` rather than an atomic `rename(2)`. SIGKILL or power-loss mid-copy could leave a truncated script.
 - **Pattern D** (`if ! mv -f`) replaces the bare `mv -f` so a read-only or cross-FS destination produces a typed error and the local file is preserved.
 - **Pattern H** (`show_diff_box`) replaces the inline diff border + `diff -u --color` block. Color is now `--color=always` and multi-page diffs page through `less -RFX`.
-- The function is inlined in the three `github/gh_org_*.sh` standalones, whose `main()` runs `if detect_download_cmd && [[ ${GH_SCRIPTS_UPDATED:-0} -eq 0 ]]` — detection first, guard second — and `unset GH_SCRIPTS_UPDATED` after the block. Modular Standalone directories use `check_for_updates` instead.
+- The function is inlined in the three `github/gh_org_*.sh` standalones, whose `main()` runs `if detect_download_cmd && [[ -z "${GH_SCRIPTS_UPDATED:-}" ]]` — detection first, guard second — and `unset GH_SCRIPTS_UPDATED` after the block. Test the guard as a STRING: `[[ ${GUARD:-0} -eq 0 ]]` evaluates both operands as arithmetic, so a `$(…)` smuggled in through the environment is executed by the test itself. Modular Standalone directories use `check_for_updates` instead.
+- No `exit 0` after the `exec`. `exec` replaces the process; a following line is dead code (§No Dead Code / Legacy / Back-Compat Shims), and none of the three standalones has one.
 
 ### check_for_updates Pattern (per-directory utils)
 
@@ -2681,11 +2689,11 @@ Used by individual scripts and modules in lxc/, llm/, kubernetes/, system-setup/
 check_for_updates "${BASH_SOURCE[0]}" "$@"
 ```
 
-Flow: `detect_download_cmd` → one-shot restart guard → adjacent-`mktemp` utils temp → download utils → diff/prompt → adjacent-`mktemp` caller temp → download caller → diff/prompt → `export SCRIPTS_UPDATED=1` + exec restart if updated.
+Flow: consume the one-shot restart guard → `detect_download_cmd` → return if this run was the restart → adjacent-`mktemp` utils temp → download utils → diff/prompt → adjacent-`mktemp` caller temp → download caller → diff/prompt → `export SELF_UPDATE_RESTARTED=1` + exec restart if updated.
 
-> **`detect_download_cmd` MUST run before the restart guard.** After the exec restart the library is sourced fresh with `DOWNLOAD_CMD=""`, and `system-setup.sh`, `kubernetes-setup.sh`, and the three `_download-*-scripts.sh` gate `update_modules` on `[[ -n "$DOWNLOAD_CMD" ]]` right after the call. Contract: on every return path where curl or wget exists, including the post-restart one, `DOWNLOAD_CMD` is populated. `tests/test-self-update.sh` pins it for all five libraries.
+> **`detect_download_cmd` MUST run before the restart guard returns.** After the exec restart the library is sourced fresh with `DOWNLOAD_CMD=""`, and `system-setup.sh`, `kubernetes-setup.sh`, and the three `_download-*-scripts.sh` gate `update_modules` on `[[ -n "$DOWNLOAD_CMD" ]]` right after the call. Contract: on every return path where curl or wget exists, including the post-restart one, `DOWNLOAD_CMD` is populated. `tests/test-self-update.sh` pins it for all five libraries.
 >
-> **The guard is the single exported name `SCRIPTS_UPDATED`, shared by all five libraries (so the body is byte-identical — §Helper Library Duplication). It tells the exec'd process that its parent already checked both files and replaced at least one, so the post-restart self-check is skipped (without it the restart would repeat the two fetches once; an up-to-date pair never restarts again, so no loop is possible either way). It is one-shot: the restarted process `unset`s it as soon as it has tested it, so no child (a package manager, a tmux server) inherits it and skips its own check.** The github standalones' `GH_SCRIPTS_UPDATED`: §Self-Update Function.
+> **The guard is the single exported name `SELF_UPDATE_RESTARTED`, shared by all five libraries (so the body is byte-identical — §Helper Library Duplication). It tells the exec'd process that its parent already checked both files and replaced at least one, so the post-restart self-check is skipped (without it the restart would repeat the two fetches once; an up-to-date pair never restarts again, so no loop is possible either way). It is one-shot, and consumed FIRST: the restarted process reads it into a local and `unset`s it ahead of every return path — including the one taken when no download tool exists — so no child (a package manager, a tmux server) can inherit it and skip its own check.** The github standalones' `GH_SCRIPTS_UPDATED`: §Self-Update Function.
 
 The two `mktemp` sites use the two Pattern E variants:
 
@@ -2706,6 +2714,8 @@ TEMP_FILES+=("$temp_file")
 The install step sets the mode explicitly: the utils-file branch uses `chmod 644` (a sourced library, never executed directly); the caller branch uses `chmod +x` (an executable script). This is the only substantive difference between the two branches — do not copy `chmod +x` into the utils branch.
 
 Each non-success branch (download fail, no-diff, user decline, mv fail) carries its own `rm -f "$temp_file"` per [Layer 1 of the cleanup architecture](#defense-in-depth-cleanup). When the success branch runs, `mv` consumes the temp and no `rm` is needed.
+
+Both `mktemp` calls are GUARDED here (`if ! temp_file=$(mktemp … 2>/dev/null); then`), not bare as in the Pattern E snippets above. A failing bare assignment under `set -e` aborts the caller, and `check_for_updates` is invoked bare — unlike `update_modules`, which every caller invokes in a `||` list, where `set -e` is suspended. The utils site reports and returns 0 (a library directory that cannot hold a temp could not have received an update anyway); the caller site skips only its own half, so a library update already accepted still earns the restart. The caller half is skipped the same way when the caller resolves outside `_UTILS_DIR`: `caller_relpath` is derived by stripping that prefix, so a caller elsewhere keeps an absolute path and would fetch `${REMOTE_BASE}//abs/path` — an HTTP 404 on every single run.
 
 ### Module Update Function
 

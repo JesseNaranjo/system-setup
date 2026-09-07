@@ -490,7 +490,10 @@ main() {
     sweep_stale_temps '~*.tmp.??????'
 
     # Check for updates if download tool available
-    if detect_download_cmd && [[ ${GH_SCRIPTS_UPDATED:-0} -eq 0 ]]; then
+    # The guard is compared as a STRING: `[[ $v -eq 0 ]]` evaluates both operands
+    # as arithmetic, so a `$(…)` smuggled in through the environment would be
+    # executed right here.
+    if detect_download_cmd && [[ -z "${GH_SCRIPTS_UPDATED:-}" ]]; then
         # `|| true`: self_update returns 1 when the download fails or the install
         # mv fails. Both are non-fatal by design — it prints "keeping local version"
         # and the tool is expected to carry on — but a bare call under

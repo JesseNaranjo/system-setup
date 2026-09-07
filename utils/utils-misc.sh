@@ -398,18 +398,24 @@ check_for_updates() {
     local caller_script="$1"
     shift
 
-    # Detect BEFORE the restart guard. The exec'd process sources this library
+    # One-shot restart guard: the process that exec'd us already checked both
+    # files and replaced at least one. Read and consume it BEFORE any return
+    # path below, so no child of this run can inherit it and skip its own
+    # check — not even on a host where the tool detection below fails.
+    local restarted=""
+    if [[ -n "${SELF_UPDATE_RESTARTED:-}" ]]; then
+        restarted=1
+        unset SELF_UPDATE_RESTARTED
+    fi
+
+    # Detect before the guard RETURNS. The exec'd process sources this library
     # fresh (DOWNLOAD_CMD=""), and the orchestrators and _download-*-scripts.sh
     # gate update_modules on DOWNLOAD_CMD right after this call — so the
     # restarted process must populate it too (AGENTS.md §check_for_updates
     # Pattern).
     detect_download_cmd || return 0
 
-    # One-shot restart guard: the process that exec'd us already checked both
-    # files and replaced at least one. Consume it so no child of this run
-    # inherits it and skips its own check.
-    if [[ -n "${SCRIPTS_UPDATED:-}" ]]; then
-        unset SCRIPTS_UPDATED
+    if [[ -n "$restarted" ]]; then
         return 0
     fi
 
@@ -426,7 +432,14 @@ check_for_updates() {
     # Check utils file
     # mktemp adjacent to destination so `mv` is atomic rename(2) on the same FS;
     # ~filename.tmp.XXXXXX naming convention makes the sweep glob unambiguous.
-    temp_file=$(mktemp "${_UTILS_DIR}/~${utils_basename}.tmp.XXXXXX")
+    # A bare `temp_file=$(mktemp …)` that fails is an assignment under `set -e`
+    # and would kill the caller, which the preamble above forbids — so report
+    # the unwritable directory (which could not have received an update anyway)
+    # and skip the check.
+    if ! temp_file=$(mktemp "${_UTILS_DIR}/~${utils_basename}.tmp.XXXXXX" 2>/dev/null); then
+        print_warning "⚠ Cannot create a temp file in ${_UTILS_DIR} — skipping the update check"
+        return 0
+    fi
     TEMP_FILES+=("$temp_file")
     if download_script "$utils_basename" "$temp_file"; then
         if ! diff -q "${_UTILS_DIR}/${utils_basename}" "$temp_file" > /dev/null 2>&1; then
@@ -455,36 +468,45 @@ check_for_updates() {
     # Check calling script. Use caller_abs (already resolved) for path-sensitive
     # operations — the raw ${BASH_SOURCE[0]} caller_script may be a bare basename
     # when invoked via PATH or bash <name>, breaking ${caller_script%/*} dirname
-    # extraction and PATH-resolved exec.
-    temp_file=$(mktemp "$(dirname "$caller_abs")/~$(basename "$caller_abs").tmp.XXXXXX")
-    TEMP_FILES+=("$temp_file")
-    if download_script "$caller_relpath" "$temp_file"; then
-        if ! diff -q "$caller_abs" "$temp_file" > /dev/null 2>&1; then
-            show_diff_box "$caller_abs" "$temp_file" "$caller_relpath"
-            if prompt_yes_no "→ Update ${caller_relpath}?" "y"; then
-                chmod +x "$temp_file"
-                if mv -f "$temp_file" "$caller_abs"; then
-                    print_success "✓ Updated ${caller_relpath}"
-                    any_updated=true
+    # extraction and PATH-resolved exec. Two conditions skip this half WITHOUT
+    # skipping the restart the utils half may already have earned: a caller
+    # outside _UTILS_DIR, whose caller_relpath is still absolute and would fetch
+    # ${REMOTE_BASE}//abs/path (HTTP 404) on every run, and a caller directory
+    # that cannot hold the temp (same `set -e` hazard as above).
+    if [[ "$caller_abs" != "${_UTILS_DIR}/"* ]]; then
+        print_warning "⚠ ${caller_abs} is outside ${_UTILS_DIR} — skipping its update check"
+    elif ! temp_file=$(mktemp "$(dirname "$caller_abs")/~$(basename "$caller_abs").tmp.XXXXXX" 2>/dev/null); then
+        print_warning "⚠ Cannot create a temp file next to ${caller_relpath} — skipping its update check"
+    else
+        TEMP_FILES+=("$temp_file")
+        if download_script "$caller_relpath" "$temp_file"; then
+            if ! diff -q "$caller_abs" "$temp_file" > /dev/null 2>&1; then
+                show_diff_box "$caller_abs" "$temp_file" "$caller_relpath"
+                if prompt_yes_no "→ Update ${caller_relpath}?" "y"; then
+                    chmod +x "$temp_file"
+                    if mv -f "$temp_file" "$caller_abs"; then
+                        print_success "✓ Updated ${caller_relpath}"
+                        any_updated=true
+                    else
+                        rm -f "$temp_file"
+                        print_error "✖ Failed to install update — keeping local version"
+                    fi
                 else
+                    print_info "Skipped ${caller_relpath}"
                     rm -f "$temp_file"
-                    print_error "✖ Failed to install update — keeping local version"
                 fi
             else
-                print_info "Skipped ${caller_relpath}"
+                print_success "- ${caller_relpath} is up-to-date"
                 rm -f "$temp_file"
             fi
         else
-            print_success "- ${caller_relpath} is up-to-date"
             rm -f "$temp_file"
         fi
-    else
-        rm -f "$temp_file"
     fi
 
     if [[ "$any_updated" == "true" ]]; then
-        print_success "Restarting with updated scripts..."
-        export SCRIPTS_UPDATED=1
+        print_success "✓ Restarting with updated scripts..."
+        export SELF_UPDATE_RESTARTED=1
         exec "$caller_abs" "$@"
     fi
 }

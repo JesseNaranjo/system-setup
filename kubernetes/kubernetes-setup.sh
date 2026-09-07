@@ -23,6 +23,10 @@
 #
 # The script automatically detects the environment and configures appropriately.
 # Linux only - Kubernetes is not supported on macOS natively.
+#
+# A module download that fails is reported and skipped, not fatal, so the exit
+# status does not reflect it; a module that is missing altogether stops the run
+# with a typed error before anything is sourced.
 
 set -euo pipefail
 
@@ -259,13 +263,13 @@ check_step_prerequisites() {
 }
 
 main() {
-    sweep_stale_temps '~*.tmp.??????'
-
     # Save original args for the check_for_updates exec restart; the parse loop
     # below consumes $@.
     local -a original_args=("$@")
 
-    local SKIP_UPDATE=false
+    # Argument parsing runs FIRST: the stale-temp sweep below can stop for a
+    # confirmation, and --help or a rejected option must answer immediately.
+    local skip_update=false
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --help)
@@ -281,7 +285,7 @@ main() {
                 exit 0
                 ;;
             --skip-update)
-                SKIP_UPDATE=true
+                skip_update=true
                 shift
                 ;;
             --debug)
@@ -297,7 +301,9 @@ main() {
         esac
     done
 
-    if [[ "$SKIP_UPDATE" != true ]]; then
+    sweep_stale_temps '~*.tmp.??????'
+
+    if [[ "$skip_update" != true ]]; then
         check_for_updates "${BASH_SOURCE[0]}" "${original_args[@]+"${original_args[@]}"}"
         if [[ -n "$DOWNLOAD_CMD" ]]; then
             # `|| true`: update_modules keeps going past individual download
@@ -307,6 +313,28 @@ main() {
             update_modules || true
             cleanup_obsolete_scripts "${OBSOLETE_SCRIPTS[@]+"${OBSOLETE_SCRIPTS[@]}"}"
         fi
+    fi
+
+    # A failed module download leaves nothing on disk — update_modules `continue`s
+    # past the failure before its create-if-missing step — and the `source` calls
+    # further down would then die on bash's raw "No such file or directory". Name
+    # the gap instead. Only the kubernetes-modules/ entries are sourced here; the
+    # flat entries in get_script_list (start-k8s.sh, stop-k8s.sh) are run by the
+    # user, so their absence must not stop a setup that never touches them.
+    local missing_modules=()
+    local module_path
+    while IFS= read -r module_path; do
+        if [[ "$module_path" == kubernetes-modules/* ]] && [[ ! -f "${SCRIPT_DIR}/${module_path}" ]]; then
+            missing_modules+=("$module_path")
+        fi
+    done < <(get_script_list)
+    if [[ ${#missing_modules[@]} -gt 0 ]]; then
+        print_error "✖ Missing module(s) — a download failed or this copy is incomplete:"
+        for module_path in "${missing_modules[@]}"; do
+            echo "            - ${module_path}" >&2
+        done
+        print_info "Re-run with network access, or copy them from ${REMOTE_BASE}"
+        exit 1
     fi
 
     print_info "Kubernetes Setup and Configuration Script (Idempotent Mode)"
