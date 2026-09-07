@@ -384,21 +384,34 @@ download_script() {
     return 1
 }
 
-# Check for updates to the utils file and the calling script
-# Called at the start of main() in each script
-# Args: $1 = caller script path (${BASH_SOURCE[0]}), remaining args = original script args
+# Check for updates to the utils file and the calling script, then exec-restart
+# the caller if either was replaced.
+# Usage: check_for_updates "${BASH_SOURCE[0]}" "$@"
 # Never returns non-zero. Every caller invokes this bare under `set -euo
 # pipefail`, so returning 1 for an update that could not be installed would
 # abort the whole tool at the exact moment the message says "keeping local
 # version". Failures are reported and the run continues with the copy on disk.
+#
+# PARITY COPY — byte-identical in all 5 libraries (AGENTS.md §Helper Library
+# Duplication). It has no per-suite input; never inline a suite name here.
 check_for_updates() {
     local caller_script="$1"
     shift
 
-    # Skip if already updated this run
-    [[ -n "${UTILS_SCRIPTS_UPDATED:-}" ]] && return 0
-
+    # Detect BEFORE the restart guard. The exec'd process sources this library
+    # fresh (DOWNLOAD_CMD=""), and the orchestrators and _download-*-scripts.sh
+    # gate update_modules on DOWNLOAD_CMD right after this call — so the
+    # restarted process must populate it too (AGENTS.md §check_for_updates
+    # Pattern).
     detect_download_cmd || return 0
+
+    # One-shot restart guard: the process that exec'd us already checked both
+    # files and replaced at least one. Consume it so no child of this run
+    # inherits it and skips its own check.
+    if [[ -n "${SCRIPTS_UPDATED:-}" ]]; then
+        unset SCRIPTS_UPDATED
+        return 0
+    fi
 
     local utils_basename
     utils_basename=$(basename "${BASH_SOURCE[0]}")
@@ -411,11 +424,13 @@ check_for_updates() {
     print_info "Checking for updates..."
 
     # Check utils file
+    # mktemp adjacent to destination so `mv` is atomic rename(2) on the same FS;
+    # ~filename.tmp.XXXXXX naming convention makes the sweep glob unambiguous.
     temp_file=$(mktemp "${_UTILS_DIR}/~${utils_basename}.tmp.XXXXXX")
     TEMP_FILES+=("$temp_file")
     if download_script "$utils_basename" "$temp_file"; then
         if ! diff -q "${_UTILS_DIR}/${utils_basename}" "$temp_file" > /dev/null 2>&1; then
-            show_diff_box "${_UTILS_DIR}/${utils_basename}" "$temp_file" "${utils_basename}"
+            show_diff_box "${_UTILS_DIR}/${utils_basename}" "$temp_file" "$utils_basename"
             if prompt_yes_no "→ Update ${utils_basename}?" "y"; then
                 chmod 644 "$temp_file"
                 if mv -f "$temp_file" "${_UTILS_DIR}/${utils_basename}"; then
@@ -445,7 +460,7 @@ check_for_updates() {
     TEMP_FILES+=("$temp_file")
     if download_script "$caller_relpath" "$temp_file"; then
         if ! diff -q "$caller_abs" "$temp_file" > /dev/null 2>&1; then
-            show_diff_box "$caller_abs" "$temp_file" "${caller_relpath}"
+            show_diff_box "$caller_abs" "$temp_file" "$caller_relpath"
             if prompt_yes_no "→ Update ${caller_relpath}?" "y"; then
                 chmod +x "$temp_file"
                 if mv -f "$temp_file" "$caller_abs"; then
@@ -469,7 +484,7 @@ check_for_updates() {
 
     if [[ "$any_updated" == "true" ]]; then
         print_success "Restarting with updated scripts..."
-        export UTILS_SCRIPTS_UPDATED=1
+        export SCRIPTS_UPDATED=1
         exec "$caller_abs" "$@"
     fi
 }
