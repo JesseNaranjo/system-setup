@@ -1081,7 +1081,7 @@ The main script automatically checks for updates to all scripts in the system-se
 - Downloads each script from GitHub
 - Shows diffs for changed files
 - Prompts to apply updates selectively
-- Restarts with updated version if changes are applied
+- Restarts if `utils-sys.sh` or `system-setup.sh` was updated, then continues with the module updates
 
 ### Shared Utilities
 

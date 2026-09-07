@@ -391,6 +391,7 @@ Scripts use standard sysexits.h codes:
 | Code | Name | Description |
 |------|------|-------------|
 | 0 | EX_OK | Success |
+| 1 | — | General error. `_download-lxc-scripts.sh` returns it when one or more script downloads failed; the per-file failures are already reported on stdout. |
 | 64 | EX_USAGE | Command line usage error |
 | 65 | EX_DATAERR | Data format error |
 | 66 | EX_NOINPUT | Input file not found |

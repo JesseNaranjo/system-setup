@@ -1,7 +1,7 @@
 # Lessons
 
 <!-- DRIFT GUARD — Do not remove the audience line below. -->
-> **Audience: AI coding agents only.** AI-maintained log of standing lessons and decision records. Follow the entry schema in `~/.claude/CLAUDE.md` §Lessons Log exactly. Append new entries at the end of `## Lessons`.
+> **Audience: AI coding agents only.** AI-maintained log of standing lessons and decision records. Append new entries at the end of `## Lessons` as `### <title>` followed by four bullets in this order — **Source:** (the plan, review or incident it came from), **Problem:**, **Lesson:** (the durable fact, stated declaratively), **Standing instruction:** (the imperative a future session obeys; `None` when the lesson alone suffices). Keep the file flat — no category subheadings. Entries stand: supersede one by appending a dated **Superseded YYYY-MM-DD:** bullet rather than rewriting or deleting its bullets, and delete an entry only when its subject has left the repository entirely. Open work belongs in `backlog.md`, shipped work in `changelog.md`.
 
 ## Lessons
 
@@ -14,7 +14,7 @@
 
 ### A restart guard must not short-circuit the initialization its consumers depend on, and it must be consumed
 
-- **Source:** 2026-09-06 self-update fix (plan `~/.claude/plans/we-re-going-to-fix-melodic-nebula.md`). Owner report: after `system-setup.sh` self-updated and restarted, no module update check ran until a second run.
+- **Source:** 2026-09-06 self-update fix (branch `worktree-self-update-restart`; the plan file is local to the author's machine). Owner report: after `system-setup.sh` self-updated and restarted, no module update check ran until a second run.
 - **Problem:** `check_for_updates` tested its restart guard before `detect_download_cmd`. The exec'd process sources the library fresh, so `DOWNLOAD_CMD` was `""`; every orchestrator and downloader gates `update_modules` on `[[ -n "$DOWNLOAD_CMD" ]]`, so the restarted run silently skipped module updates. Identical in all five libraries; `github/gh_org_*.sh` were already detect-first. The guard was also never consumed, so it stayed exported for every child of the restarted run.
-- **Lesson:** An early-return guard placed before a side-effecting initializer starves every downstream consumer of that side effect on the guarded path: initialization first, guard second, and the contract ("populated on every return path where a tool exists") in the function's comment so the next parity copy inherits it. A process-restart marker is one-shot state — `unset` it the moment it has been read, or every child (including a long-lived server) inherits a stale instruction.
-- **Standing instruction:** Any new guarded entry point that also initializes a global its callers read MUST order the initialization first, and any exported restart marker MUST be consumed with `unset` once tested. The `check_for_updates`-specific rules live in AGENTS.md §check_for_updates Pattern; `tests/test-self-update.sh` pins them.
+- **Lesson:** An early-return guard placed before a side-effecting initializer starves every downstream consumer of that side effect on the guarded path: run the initialization before the guard can return, and state the contract ("populated on every return path where a tool exists") in the function's comment so the next parity copy inherits it. A process-restart marker is one-shot state — read it into a local and `unset` it ahead of *every* return path, or a child (including a long-lived server that seeds other shells) inherits a stale instruction.
+- **Standing instruction:** Any new guarded entry point that also initializes a global its callers read MUST run that initialization before the guard returns, and any exported restart marker MUST be consumed with `unset` ahead of every return path. The `check_for_updates`-specific rules live in AGENTS.md §check_for_updates Pattern; `tests/test-self-update.sh` pins them.
