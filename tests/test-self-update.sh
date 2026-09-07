@@ -470,6 +470,32 @@ done
 # the retired identifiers on purpose — in this very assertion.
 assert_eq '0' "$(grep -rlE 'scriptUpdated|GH_SCRIPTS_UPDATED|(SYS|K8S|LXC|LLM|UTILS)_SCRIPTS_UPDATED' --include='*.sh' --exclude-dir=tests --exclude-dir=.claude "${REPO_DIR}" | wc -l | tr -d ' ')" 'no retired guard name survives in distributed *.sh'
 
+echo "== executable bits: every launched *.sh is 100755 in the index =="
+# Every tracked *.sh is launched as a program — `./x.sh` by a user, or
+# `exec "$caller_abs"` by check_for_updates — except the six named below, so
+# git must record it as 100755: on a clone, `./script.sh` otherwise fails with
+# `Permission denied` (126), and a library-only self-update dies at the exec
+# AFTER the library has already been replaced. Reads the INDEX
+# (`git ls-files -s`), not the working tree, so a stray local chmod cannot mask
+# a wrong commit. The allowlist is the record of what is deliberately not
+# executable — a new sourced library goes here; a new launcher needs nothing:
+#   the five utils-*.sh libraries   sourced, never launched; check_for_updates
+#                                   installs them with `chmod 644` on purpose
+#   github/gh_org_copy-backup.sh    a retained Legacy backup of gh_org_copy.sh
+#                                   (github/README.md), not a launcher
+if ! mode_offenders=$(git -C "$REPO_DIR" ls-files -s -- '*.sh' \
+        | awk '$1 != "100755" &&
+               $4 != "system-setup/utils-sys.sh" && $4 != "kubernetes/utils-k8s.sh" &&
+               $4 != "lxc/utils-lxc.sh" && $4 != "llm/utils-llm.sh" && $4 != "utils/utils-misc.sh" &&
+               $4 != "github/gh_org_copy-backup.sh" {print $4}' \
+        | tr '\n' ' '); then
+    printf '  FAIL executable bits: git ls-files failed (not a git checkout?)\n'
+    ((TESTS_RUN++)) || true
+    ((TESTS_FAILED++)) || true
+else
+    assert_eq '' "$mode_offenders" 'every tracked *.sh is 100755 in the index (except the five libraries and the Legacy backup)'
+fi
+
 echo ""
 echo "${TESTS_RUN} assertions, ${TESTS_FAILED} failed"
 [[ "$TESTS_FAILED" -eq 0 ]]
