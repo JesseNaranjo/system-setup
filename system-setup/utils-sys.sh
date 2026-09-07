@@ -1365,7 +1365,7 @@ check_for_updates() {
             if ! diff -q "$caller_abs" "$temp_file" > /dev/null 2>&1; then
                 show_diff_box "$caller_abs" "$temp_file" "$caller_relpath"
                 if prompt_yes_no "→ Update ${caller_relpath}?" "y"; then
-                    if chmod +x "$temp_file" && mv -f "$temp_file" "$caller_abs"; then
+                    if chmod 755 "$temp_file" && mv -f "$temp_file" "$caller_abs"; then
                         print_success "✓ Updated ${caller_relpath}"
                         any_updated=true
                     else

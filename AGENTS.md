@@ -2599,7 +2599,7 @@ download_script() {
 ```
 
 **The content gate is a security boundary, not a sanity check.** The downloaded
-file is about to be `chmod +x`'d, `mv`'d over the running script, and `exec`'d.
+file is about to be `chmod 755`'d, `mv`'d over the running script, and `exec`'d.
 Only these forms are acceptable:
 
 - **Read line 1 and only line 1.** `head -n 10 … | grep -q "^#!/"` accepted a
@@ -2652,18 +2652,21 @@ self_update() {
     show_diff_box "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" "${SCRIPT_FILE}"
 
     if prompt_yes_no "→ Overwrite and restart with updated ${SCRIPT_FILE}?" "y"; then
-        chmod +x "${TEMP_SCRIPT_FILE}"
-        # Pattern D: explicit failure handler so a read-only $SCRIPT_DIR or
-        # cross-FS attempt doesn't leave the local script half-overwritten.
-        if ! mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"; then
+        # Pattern D with the mode change inside the chain: a read-only
+        # $SCRIPT_DIR or a cross-FS attempt must not leave the local script
+        # half-overwritten, and self_update is invoked in a `||` list, which
+        # suspends errexit for its whole body — so a bare chmod that failed
+        # would install anyway and the exec below would die with 126.
+        if chmod 755 "${TEMP_SCRIPT_FILE}" && mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"; then
+            print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
+            echo ""
+            export SELF_UPDATE_RESTARTED=1
+            exec "${LOCAL_SCRIPT}" "$@"
+        else
             rm -f "$TEMP_SCRIPT_FILE"
             print_error "✖ Failed to install update — keeping local version"
             return 1
         fi
-        print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
-        echo ""
-        export SELF_UPDATE_RESTARTED=1
-        exec "${LOCAL_SCRIPT}" "$@"
     else
         rm -f "$TEMP_SCRIPT_FILE"
         print_warning "⚠ Skipped update - continuing with local version"
@@ -2710,14 +2713,14 @@ TEMP_FILES+=("$temp_file")
 caller_abs="$(cd "$(dirname "$caller_script")" && pwd)/$(basename "$caller_script")"
 temp_file=$(mktemp "$(dirname "$caller_abs")/~$(basename "$caller_abs").tmp.XXXXXX")
 TEMP_FILES+=("$temp_file")
-# ... download_script + show_diff_box + prompt_yes_no + Pattern D `if chmod +x … && mv -f …; then … else` (executable) ...
+# ... download_script + show_diff_box + prompt_yes_no + Pattern D `if chmod 755 … && mv -f …; then … else` (executable) ...
 ```
 
-The install step sets the mode explicitly: the utils-file branch uses `chmod 644` (a sourced library, never executed directly); the caller branch uses `chmod +x` (an executable script). This is the only substantive difference between the two branches — do not copy `chmod +x` into the utils branch. Both `chmod`s sit INSIDE the Pattern D chain (`if chmod … && mv -f …; then`): `check_for_updates` is invoked bare under `set -e`, so a bare `chmod` that failed would abort the tool at the moment the message promises "keeping local version"; `&&` short-circuits, so a failed `chmod` never installs, and the existing `else` branch removes the temp and reports.
+The install step sets the mode explicitly: the utils-file branch uses `chmod 644` (a sourced library, never executed directly); the caller branch uses `chmod 755` (an executable script). This is the only substantive difference between the two branches — do not copy `chmod 755` into the utils branch. Both modes are LITERAL, never `+x`: `mktemp` creates the temp at 0600 and `+x` is umask-relative, so it yields 0711 under umask 022 and 0700 under umask 077 (probed 2026-09-07) — the owner can run the installed script and nobody else can even read it, which is the state a `sudo` self-update left behind for the invoking user. Both `chmod`s sit INSIDE the Pattern D chain (`if chmod … && mv -f …; then`): `check_for_updates` is invoked bare under `set -e`, so a bare `chmod` that failed would abort the tool at the moment the message promises "keeping local version"; `&&` short-circuits, so a failed `chmod` never installs, and the existing `else` branch removes the temp and reports.
 
 Each non-success branch (download fail, no-diff, user decline, mv fail) carries its own `rm -f "$temp_file"` per [Layer 1 of the cleanup architecture](#defense-in-depth-cleanup). When the success branch runs, `mv` consumes the temp and no `rm` is needed.
 
-Both `mktemp` calls are GUARDED here (`if ! temp_file=$(mktemp … 2>/dev/null); then`), not bare as in the Pattern E snippets above. A failing bare assignment under `set -e` aborts the caller, and `check_for_updates` is invoked bare — unlike `update_modules`, which every caller invokes in a `||` list. Bash suspends errexit for the WHOLE body of a function invoked that way (probed 2026-09-07), so a failing `mktemp` there leaves an empty path and `download_script` reports that one file as a failed download: degraded, but not fatal. That is the only reason the Pattern E snippets stay bare; do not read it as an endorsement. The utils site reports and returns 0 (a library directory that cannot hold a temp could not have received an update anyway); the caller site skips only its own half, so a library update already accepted still earns the restart. The caller half is skipped the same way when the caller resolves outside `_UTILS_DIR`: `caller_relpath` is derived by stripping that prefix, so a caller elsewhere keeps an absolute path and would fetch `${REMOTE_BASE}//abs/path` — an HTTP 404 on every single run.
+Both `mktemp` calls are GUARDED here (`if ! temp_file=$(mktemp … 2>/dev/null); then`), not bare as in the Pattern E snippets above. A failing bare assignment under `set -e` aborts the caller, and `check_for_updates` is invoked bare — unlike `update_modules`, which every caller invokes in a `||` list. Bash suspends errexit for the WHOLE body of a function invoked that way (probed 2026-09-07), so a failing `mktemp` there leaves an empty path and `download_script` reports that one file as a failed download: degraded, but not fatal. That is the only reason the Pattern E snippets stay bare; do not read it as an endorsement, and it does NOT extend to the install-step `chmod`: a failing `mktemp` in a `||`-list function leaves an empty path that `download_script` reports as one failed file, but a failing `chmod` there is silent and installs the wrong mode, after which the `exec` dies with 126. Every install-step `chmod` in this repository therefore sits inside its `mv` chain — `update_modules` and the three `github/gh_org_*.sh` `self_update` copies included. The utils site reports and returns 0 (a library directory that cannot hold a temp could not have received an update anyway); the caller site skips only its own half, so a library update already accepted still earns the restart. The caller half is skipped the same way when the caller resolves outside `_UTILS_DIR`: `caller_relpath` is derived by stripping that prefix, so a caller elsewhere keeps an absolute path and would fetch `${REMOTE_BASE}//abs/path` — an HTTP 404 on every single run.
 
 ### Module Update Function
 
@@ -2772,17 +2775,18 @@ update_modules() {
 
             if prompt_yes_no "→ Overwrite local ${SCRIPT_FILE} with remote copy?" "y"; then
                 echo ""
-                chmod +x "${TEMP_SCRIPT_FILE}"
-                # Pattern D: mv -f failure handler.
-                if ! mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"; then
+                # Pattern D with the mode change inside the chain — update_modules
+                # is invoked in a `||` list, so a bare chmod would be ignored.
+                if chmod 755 "${TEMP_SCRIPT_FILE}" && mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"; then
+                    print_success "✓ Replaced ${SCRIPT_FILE}"
+                    ((updated_count++)) || true
+                else
                     rm -f "${TEMP_SCRIPT_FILE}"
                     print_error "✖ Failed to install update for ${SCRIPT_FILE} — keeping local version"
                     ((failed_count++)) || true
                     echo ""
                     continue
                 fi
-                print_success "✓ Replaced ${SCRIPT_FILE}"
-                ((updated_count++)) || true
             else
                 print_warning "⚠ Skipped ${SCRIPT_FILE}"
                 ((skipped_count++)) || true

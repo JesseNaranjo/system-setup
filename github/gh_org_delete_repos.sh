@@ -373,16 +373,23 @@ self_update() {
     read -p "→ Overwrite and restart with updated ${SCRIPT_FILE}? [Y/n] " -n 1 -r </dev/tty
     if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
         echo ""
-        chmod +x "${TEMP_SCRIPT_FILE}"
-        if ! mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"; then
+        # Both steps inside the chain: self_update is invoked in a `||` list,
+        # which suspends errexit for its whole body, so a bare chmod that failed
+        # would install anyway and the exec below would die with 126. SCRIPT_DIR
+        # could also be read-only (chmod -w) or out of inodes; either way the
+        # local script is preserved and the failure reported. `chmod 755`, not
+        # `+x` — `+x` on a 0600 mktemp file is umask-relative (0711 under umask
+        # 022): runnable by its owner, unreadable by anyone else.
+        if chmod 755 "${TEMP_SCRIPT_FILE}" && mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"; then
+            print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
+            echo ""
+            export SELF_UPDATE_RESTARTED=1
+            exec "${LOCAL_SCRIPT}" "$@"
+        else
             rm -f "$TEMP_SCRIPT_FILE"
             print_error "✖ Failed to install update — keeping local version"
             return 1
         fi
-        print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
-        echo ""
-        export SELF_UPDATE_RESTARTED=1
-        exec "${LOCAL_SCRIPT}" "$@"
     else
         print_warning "⚠ Skipped update - continuing with local version"
         rm -f "$TEMP_SCRIPT_FILE"

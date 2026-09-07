@@ -129,16 +129,21 @@ update_modules() {
 
             if prompt_yes_no "→ Overwrite local ${SCRIPT_FILE} with remote copy?" "y"; then
                 echo ""
-                chmod +x "${TEMP_SCRIPT_FILE}"
-                if ! mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"; then
+                # Both steps inside the chain: update_modules is invoked in a
+                # `||` list, which suspends errexit for its whole body, so a bare
+                # chmod that failed would install anyway. `chmod 755`, not `+x` —
+                # `+x` on a 0600 mktemp file is umask-relative (0711 under umask
+                # 022): runnable by its owner, unreadable by anyone else.
+                if chmod 755 "${TEMP_SCRIPT_FILE}" && mv -f "${TEMP_SCRIPT_FILE}" "${LOCAL_SCRIPT}"; then
+                    print_success "✓ Replaced ${SCRIPT_FILE}"
+                    ((updated_count++)) || true
+                else
                     rm -f "${TEMP_SCRIPT_FILE}"
                     print_error "✖ Failed to install update for ${SCRIPT_FILE} — keeping local version"
                     ((failed_count++)) || true
                     echo ""
                     continue
                 fi
-                print_success "✓ Replaced ${SCRIPT_FILE}"
-                ((updated_count++)) || true
             else
                 print_warning "⚠ Skipped ${SCRIPT_FILE}"
                 ((skipped_count++)) || true

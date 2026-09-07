@@ -206,7 +206,7 @@ for lib_rel in "${LIBRARIES[@]}"; do
     assert_contains "$out" 'REMOTE_COPY'            "${lib_rel}: accept caller → exec ran the NEW caller"
     assert_eq '2' "$(wc -l < "${SANDBOX}/shim.log" | tr -d ' ')" "${lib_rel}: accept caller → utils + caller fetched once each"
     assert_eq '0' "$(find "$SANDBOX" -name '~*.tmp.??????' -type f | wc -l | tr -d ' ')" "${lib_rel}: accept caller → no ~*.tmp leftovers"
-    assert_eq 'executable' "$([[ -x "${SANDBOX}/caller.sh" ]] && echo executable || echo not-executable)" "${lib_rel}: accept caller → installed executable"
+    assert_eq '755' "$(stat -c %a "${SANDBOX}/caller.sh" 2>/dev/null || stat -f %OLp "${SANDBOX}/caller.sh")" "${lib_rel}: accept caller → installed 755, not a umask-relative +x"
 
     # First run, the LIBRARY changed and the caller did not: the branch that
     # produced the bug report this suite exists for. The library is replaced
@@ -220,7 +220,7 @@ for lib_rel in "${LIBRARIES[@]}"; do
     assert_contains "$out" 'RESTARTED_WITH=1'       "${lib_rel}: accept utils → restarts so the new library is loaded"
     assert_not_contains "$out" 'REMOTE_COPY'        "${lib_rel}: accept utils → the caller itself was not replaced"
     assert_eq 'same' "$(cmp -s "${SANDBOX}/${lib_base}" "${SANDBOX}/remote/${lib_base}" && echo same || echo differs)" "${lib_rel}: accept utils → installed copy is the remote one"
-    assert_eq 'not-executable' "$([[ -x "${SANDBOX}/${lib_base}" ]] && echo executable || echo not-executable)" "${lib_rel}: accept utils → library installed 644, not +x"
+    assert_eq '644' "$(stat -c %a "${SANDBOX}/${lib_base}" 2>/dev/null || stat -f %OLp "${SANDBOX}/${lib_base}")" "${lib_rel}: accept utils → library installed 644, not +x"
     assert_eq '0' "$(find "$SANDBOX" -name '~*.tmp.??????' -type f | wc -l | tr -d ' ')" "${lib_rel}: accept utils → no ~*.tmp leftovers"
 done
 
