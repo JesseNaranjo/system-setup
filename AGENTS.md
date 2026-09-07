@@ -555,7 +555,7 @@ are `github/gh_org_copy.sh`, `github/gh_org_delete_repos.sh`,
 
 - `utils/utils-misc.sh` defines its colour constants with `$'\033…'` (real ESC bytes) rather than `'\033…'`. The `cat`-heredoc `show_usage` in `utils/push-ghostty-terminfo.sh` and `utils/rsync-over-tunnel.sh` needs real bytes or it prints literal escapes. Every `print_*` body uses `%b` for the colour and `%s` for the message precisely so ONE body works with either constant form.
 - `utils/rsync-over-tunnel.sh` overrides `cleanup` BY NAME with a superset that also removes its throwaway daemon config. It is a 9th copy of the roster helper and must be re-audited whenever the canonical `cleanup` changes; the file says so at the definition.
-- `private/tmux/utils-tmux.sh` defines a `check_for_updates` of the same name that is token-gated (`_TOKEN_FILE`), downloads through `download_file … "$token"`, and uses the literal `TMUX_SCRIPTS_UPDATED`. It shares the detect-before-guard and one-shot rules but is NOT a parity copy — a cross-repo hash of `check_for_updates` legitimately yields two digests.
+- `private/tmux/utils-tmux.sh` defines a `check_for_updates` of the same name that is token-gated (`_TOKEN_FILE`) and downloads through `download_file … "$token"`. It shares the `SELF_UPDATE_RESTARTED` guard and the detect-before-guard and one-shot rules, but is NOT a parity copy — a cross-repo hash of `check_for_updates` legitimately yields two digests.
 
 **This is INTENTIONAL.** The suite-isolation architecture requires every directory to be independently downloadable: a user pulling `lxc/script.sh` must get a working script without also fetching `system-setup/utils-sys.sh`. The `github/gh_org_*.sh` standalones go further — they MUST work as a single-file copy/paste with zero external dependencies.
 
@@ -2662,7 +2662,7 @@ self_update() {
         fi
         print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
         echo ""
-        export GH_SCRIPTS_UPDATED=1
+        export SELF_UPDATE_RESTARTED=1
         exec "${LOCAL_SCRIPT}" "$@"
     else
         rm -f "$TEMP_SCRIPT_FILE"
@@ -2677,7 +2677,7 @@ self_update() {
 - **Pattern E** (adjacent `mktemp` + `TEMP_FILES+=()`) replaces the older `local TEMP_SCRIPT="$(mktemp)"` form, which landed in `$TMPDIR` (tmpfs) and made `mv -f` a cross-FS `copy + unlink` rather than an atomic `rename(2)`. SIGKILL or power-loss mid-copy could leave a truncated script.
 - **Pattern D** (`if ! mv -f`) replaces the bare `mv -f` so a read-only or cross-FS destination produces a typed error and the local file is preserved.
 - **Pattern H** (`show_diff_box`) replaces the inline diff border + `diff -u --color` block. Color is now `--color=always` and multi-page diffs page through `less -RFX`.
-- The function is inlined in the three `github/gh_org_*.sh` standalones, whose `main()` runs `if detect_download_cmd && [[ -z "${GH_SCRIPTS_UPDATED:-}" ]]` — detection first, guard second — and `unset GH_SCRIPTS_UPDATED` after the block. Test the guard as a STRING: `[[ ${GUARD:-0} -eq 0 ]]` evaluates both operands as arithmetic, so a `$(…)` smuggled in through the environment is executed by the test itself. Modular Standalone directories use `check_for_updates` instead.
+- The function is inlined in the three `github/gh_org_*.sh` standalones, whose `main()` runs `if detect_download_cmd && [[ -z "${SELF_UPDATE_RESTARTED:-}" ]]` — detection first, guard second — and `unset SELF_UPDATE_RESTARTED` **after** the block, outside the `if`, so the guard is consumed even on a host with no download tool. Same literal as the libraries: one name for one meaning. Test the guard as a STRING: `[[ ${GUARD:-0} -eq 0 ]]` evaluates both operands as arithmetic, so a `$(…)` smuggled in through the environment is executed by the test itself. Modular Standalone directories use `check_for_updates` instead.
 - No `exit 0` after the `exec`. `exec` replaces the process; a following line is dead code (§No Dead Code / Legacy / Back-Compat Shims), and none of the three standalones has one.
 
 ### check_for_updates Pattern (per-directory utils)
@@ -2693,7 +2693,9 @@ Flow: consume the one-shot restart guard → `detect_download_cmd` → return if
 
 > **`detect_download_cmd` MUST run before the restart guard returns.** After the exec restart the library is sourced fresh with `DOWNLOAD_CMD=""`, and `system-setup.sh`, `kubernetes-setup.sh`, and the three `_download-*-scripts.sh` gate `update_modules` on `[[ -n "$DOWNLOAD_CMD" ]]` right after the call. Contract: on every return path where curl or wget exists, including the post-restart one, `DOWNLOAD_CMD` is populated. `tests/test-self-update.sh` pins it for all five libraries.
 >
-> **The guard is the single exported name `SELF_UPDATE_RESTARTED`, shared by all five libraries (so the body is byte-identical — §Helper Library Duplication). It tells the exec'd process that its parent already checked both files and replaced at least one, so the post-restart self-check is skipped (without it the restart would repeat the two fetches once; an up-to-date pair never restarts again, so no loop is possible either way). It is one-shot, and consumed FIRST: the restarted process reads it into a local and `unset`s it ahead of every return path — including the one taken when no download tool exists — so no child (a package manager, a tmux server) can inherit it and skip its own check.** The github standalones' `GH_SCRIPTS_UPDATED`: §Self-Update Function.
+> **The guard is the single exported name `SELF_UPDATE_RESTARTED`, shared by all five libraries (so the body is byte-identical — §Helper Library Duplication). It tells the exec'd process that its parent already checked both files and replaced at least one, so the post-restart self-check is skipped (without it the restart would repeat the two fetches once; an up-to-date pair never restarts again, so no loop is possible either way). It is one-shot, and consumed FIRST: the restarted process reads it into a local and `unset`s it ahead of every return path — including the one taken when no download tool exists — so no child (a package manager, a tmux server) can inherit it and skip its own check.**
+>
+> **One literal, every self-updater in both repositories** — the five libraries, the three `github/gh_org_*.sh` standalones (§Self-Update Function) and `private/tmux/utils-tmux.sh`. That is only safe because every holder consumes it unconditionally, ahead of or outside each early return: the name says "the process that exec'd me had already replaced a file", and nothing may still be claiming that by the time a child starts. A new self-updater either consumes it the same way or does not use this name. The two private per-script markers, `TOOLS_UPDATE_RESTARTED` and `PINGS_LOOP_RESTARTED`, stay distinct: they guard a script re-execing itself, not a library-plus-caller check.
 
 The two `mktemp` sites use the two Pattern E variants:
 

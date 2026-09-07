@@ -362,7 +362,7 @@ self_update() {
         fi
         print_success "✓ Updated ${SCRIPT_FILE} - restarting..."
         echo ""
-        export GH_SCRIPTS_UPDATED=1
+        export SELF_UPDATE_RESTARTED=1
         exec "${LOCAL_SCRIPT}" "$@"
     else
         print_warning "⚠ Skipped update - continuing with local version"
@@ -1018,7 +1018,7 @@ main() {
     # Check for updates if download tool available. The guard is compared as a
     # STRING: `[[ $v -eq 0 ]]` evaluates both operands as arithmetic, so a
     # `$(…)` smuggled in through the environment would be executed right here.
-    if detect_download_cmd && [[ -z "${GH_SCRIPTS_UPDATED:-}" ]]; then
+    if detect_download_cmd && [[ -z "${SELF_UPDATE_RESTARTED:-}" ]]; then
         # `|| true`: self_update returns 1 when the download fails or the install
         # mv fails. Both are non-fatal by design — it prints "keeping local version"
         # and the tool is expected to carry on — but a bare call under
@@ -1027,8 +1027,10 @@ main() {
         echo ""
     fi
 
-    # One-shot: consumed so the gh/git children of this run do not inherit it.
-    unset GH_SCRIPTS_UPDATED
+    # One-shot: consumed so no child of this run inherits it — neither the gh
+    # and git subprocesses nor anything that sources one of the utils-*.sh
+    # libraries, which guard on this same literal.
+    unset SELF_UPDATE_RESTARTED
 
     # Record start time
     START_TIME=$(date +%s)

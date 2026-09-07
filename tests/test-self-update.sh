@@ -447,21 +447,28 @@ for dl in "${DOWNLOADERS[@]}"; do
     assert_not_contains "${res#*|}" 'CLEANUP'    "${dl}: no download tool → nothing runs"
 done
 
-echo "== github/gh_org_*.sh: restart guard is renamed, string-tested and consumed =="
+echo "== github/gh_org_*.sh: the same restart guard, string-tested and consumed =="
 # The github standalones inline their own self_update rather than sourcing a
-# library, so nothing above reaches them. Static pins: the guard is spelled the
-# same at all three sites, is compared as a STRING (an arithmetic `-eq` test
+# library, so nothing above reaches them. They nonetheless use the SAME literal
+# as the five libraries: one name for one meaning ("the process that exec'd me
+# had already replaced a file"), which is only safe because every holder
+# consumes it. Static pins: the guard is spelled the same at all three sites and
+# matches the libraries', is compared as a STRING (an arithmetic `-eq` test
 # evaluates the environment value as an expression, so a `$(…)` smuggled into it
-# would run), and is consumed after the update block.
+# would run), is consumed after the update block, and no retired name survives.
 readonly GH_STANDALONES=(github/gh_org_copy.sh github/gh_org_delete_issues.sh github/gh_org_delete_repos.sh)
 for gh in "${GH_STANDALONES[@]}"; do
-    assert_eq '1' "$(grep -c 'export GH_SCRIPTS_UPDATED=1' "${REPO_DIR}/${gh}" || true)"        "${gh}: exports GH_SCRIPTS_UPDATED before the exec"
+    assert_eq '1' "$(grep -c 'export SELF_UPDATE_RESTARTED=1' "${REPO_DIR}/${gh}" || true)"        "${gh}: exports the shared guard before the exec"
     # shellcheck disable=SC2016  # the single quotes are deliberate: this is the
     # literal source text being searched for, not an expansion.
-    assert_eq '1' "$(grep -c -- '-z "${GH_SCRIPTS_UPDATED:-}"' "${REPO_DIR}/${gh}" || true)"    "${gh}: tests the guard as a string, not with -eq"
-    assert_eq '1' "$(grep -c '^    unset GH_SCRIPTS_UPDATED$' "${REPO_DIR}/${gh}" || true)"     "${gh}: consumes the guard after the update block"
-    assert_eq '0' "$(grep -c 'scriptUpdated' "${REPO_DIR}/${gh}" || true)"                      "${gh}: the retired camelCase name is gone"
+    assert_eq '1' "$(grep -c -- '-z "${SELF_UPDATE_RESTARTED:-}"' "${REPO_DIR}/${gh}" || true)"    "${gh}: tests the guard as a string, not with -eq"
+    assert_eq '1' "$(grep -c '^    unset SELF_UPDATE_RESTARTED$' "${REPO_DIR}/${gh}" || true)"     "${gh}: consumes the guard after the update block"
+    assert_eq '0' "$(grep -cE 'scriptUpdated|GH_SCRIPTS_UPDATED' "${REPO_DIR}/${gh}" || true)"     "${gh}: no retired guard name survives"
 done
+# One literal across the distributed code: the libraries and the standalones
+# must not drift apart. The tests/ directories are excluded because they name
+# the retired identifiers on purpose — in this very assertion.
+assert_eq '0' "$(grep -rlE 'scriptUpdated|GH_SCRIPTS_UPDATED|(SYS|K8S|LXC|LLM|UTILS)_SCRIPTS_UPDATED' --include='*.sh' --exclude-dir=tests --exclude-dir=.claude "${REPO_DIR}" | wc -l | tr -d ' ')" 'no retired guard name survives in distributed *.sh'
 
 echo ""
 echo "${TESTS_RUN} assertions, ${TESTS_FAILED} failed"
