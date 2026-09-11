@@ -118,12 +118,14 @@ Modules self-update when run directly (not when sourced by the orchestrator).
 - `backup_file()`: Creates timestamped backups (once per session per file)
 - `add_change_header()`: Adds managed-by comment block to config files
 - `check_disk_space()`: Pre-flight validation of available disk space
+- `get_file_permissions()`: Mode of a file as octal digits (cross-platform `stat`)
+- `get_file_owner()`: Owner of a file as `uid:gid` (cross-platform `stat`)
 - Both backup/header functions track modifications to avoid duplicate operations
 
 **Configuration Management:**
 - `config_exists()`: Checks if config line exists in file
 - `get_config_value()`: Extracts current value of setting
-- `update_config_line()`: Adds or updates config with diff detection
+- `update_config_line()`: Adds or updates config with diff detection, preserving the file's owner and mode
 - `add_config_if_needed()`: Wrapper for key-value settings
 - `add_alias_if_needed()`: Wrapper for shell aliases
 - `add_export_if_needed()`: Wrapper for environment variables

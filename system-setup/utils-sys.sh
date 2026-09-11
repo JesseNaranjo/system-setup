@@ -698,6 +698,17 @@ get_file_permissions() {
     fi
 }
 
+# Get the owner of a file as "uid:gid" (numeric, so chown needs no name lookup)
+get_file_owner() {
+    local file="$1"
+
+    if [[ "$DETECTED_OS" == "macos" ]]; then
+        stat -f "%u:%g" "$file"
+    else
+        stat -c "%u:%g" "$file"
+    fi
+}
+
 # Create a config file with specified permissions
 # Usage: create_config_file <path> [perms] [content]
 #   path: file path (required)
@@ -795,13 +806,8 @@ backup_file() {
         fi
 
         # Preserve ownership (requires appropriate permissions)
-        # Get the owner and group of the original file
         local owner
-        if [[ "$DETECTED_OS" == "macos" ]]; then
-            owner=$(stat -f "%u:%g" "$file")
-        else
-            owner=$(stat -c "%u:%g" "$file")
-        fi
+        owner=$(get_file_owner "$file")
         if needs_elevation "$file"; then
             run_elevated chown "$owner" "$backup" 2>/dev/null || true
         else
@@ -921,6 +927,8 @@ update_config_line() {
             TEMP_FILES+=("$temp_file")
             local original_perms
             original_perms=$(get_file_permissions "$file")
+            local original_owner
+            original_owner=$(get_file_owner "$file")
 
             # Use awk to find the line, comment it, and append the new line at the end of the file
             if ! awk -v pattern="^[[:space:]]*${setting_pattern}" -v new_line="${full_line}" '
@@ -943,20 +951,25 @@ update_config_line() {
                 return 1
             fi
 
-            # Replace the original file with the updated temporary file
-            # and restore original permissions (mktemp creates files with 600)
+            # Replace the original file with the updated temporary file, then restore
+            # its owner and mode: mv keeps the temp's, which are the caller's and 0600
             if needs_elevation "$file"; then
                 if ! run_elevated mv "$temp_file" "$file"; then
                     rm -f "$temp_file"
                     print_error "✖ Failed to update $file"
                     return 1
                 fi
+                run_elevated chown "$original_owner" "$file"
                 run_elevated chmod "$original_perms" "$file"
             else
                 if ! mv "$temp_file" "$file"; then
                     rm -f "$temp_file"
                     print_error "✖ Failed to update $file"
                     return 1
+                fi
+                # A non-root caller already owns the temp and cannot give the file away
+                if [[ $EUID -eq 0 ]]; then
+                    chown "$original_owner" "$file"
                 fi
                 chmod "$original_perms" "$file"
             fi

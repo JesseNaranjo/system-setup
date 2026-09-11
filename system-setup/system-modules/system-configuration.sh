@@ -371,15 +371,12 @@ configure_shell_prompt_colors_user() {
 
     # Elevate only for another user's dotfile (system scope). In user scope the
     # caller owns the file, and run_elevated refuses on Linux without root.
+    # No ownership restore afterwards: GNU and BSD sed -i both fchown the
+    # rewritten file to the original owner.
     if needs_elevation "$shell_config"; then
         run_elevated sed -i.bak "$sed_expression" "$shell_config" && run_elevated rm -f "${shell_config}.bak"
     else
         sed -i.bak "$sed_expression" "$shell_config" && rm -f "${shell_config}.bak"
-    fi
-
-    # Restore ownership if running as root
-    if [[ $EUID -eq 0 ]] && [[ "$username" != "root" ]]; then
-        chown "$username:$username" "$shell_config" 2>/dev/null || true
     fi
 
     print_success "✓ PS1 definitions commented out in $shell_config"
@@ -449,9 +446,15 @@ configure_shell_for_user() {
     if [[ ! -f "$shell_config" ]]; then
         print_info "Creating new shell configuration file: $shell_config (user: $username)"
         create_config_file "$shell_config" 600 # -rw-------
-        # Set proper ownership if running as root
-        if [[ $EUID -eq 0 ]] && [[ "$username" != "root" ]]; then
-            chown "$username:$username" "$shell_config" 2>/dev/null || true
+        # Created as root (Linux) or through sudo (macOS): hand it to the home
+        # directory's owner. Not "$username:$username" — macOS has no same-named
+        # group (the primary group is staff), so that chown fails there.
+        local owner
+        owner=$(get_file_owner "$home_dir")
+        if needs_elevation "$shell_config"; then
+            run_elevated chown "$owner" "$shell_config"
+        elif [[ $EUID -eq 0 ]]; then
+            chown "$owner" "$shell_config"
         fi
     fi
 
@@ -558,11 +561,6 @@ configure_shell_for_user() {
             add_export_if_needed "$shell_config" "SYSTEMD_EDITOR" "nano" "systemd editor"
         fi
         add_export_if_needed "$shell_config" "VISUAL" "nano" "visual editor"
-    fi
-
-    # Restore ownership if running as root
-    if [[ $EUID -eq 0 ]] && [[ "$username" != "root" ]]; then
-        chown "$username:$username" "$shell_config" 2>/dev/null || true
     fi
 
     print_success "✓ Shell configuration completed for $shell_config (user: $username)"

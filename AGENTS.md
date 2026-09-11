@@ -1227,6 +1227,7 @@ update_config_line() {
 
         local temp_file=$(mktemp)
         local original_perms=$(get_file_permissions "$file")
+        local original_owner=$(get_file_owner "$file")
 
         # Comment old line, append new at end of file
         awk -v pattern="^[[:space:]]*${setting_pattern}" -v new_line="${full_line}" '
@@ -1238,6 +1239,10 @@ update_config_line() {
             { print }
             END { print new_line }
         ' "$file" > "$temp_file" && mv "$temp_file" "$file"
+        # mv keeps the temp's owner (the caller) and mode (0600): restore both
+        if [[ $EUID -eq 0 ]]; then
+            chown "$original_owner" "$file"
+        fi
         chmod "$original_perms" "$file"
     else
         backup_file "$file"
@@ -1361,6 +1366,19 @@ get_file_permissions() {
         stat -f "%Lp" "$file"  # macOS syntax
     else
         stat -c "%a" "$file"   # Linux syntax
+    fi
+}
+```
+
+**get_file_owner** - Cross-platform owner lookup, numeric so `chown` needs no name lookup:
+```bash
+get_file_owner() {
+    local file="$1"
+
+    if [[ "$DETECTED_OS" == "macos" ]]; then
+        stat -f "%u:%g" "$file"  # macOS syntax
+    else
+        stat -c "%u:%g" "$file"  # Linux syntax
     fi
 }
 ```
@@ -2144,13 +2162,9 @@ backup_file() {
             cp -p "$file" "$backup"
         fi
 
-        # Preserve ownership (platform-specific)
+        # Preserve ownership
         local owner
-        if [[ "$DETECTED_OS" == "macos" ]]; then
-            owner=$(stat -f "%u:%g" "$file")
-        else
-            owner=$(stat -c "%u:%g" "$file")
-        fi
+        owner=$(get_file_owner "$file")
         if needs_elevation "$file"; then
             run_elevated chown "$owner" "$backup" 2>/dev/null || true
         else
@@ -2306,8 +2320,17 @@ awk -v pattern="$pat" -v new="$newline" '
     END { print new }
 ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
 
-# Preserve ownership
-[[ $EUID -eq 0 ]] && [[ "$user" != "root" ]] && chown "$user:$user" "$file" 2>/dev/null || true
+# Preserve ownership: capture before the edit, restore after, elevation-aware.
+# Never gate on `$EUID -eq 0` alone (macOS system scope is a non-root admin using sudo per command)
+# and never `chown "$user:$user"` (macOS has no same-named group; the primary group is staff).
+owner=$(get_file_owner "$file")
+# ... edit ...
+if needs_elevation "$file"; then
+    run_elevated chown "$owner" "$file"
+elif [[ $EUID -eq 0 ]]; then
+    chown "$owner" "$file"
+fi
+# `sed -i` needs none of this: GNU and BSD sed fchown the rewritten file to the original owner.
 ```
 
 ---

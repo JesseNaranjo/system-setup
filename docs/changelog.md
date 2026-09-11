@@ -14,6 +14,10 @@ features as of that date; earlier history is not individually recorded.
 
 - **User scope now comments out the current user's own PS1 definitions** (terminal-title sequences are still preserved on Linux), so a dotfile copied from `/etc/skel` after a system-scope run no longer hides the system-wide prompt. `configure_shell_prompt_colors_user` now elevates only when the dotfile is not the caller's own.
 
+### Fixed
+
+- **macOS system scope no longer leaves other users' dotfiles owned by root or the invoking admin.** On macOS the script runs as a non-root admin and elevates per command, so the `$EUID -eq 0` gate on the ownership restore in `configure_shell_for_user` and `configure_shell_prompt_colors_user` never fired, and its `chown "$username:$username"` would have failed there anyway (a macOS user's primary group is `staff`). A freshly created `~/.zshrc` is now handed to the home directory's owner, elevated when needed, and `update_config_line` restores the original owner alongside the mode after its `mv`, which also stops a replaced line in `/etc/zshrc` from leaving that file owned by the admin. The `sed -i` comment-out path needs no restore: GNU and BSD sed both `fchown` the rewritten file to the original owner. New `get_file_owner` helper in `utils-sys.sh`; `backup_file` uses it too.
+
 ## [2026-09-07]
 
 ### Fixed
