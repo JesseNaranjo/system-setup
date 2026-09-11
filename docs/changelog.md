@@ -8,7 +8,7 @@ features as of that date; earlier history is not individually recorded.
 
 ### Added
 
-- **System-wide shell history control.** `system-configuration.sh system` now sets `export HISTCONTROL=ignoreboth` in `/etc/bash.bashrc` on Linux, and `setopt hist_ignore_space`, `setopt hist_ignore_dups` and `setopt hist_expire_dups_first` in `/etc/zshrc` on macOS, through the same comment-then-add flow as the editor variables. `utils-sys.sh` gains `add_setopt_if_needed` next to `add_alias_if_needed` and `add_export_if_needed`.
+- **System-wide shell history control.** `system-configuration.sh system` now sets `export HISTCONTROL=ignoreboth` in `/etc/bash.bashrc` on Linux, and `setopt hist_ignore_space`, `setopt hist_ignore_dups` and `setopt hist_expire_dups_first` in `/etc/zshrc` on macOS, through the same comment-then-add flow as the editor variables. `utils-sys.sh` gains `add_setopt_if_needed` next to `add_alias_if_needed` and `add_export_if_needed`; it recognises an option only on a line of its own, so an existing multi-option `setopt` line is never commented out and the option is added on its own line instead.
 
 ### Changed
 

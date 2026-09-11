@@ -1052,8 +1052,10 @@ add_setopt_if_needed() {
     local description="$3"
 
     local full_setopt="setopt ${option_name}"
-    # The pattern finds 'setopt name'
-    local setting_pattern="setopt[[:space:]]+${option_name}"
+    # The pattern finds 'setopt name' on a line of its own. Anchored at the end so a
+    # multi-option line (setopt a b) is never commented out for one of its options;
+    # zsh accepts a repeated setopt, so an unmatched spelling only costs a duplicate line.
+    local setting_pattern="setopt[[:space:]]+${option_name}[[:space:]]*$"
 
     update_config_line "shell" "$file" "$setting_pattern" "$full_setopt" "$description"
 }

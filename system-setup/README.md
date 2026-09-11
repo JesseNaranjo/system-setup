@@ -735,8 +735,7 @@ Updates `/etc/issue` with network interface information (Linux only, system scop
 **Behavior:**
 - No root privileges required
 - Does not modify system files
-- Does not alter prompt colors
-- Preserves user's PS1 configuration
+- Comments out the user's own PS1 definitions (terminal title sequences are preserved on Linux) so the system-wide prompt applies; installs no prompt of its own
 
 ### System Scope
 
@@ -753,6 +752,7 @@ Updates `/etc/issue` with network interface information (Linux only, system scop
 - OpenSSH socket activation
 - /etc/issue network display
 - Custom PS1 prompts for all users
+- Shell history control for all users
 
 **Requirements:**
 - Root privileges (Linux)
