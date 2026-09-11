@@ -4,6 +4,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), date-based, ne
 This changelog begins 2026-07-06. Entries below capture the project's major
 features as of that date; earlier history is not individually recorded.
 
+## [2026-09-11]
+
+### Added
+
+- **System-wide shell history control.** `system-configuration.sh system` now sets `export HISTCONTROL=ignoreboth` in `/etc/bash.bashrc` on Linux, and `setopt hist_ignore_space`, `setopt hist_ignore_dups` and `setopt hist_expire_dups_first` in `/etc/zshrc` on macOS, through the same comment-then-add flow as the editor variables. `utils-sys.sh` gains `add_setopt_if_needed` next to `add_alias_if_needed` and `add_export_if_needed`.
+
+### Changed
+
+- **User scope now comments out the current user's own PS1 definitions** (terminal-title sequences are still preserved on Linux), so a dotfile copied from `/etc/skel` after a system-scope run no longer hides the system-wide prompt. `configure_shell_prompt_colors_user` now elevates only when the dotfile is not the caller's own.
+
 ## [2026-09-07]
 
 ### Fixed

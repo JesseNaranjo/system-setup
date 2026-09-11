@@ -6,7 +6,7 @@
 # This script:
 # - Configures nano editor with sensible defaults and syntax highlighting
 # - Configures tmux with mouse support and sensible defaults
-# - Configures shell aliases and prompt colors for users
+# - Configures shell aliases, prompt colors, and history control
 
 set -euo pipefail
 
@@ -310,7 +310,7 @@ $bash_prompt"
     fi
 }
 
-# Comment out PS1 definitions in user config files (system scope only)
+# Comment out PS1 definitions in a user's shell config so the system-wide prompt applies
 configure_shell_prompt_colors_user() {
     local home_dir="$1"
     local username="$2"
@@ -359,13 +359,22 @@ configure_shell_prompt_colors_user() {
     backup_file "$shell_config"
 
     # Comment out existing PS1 definitions with OS-specific rules
+    local sed_expression
     if [[ "$DETECTED_OS" == "macos" ]]; then
         # macOS: Comment out ALL PS1 definitions
-        run_elevated sed -i.bak "s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Commented out by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && run_elevated rm -f "${shell_config}.bak"
+        sed_expression="s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Commented out by system-setup.sh on $(date +%Y-%m-%d)/"
     else
         # Linux: Comment out all PS1 definitions EXCEPT those starting with: PS1="\[\e]0;
         # This preserves the terminal title escape sequences
-        run_elevated sed -i.bak "/^[[:space:]]*PS1=\"\\\\\[\\\\e\]0;/! s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Commented out by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && run_elevated rm -f "${shell_config}.bak"
+        sed_expression="/^[[:space:]]*PS1=\"\\\\\[\\\\e\]0;/! s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Commented out by system-setup.sh on $(date +%Y-%m-%d)/"
+    fi
+
+    # Elevate only for another user's dotfile (system scope). In user scope the
+    # caller owns the file, and run_elevated refuses on Linux without root.
+    if needs_elevation "$shell_config"; then
+        run_elevated sed -i.bak "$sed_expression" "$shell_config" && run_elevated rm -f "${shell_config}.bak"
+    else
+        sed -i.bak "$sed_expression" "$shell_config" && rm -f "${shell_config}.bak"
     fi
 
     # Restore ownership if running as root
@@ -374,6 +383,47 @@ configure_shell_prompt_colors_user() {
     fi
 
     print_success "✓ PS1 definitions commented out in $shell_config"
+}
+
+# Configure system-wide shell history control
+configure_history_control_system() {
+    # Determine shell config file based on OS
+    local shell_config
+    if [[ "$DETECTED_OS" == "macos" ]]; then
+        shell_config="/etc/zshrc"
+    else
+        shell_config="/etc/bash.bashrc"
+    fi
+
+    # Skip if config file doesn't exist
+    if [[ ! -f "$shell_config" ]]; then
+        print_warning "⚠ Shell configuration file $shell_config does not exist, skipping history control configuration"
+        return 0
+    fi
+
+    print_info "Configuring history control in $shell_config..."
+
+    # OS-specific history control
+    if [[ "$DETECTED_OS" == "macos" ]]; then
+        # Add history control section if not present
+        if ! grep_file -q "zsh history control" "$shell_config" 2>/dev/null; then
+            backup_file "$shell_config"
+            add_change_header "$shell_config" "shell"
+            append_to_file "$shell_config" "" "# zsh history control"
+        fi
+        add_setopt_if_needed "$shell_config" "hist_ignore_space" "history control (ignorespace = prefix with space to hide)"
+        add_setopt_if_needed "$shell_config" "hist_ignore_dups" "history control (ignoredups = ignore sequential duplicates)"
+        add_setopt_if_needed "$shell_config" "hist_expire_dups_first" "history control (hist_expire_dups_first = trim oldest duplicates first)"
+    else
+        if ! grep_file -q "bash history control" "$shell_config" 2>/dev/null; then
+            backup_file "$shell_config"
+            add_change_header "$shell_config" "shell"
+            append_to_file "$shell_config" "" "# bash history control"
+        fi
+        add_export_if_needed "$shell_config" "HISTCONTROL" "ignoreboth" "history control (ignoreboth = ignorespace:ignoredups)"
+    fi
+
+    print_success "✓ History control configured in $shell_config"
 }
 
 # Configure shell for a specific user
@@ -660,6 +710,7 @@ configure_shell() {
         # User-specific configuration: configure for current user only
         print_info "Configuring shell for current user..."
         configure_shell_for_user "$HOME" "$(whoami)"
+        configure_shell_prompt_colors_user "$HOME" "$(whoami)"
     fi
 
     print_info "Note: Users may need to run 'source ~/.bashrc' (or ~/.zshrc) or restart their terminal for changes to take effect."
@@ -676,6 +727,10 @@ configure_shell() {
         # Configure system-wide editor environment variables
         echo ""
         configure_editor_system
+
+        # Configure system-wide history control
+        echo ""
+        configure_history_control_system
     fi
 }
 

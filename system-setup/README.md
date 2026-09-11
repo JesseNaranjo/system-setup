@@ -127,6 +127,7 @@ Modules self-update when run directly (not when sourced by the orchestrator).
 - `add_config_if_needed()`: Wrapper for key-value settings
 - `add_alias_if_needed()`: Wrapper for shell aliases
 - `add_export_if_needed()`: Wrapper for environment variables
+- `add_setopt_if_needed()`: Wrapper for zsh `setopt` options
 - `add_git_config_if_needed()`: Wrapper for git config settings (user/system scope)
 
 **User Interaction:**
@@ -500,7 +501,23 @@ PS1="${debian_chroot:+($debian_chroot)}[\[\e[90m\]\h\[\e[0m\]:\[\e[92m\]\u\[\e[0
 **User Scope Behavior:**
 - Only configures current user's dotfile
 - Does not modify system-wide configs
-- Does not alter PS1 (preserves user's prompt)
+- Comments out existing PS1 definitions in the current user's dotfile (except terminal title sequences on Linux) so the system-wide prompt applies
+
+#### History Control (System Scope)
+
+Added to `/etc/bash.bashrc` (Linux) or `/etc/zshrc` (macOS):
+
+**Linux (bash):**
+```bash
+export HISTCONTROL=ignoreboth
+```
+
+**macOS (zsh):**
+```zsh
+setopt hist_ignore_space
+setopt hist_ignore_dups
+setopt hist_expire_dups_first
+```
 
 ### system-modules/system-configuration-swap.sh
 

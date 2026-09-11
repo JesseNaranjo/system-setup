@@ -1032,6 +1032,19 @@ add_export_if_needed() {
     update_config_line "shell" "$file" "$setting_pattern" "$full_export" "$description"
 }
 
+# Wrapper for zsh setopt options
+add_setopt_if_needed() {
+    local file="$1"
+    local option_name="$2"
+    local description="$3"
+
+    local full_setopt="setopt ${option_name}"
+    # The pattern finds 'setopt name'
+    local setting_pattern="setopt[[:space:]]+${option_name}"
+
+    update_config_line "shell" "$file" "$setting_pattern" "$full_setopt" "$description"
+}
+
 # Add or update a git config setting if not already set to the desired value
 # Uses git config commands directly (handles INI format correctly)
 # Usage: add_git_config_if_needed "scope" "key" "value" "description"
