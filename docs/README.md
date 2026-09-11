@@ -7,6 +7,5 @@ Project-level documentation that doesn't belong inside a single code folder. Tra
 | File | Purpose |
 |------|---------|
 | `changelog.md` | Curated, human-readable record of completed changes ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format, newest first). |
-| `backlog.md` | AI-maintained backlog of work deferred from plans and reviews. The entry schema is stated in the file's own header. |
-| `future-todos.md` | Concrete feature gaps (a higher bar than `backlog.md`), with context on why each was deferred. |
+| `backlog.md` | AI-maintained backlog of open work deferred from plans and reviews, including concrete feature gaps. The entry schema and sweep rules are owned by §Backlog in the global AI-instruction file. |
 | `lessons.md` | Standing lessons and decision records — durable facts that outlive the work that surfaced them. |

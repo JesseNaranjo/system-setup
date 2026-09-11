@@ -6,6 +6,14 @@ features as of that date; earlier history is not individually recorded.
 
 ## [2026-09-11]
 
+### Removed
+
+- **`docs/future-todos.md`, merged into `docs/backlog.md`.** The two files tracked the same thing under different bars — deferred work in one, "concrete feature gaps (a higher bar)" in the other — so an item's home depended on who filed it, and the higher-bar file was never swept. All 23 items are now `docs/backlog.md` entries in the standard four-bullet schema (**Source:** / **Problem:** / **Why deferred:** / **Action on pickup:**), each titled with the date it was deferred, taking the file from 1 entry to 24. Content is preserved, not summarised: every affected path, measurement, citation and rejected alternative survives, and where an item carried a dated `Update` passage the entry now states the present position instead of the chronology — the 2026-08-07 macOS↔macOS run, for one, is recorded as the measurement it is rather than as news. References updated in `AGENTS.md` (four), `docs/README.md`, `utils/tests/README.md`, and the `grep --exclude` lesson, whose filter regex named the deleted file.
+
+### Changed
+
+- **`docs/lessons.md` and `docs/backlog.md` headers point at the global rules instead of restating them.** Both audience blockquotes carried their own copy of the entry schema and lifecycle rules, and the lessons copy had gone stale against the global AI-instruction file: it still mandated superseding an entry by appending a dated bullet and deleting one only when its subject left the repository, both of which that file now does the opposite of. Each header now names the owning section and states nothing a reader could follow into a contradiction.
+
 ### Added
 
 - **System-wide shell history control.** `system-configuration.sh system` now sets `export HISTCONTROL=ignoreboth` in `/etc/bash.bashrc` on Linux, and `setopt hist_ignore_space`, `setopt hist_ignore_dups` and `setopt hist_expire_dups_first` in `/etc/zshrc` on macOS, through the same comment-then-add flow as the editor variables. `utils-sys.sh` gains `add_setopt_if_needed` next to `add_alias_if_needed` and `add_export_if_needed`; it recognises an option only on a line of its own, so an existing multi-option `setopt` line is never commented out and the option is added on its own line instead.

@@ -30,7 +30,7 @@ the multi-byte rows.
 
 Everything here is pure text processing or pure decision logic. Daemon startup,
 chroot enforcement, and real transfers need two hosts and are still covered only
-by manual verification — see `docs/future-todos.md` for exactly what that manual
+by manual verification — see `docs/backlog.md` for exactly what that manual
 pass did and did not exercise.
 
 ## Adding Tests

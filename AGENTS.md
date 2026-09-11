@@ -227,7 +227,7 @@ narrow `# shellcheck disable=SCxxxx` on the line plus a comment saying why —
 never a file-wide disable.
 
 Several pre-existing files are not yet at 0; they are inventoried in
-`docs/future-todos.md`. Do NOT let a file you touch get worse: compare the count
+`docs/backlog.md`. Do NOT let a file you touch get worse: compare the count
 before and after your change.
 
 #### Common Conditionals
@@ -437,7 +437,7 @@ Personal system configuration repository containing bash scripts and documentati
 | `llm/` | Modular Standalone | Ollama/LLM management scripts |
 | `utils/` | Modular Standalone | Cross-platform utilities (2 trivial Lightweight + 2 Windows .ps1 remain standalone) |
 | `tests/` | Tests | Repo-wide tests for behaviour that spans several suites (bash, no framework; development-only, never distributed) |
-| `docs/` | Documentation | Project-level docs: changelog, lessons, backlog, future-todos (markdown) |
+| `docs/` | Documentation | Project-level docs: changelog, lessons, backlog (markdown) |
 | `configs/` | Documentation | Configuration documentation (markdown) |
 | `walkthroughs/` | Documentation | Step-by-step guides (markdown) |
 
@@ -2280,7 +2280,7 @@ temp_file=$(mktemp)
 TEMP_FILES+=("$temp_file")
 ```
 
-Atomic-rename for these config-rewrite sites is a known-deferred gap. See `docs/future-todos.md` ("Atomic-rename for config-rewrite sites under elevation").
+Atomic-rename for these config-rewrite sites is a known-deferred gap. See `docs/backlog.md` ("Atomic-rename for config-rewrite sites under elevation").
 
 ### check_disk_space - Pre-Operation Space Verification
 ```bash
@@ -2962,7 +2962,7 @@ Each significant folder contains a `README.md` that documents its contents, patt
 | Path | Documents | Status |
 |------|-----------|--------|
 | `AGENTS.md` | LLM coding standards (this document) | ✅ |
-| `docs/README.md` | Project-level docs: changelog, lessons, backlog, future-todos | ✅ |
+| `docs/README.md` | Project-level docs: changelog, lessons, backlog | ✅ |
 | `configs/README.md` | Configuration documentation files | ❌ |
 | `walkthroughs/README.md` | Step-by-step guides | ❌ |
 
