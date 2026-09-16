@@ -146,7 +146,7 @@ Apply the DRY principle when code duplication creates maintenance risk. Extract 
 
 - **Remove, don't comment out.** Dead code, unused functions, and unreferenced variables MUST be deleted. Git history preserves anything that needs to be recovered.
 - **Breaking changes over compatibility layers.** NEVER add backwards-compatibility code or legacy fallbacks unless the user explicitly requests it.
-- **Exception: Config file modifications.** The comment-then-add pattern (commenting out old values with `# Replaced` annotation) is the intended convention for system config files, not dead code. This preserves a rollback path for system configuration changes that could break the user's environment.
+- **Exception: Config file modifications.** The comment-then-add pattern (commenting out old values with `# Replaced` annotation) is the intended convention for system config files, not dead code. This preserves a rollback path for system configuration changes that could break the user's environment. The rule covers **operator-authored** config values. A fenced block a script writes, owns, and recreates verbatim — `lxc/protect-lxc.sh`'s `# --- BEGIN protect-lxc ---` block — is deleted by its own remover, because commenting it would accumulate dead blocks across protect/unprotect cycles.
 
 ### No Simple Wrapper Functions
 
@@ -264,6 +264,8 @@ before and after your change.
 | `[ -f "$file" ]` | `[[ -f "$file" ]]` |
 | `` result=`cmd` `` | `result=$(cmd)` |
 | `str="$str item"` | `arr+=("item")` |
+
+Exception: a fenced block a script writes, owns and recreates verbatim is deleted by its own remover — see §No Dead Code.
 
 ### Naming Conventions
 
@@ -531,7 +533,7 @@ done
 
 ### Helper Library Duplication (Intentional)
 
-These helper functions are **deliberately duplicated**. The roster is exhaustive for distributed code — if a function is not listed here, the all-copies rule does not cover it, so ADD IT to this table when you duplicate anything new. Development-only files that are never distributed (`tests/`, `utils/tests/`) are outside the roster; the assertion trio they share is tracked in `tests/README.md` instead:
+These helper functions are **deliberately duplicated**. The roster is exhaustive for distributed code — if a function is not listed here, the all-copies rule does not cover it, so ADD IT to this table when you duplicate anything new. Development-only files that are never distributed (`tests/`, `utils/tests/`, `lxc/tests/`) are outside the roster; the assertion trio they share is tracked in `tests/README.md` instead:
 
 | Helper | Copies | Where |
 |--------|--------|-------|
@@ -578,7 +580,7 @@ When adding a NEW helper that is genuinely shared logic (not an existing canonic
 4. **Quote Everything**: All variable expansions MUST be quoted: `"$var"`, `"${array[@]}"`.
 5. **Return Codes Only**: Functions return 0 (success) or 1 (error). No complex exit codes except sysexits.h for standalone scripts.
 6. **Backup Before Modify**: The `backup_file` function tracks per-session to avoid duplicates. ALWAYS call before modifying a file.
-7. **Comment, Don't Delete**: Old config values are commented out with `# Replaced` annotation, NEVER removed from config files.
+7. **Comment, Don't Delete**: Old config values are commented out with `# Replaced` annotation, NEVER removed from config files — except a script-owned fenced block, per §No Dead Code's exception.
 8. **Platform Detection**: ALWAYS use `detect_os` / `detect_container` — NEVER hardcode paths or package managers.
 9. **User Experience Defaults**: Default to "n" for destructive operations, "y" for safe operations. Continue script if non-critical components fail.
 
@@ -2955,6 +2957,7 @@ Each significant folder contains a `README.md` that documents its contents, patt
 | `raspberry-pi/README.md` | Raspberry Pi setup scripts | ❌ |
 | `utils/README.md` | Cross-platform utilities | ✅ |
 | `utils/tests/README.md` | Unit tests for the pure functions in `utils/` | ✅ |
+| `lxc/tests/README.md` | Unit tests for the container-protection helpers in `lxc/utils-lxc.sh` | ✅ |
 | `tests/README.md` | Repo-wide self-update mechanism tests | ✅ |
 
 #### Documentation Folders

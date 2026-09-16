@@ -20,7 +20,7 @@ No network, no root, no test framework — just bash 5+. Every library is copied
 ## Adding Tests
 
 1. One file per mechanism; sandbox anything that writes, and shim anything that reaches the network.
-2. Use `assert_eq` / `assert_contains` / `assert_not_contains`. They are a deliberate second copy of the trio in `utils/tests/test-rsync-over-tunnel.sh`; change both files together.
+2. Use `assert_eq` / `assert_contains` / `assert_not_contains`. This is one of three copies of the trio — `tests/test-self-update.sh`, `utils/tests/test-rsync-over-tunnel.sh`, and `lxc/tests/test-protect-lxc.sh`; change all three files together.
 3. A script that ends in `[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"` returns 1 when sourced and its own `set -e` then exits the sourcing shell — source it as `source "$f" || true`.
 4. Disarm a sourced library's own EXIT trap (`trap - EXIT`) before asserting that no temp file was left behind. That trap is Layer 2 of AGENTS.md §Defense-in-depth Cleanup and reaps everything when the child exits, so the assertion would otherwise pass with Layer 1's per-branch `rm -f` deleted.
 5. Nothing in `tests/` is listed in any `get_script_list()`: development-only, never distributed to target hosts. These files carry no `main`/execution guard for the same reason — nothing sources them.

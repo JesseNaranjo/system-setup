@@ -36,6 +36,6 @@ pass did and did not exercise.
 ## Adding Tests
 
 1. Add fixtures as `readonly` variables holding real captured output — not paraphrases.
-2. Use `assert_eq` / `assert_contains` / `assert_not_contains`. They are a deliberate second copy of the trio in `tests/test-self-update.sh` (both files are development-only, so the suite-isolation rule that forbids sharing does not apply and neither does the AGENTS.md §Helper Library Duplication roster); change both files together.
+2. Use `assert_eq` / `assert_contains` / `assert_not_contains`. This is one of three copies of the trio — `tests/test-self-update.sh` and `lxc/tests/test-protect-lxc.sh` carry the other two (all three are development-only, so the suite-isolation rule that forbids sharing does not apply and neither does the AGENTS.md §Helper Library Duplication roster); change all three files together.
 3. These tests are NOT in `_download-utils-scripts.sh`'s `get_script_list()`: they are
    development-only and are not distributed to target hosts.

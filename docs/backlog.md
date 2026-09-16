@@ -131,10 +131,10 @@
 - **Why deferred:** A correct answer means either a per-direction allowlist (`--filter` on xattr names) or simply refusing `-A`/`-X` on cross-platform pairs, and choosing between those needs real-world testing on a mixed pair.
 - **Action on pickup:** Start by capturing what actually survives a round trip in each direction before designing the guard. No macOS→Linux or Linux→macOS run has happened yet — see the entry on the unverified cross-platform directions.
 
-### Pre-existing shellcheck warnings in six scripts (added 2026-07-15)
+### Pre-existing shellcheck warnings in five scripts (added 2026-07-15)
 
 - **Source:** 2026-07-15 canonical-helper review (helper reconciliation).
-- **Problem:** Six scripts carry shellcheck warnings despite the repo's stated "0 warnings, warnings→errors" standard (`AGENTS.md` §Linting): `github/gh_org_copy.sh` (~41), `system-setup/utils-sys.sh` (17), `kubernetes/utils-k8s.sh` (14), `github/gh_org_delete_issues.sh` (8), `github/gh_org_delete_repos.sh` (7), `lxc/utils-lxc.sh` (1). Those counts were measured 2026-07-15 by before/after `shellcheck` during the canonical-helper reconciliation, which confirmed the warnings are pre-existing and NOT introduced by that change. The `utils/` suite is outside this inventory: verified 2026-07-17, `utils/services-check.sh` and `utils/push-ghostty-terminfo.sh` (both no longer standalones) plus the rest of the `utils/` Modular Standalone conversion (`utils/utils-misc.sh`, `utils/_download-utils-scripts.sh`, `utils/dig-all.sh`, `utils/reset-macOS-display-settings.sh`, `utils/rsync-two-way.sh`, `utils/unlock-keychain.sh`) are clean under `shellcheck -x` (0 warnings each).
+- **Problem:** Five scripts carry shellcheck warnings despite the repo's stated "0 warnings, warnings→errors" standard (`AGENTS.md` §Linting): `github/gh_org_copy.sh` (~41), `system-setup/utils-sys.sh` (17), `kubernetes/utils-k8s.sh` (14), `github/gh_org_delete_issues.sh` (8), `github/gh_org_delete_repos.sh` (7). Those counts were measured 2026-07-15 by before/after `shellcheck` during the canonical-helper reconciliation, which confirmed the warnings are pre-existing and NOT introduced by that change. The `utils/` suite is outside this inventory: verified 2026-07-17, `utils/services-check.sh` and `utils/push-ghostty-terminfo.sh` (both no longer standalones) plus the rest of the `utils/` Modular Standalone conversion (`utils/utils-misc.sh`, `utils/_download-utils-scripts.sh`, `utils/dig-all.sh`, `utils/reset-macOS-display-settings.sh`, `utils/rsync-two-way.sh`, `utils/unlock-keychain.sh`) are clean under `shellcheck -x` (0 warnings each).
 - **Why deferred:** Out of scope for the push-ghostty-terminfo review that surfaced them; each file is a mechanical per-file cleanup that warrants its own focused pass so diffs stay reviewable.
 - **Action on pickup:** One focused pass per file, not a repo-wide sweep. Dominant codes: SC2155 (split `local x; x=$(...)`), SC2034 (unused vars), SC2016 (single-quoted `$` in GraphQL heredocs — usually intentional, annotate with a disable).
 
@@ -148,9 +148,9 @@
 ### No `.shellcheckrc` and no CI gate for the "0 warnings, warnings→errors" standard (added 2026-07-17)
 
 - **Source:** 2026-07-17 `utils/` Modular Standalone documentation cascade.
-- **Problem:** The "0 warnings, warnings→errors" standard is stated in `AGENTS.md` §Linting and restated in this backlog, but nothing enforces it mechanically — there is no repo-root `.shellcheckrc` and no CI step. The pre-existing library warnings (`github/gh_org_copy.sh` ~41, `system-setup/utils-sys.sh` 17, `kubernetes/utils-k8s.sh` 14, `github/gh_org_delete_issues.sh` 8, `github/gh_org_delete_repos.sh` 7, `lxc/utils-lxc.sh` 1) have persisted across multiple reviews with no gate to catch regressions or force cleanup.
+- **Problem:** The "0 warnings, warnings→errors" standard is stated in `AGENTS.md` §Linting and restated in this backlog, but nothing enforces it mechanically — there is no repo-root `.shellcheckrc` and no CI step. The pre-existing library warnings (`github/gh_org_copy.sh` ~41, `system-setup/utils-sys.sh` 17, `kubernetes/utils-k8s.sh` 14, `github/gh_org_delete_issues.sh` 8, `github/gh_org_delete_repos.sh` 7) have persisted across multiple reviews with no gate to catch regressions or force cleanup.
 - **Why deferred:** Surfaced during a documentation-only cascade, which carried no room for lint configuration or build infrastructure.
-- **Action on pickup:** Add a repo-root `.shellcheckrc` (severity/exclude policy) and a CI step that runs `shellcheck` over every `*.sh` and fails on any warning-or-above, then schedule the mechanical per-file cleanups already tracked in "Pre-existing shellcheck warnings in six scripts".
+- **Action on pickup:** Add a repo-root `.shellcheckrc` (severity/exclude policy) and a CI step that runs `shellcheck` over every `*.sh` and fails on any warning-or-above, then schedule the mechanical per-file cleanups already tracked in "Pre-existing shellcheck warnings in five scripts".
 
 ### `.ps1` scripts are out of scope for self-update / Modular Standalone conversion (added 2026-07-17)
 
@@ -172,3 +172,24 @@
 - **Problem:** Every converted `utils/` script does a bare `source "${SCRIPT_DIR}/utils-misc.sh"` under `set -e`. If the library is not co-located — e.g. a user curls a single script, the exact "no longer curl-able" trade-off the Modular Standalone pattern introduces, most likely to bite `utils/dig-all.sh` given its history as a popular single-file download — the script aborts with a raw bash "No such file or directory" error instead of a friendly message.
 - **Why deferred:** A one-line existence-check-and-message guard would be friendlier but DEVIATES from the bare-source parity `lxc/` and `llm/` already establish for `utils-lxc.sh` / `utils-llm.sh`. This is a cross-suite owner decision, so do NOT one-off it in `utils/`.
 - **Action on pickup:** Decide across `lxc/`, `llm/`, and `utils/` together (not just `utils/`) whether to add a guard, and if so, apply the same guard shape to all three per-directory libraries in one change.
+
+### `setup-lxc.sh` has no `main()` or execution guard (added 2026-09-16)
+
+- **Source:** Plan Review of the container protect/unprotect work, 2026-09-16.
+- **Problem:** `lxc/setup-lxc.sh` runs everything at file scope and calls `check_for_updates` outside any function — the only `lxc/` script that does. This violates AGENTS.md §Important Implementation Notes #1.
+- **Why deferred:** Restructuring a 600-line root-only host-setup script is unrelated to protection and cannot be exercised without a real LXC host.
+- **Action on pickup:** Wrap `setup-lxc.sh`'s file-scope logic in a `main()` and add the standard `[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"` execution guard, matching every other `lxc/` script.
+
+### `setup-lxc.sh` tracks backups in a string, not an array (added 2026-09-16)
+
+- **Source:** Plan Review of the container protect/unprotect work, 2026-09-16.
+- **Problem:** `lxc/setup-lxc.sh` tracks backed-up files with `BACKED_UP_FILES=""`, substring-matched with `[[ "$BACKED_UP_FILES" == *"$file"* ]]`. AGENTS.md §Critical Syntax Rules mandates arrays for collections, and a path containing a space corrupts the substring match.
+- **Why deferred:** Same file and same blocker as "`setup-lxc.sh` has no `main()` or execution guard" — restructuring is unrelated to protection and cannot be exercised without a real LXC host.
+- **Action on pickup:** Convert `BACKED_UP_FILES` to an array and replace the substring match with the standard "check if already in array" loop pattern (AGENTS.md §Array Iteration).
+
+### Unquoted word-splitting in `stop-lxc.sh` and `restart-lxc.sh` (added 2026-09-16)
+
+- **Source:** Plan Review of the container protect/unprotect work, 2026-09-16.
+- **Problem:** Both `lxc/stop-lxc.sh` and `lxc/restart-lxc.sh` use `RUNNING=( $(/usr/bin/lxc-ls --running) )` (the two `SC2207`s in `lxc/`) — the exact unquoted command-substitution-into-array pattern AGENTS.md §Anti-Patterns forbids. It works today only because container names cannot contain whitespace.
+- **Why deferred:** Neither file is touched by this work, and the fix wants a `mapfile`-based rewrite verified on a host with running containers.
+- **Action on pickup:** Replace `RUNNING=( $(/usr/bin/lxc-ls --running) )` in both files with `mapfile -t RUNNING < <(/usr/bin/lxc-ls -1 --running)` — the `-1` is required because plain `lxc-ls` pads every name to the longest name's column width and separates with a space or newline depending on terminal width, while `-1` prints one bare name per line — then verify against a host with running containers.

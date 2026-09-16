@@ -4,6 +4,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), date-based, ne
 This changelog begins 2026-07-06. Entries below capture the project's major
 features as of that date; earlier history is not individually recorded.
 
+## [2026-09-16]
+
+### Added
+
+- **Container-protection helpers in `lxc/utils-lxc.sh`.** `lxc_resolve_path`, `lxc_valid_name`, `lxc_list_containers`, `lxc_is_protected`, `lxc_protected_since`, `lxc_protect_config`, and `lxc_unprotect_config` gate `lxc-destroy` with a fenced `lxc.hook.destroy = /bin/false` block in the container's own config — liblxc runs destroy hooks before it touches the rootfs and aborts on a non-zero exit, so the gate holds against the raw binary. `lxc/tests/test-protect-lxc.sh` covers the round trip, idempotent double-protect, repeated cycles, an unterminated last line, a missing END fence, a stray second BEGIN fence, reversed fence order, and a hand-deleted date line — no LXC, no root, no network.
+
+### Changed
+
+- **`lxc/config-lxc-ssh.sh` enumerates containers through `lxc_list_containers`.** The private `get_all_containers` walker — a line-for-line twin of the new library helper that space-joined names into a string for a `read -ra` call site — is deleted; the call site now uses `mapfile -t containers < <(lxc_list_containers "$LXC_ROOT_PATH")`.
+
+### Fixed
+
+- **`lxc/utils-lxc.sh` is shellcheck-clean.** `BOLD_RED` triggered `SC2034` because shellcheck cannot see its consumer (`lxc/setup-lxc.sh`) from inside the library; narrowed with a disable comment, mirroring `utils/utils-misc.sh`'s `DETECTED_OS` precedent.
+
 ## [2026-09-11]
 
 ### Removed
