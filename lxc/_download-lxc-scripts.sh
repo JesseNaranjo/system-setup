@@ -28,11 +28,13 @@ get_script_list() {
     echo "backup-lxc.sh"
     echo "config-lxc-ssh.sh"
     echo "create-lxc.sh"
+    echo "protect-lxc.sh"
     echo "restart-lxc.sh"
     echo "restore-lxc.sh"
     echo "setup-lxc.sh"
     echo "start-lxc.sh"
     echo "stop-lxc.sh"
+    echo "unprotect-lxc.sh"
     echo "watch-lxc.sh"
 }
 

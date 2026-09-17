@@ -11,6 +11,8 @@ This directory contains scripts for managing LXC containers on Linux systems. Th
 | `start-lxc.sh` | Start container(s) via systemd service | Yes (sudo) |
 | `stop-lxc.sh` | Stop container(s) gracefully | Yes (sudo) |
 | `restart-lxc.sh` | Restart container(s) | Yes (sudo) |
+| `protect-lxc.sh` | Protect container(s) from destruction; `--status` to list | Matches container scope |
+| `unprotect-lxc.sh` | Remove protection from container(s) | Matches container scope |
 | `watch-lxc.sh` | Live status display refreshed every 5s | No |
 | `backup-lxc.sh` | Backup container to compressed archive | Yes (sudo) |
 | `restore-lxc.sh` | Restore container from backup | Yes (sudo) |
@@ -82,6 +84,22 @@ sudo ./start-lxc.sh mycontainer
 
 # Restore with new name
 ./restore-lxc.sh mycontainer_20241222_120000.tar.7z newname
+```
+
+### Protecting Containers
+
+```bash
+# Protect a container from lxc-destroy
+./protect-lxc.sh mycontainer
+
+# Protect multiple containers
+./protect-lxc.sh web db cache
+
+# List every container's protection state
+./protect-lxc.sh --status
+
+# Remove protection
+./unprotect-lxc.sh mycontainer
 ```
 
 ## Script Details
@@ -191,6 +209,81 @@ Stops containers gracefully:
 
 ```bash
 ./stop-lxc.sh [container_name] [[container_name], ...]
+```
+
+### protect-lxc.sh
+
+Protects container(s) from accidental destruction by appending a fenced
+sentinel block to the container's own config:
+
+```
+# --- BEGIN protect-lxc ---
+# protect-lxc: protected 2026-09-16
+# lxc-destroy aborts here BEFORE the rootfs is touched.
+# Remove with: unprotect-lxc.sh <this container>
+lxc.hook.destroy = /bin/false
+# --- END protect-lxc ---
+```
+
+**Behavior:**
+- The gate holds against the raw `lxc-destroy` binary, not just against these
+  scripts: liblxc runs `lxc.hook.destroy` before it touches the rootfs and
+  aborts when the hook exits non-zero. When it fires, liblxc prints its own
+  ERROR-level lines to stderr (`Script exited with status 1`, `Failed to
+  execute clone hook for "<name>"`, `Destroying <name> failed`) and exits 1 —
+  the rootfs and config are left intact. Hook output itself is discarded
+  (logged only at DEBUG), which is why the sentinel is `/bin/false` rather
+  than a script with a message of its own.
+- Known limitations — documented, not fixed:
+  - `rm -rf` on the container directory bypasses the hook entirely.
+  - `lxc-destroy --rcfile <other>` loads a different config and skips the hook.
+  - `lxc-copy` clones carry a protected container's hook path into the
+    clone, so the clone is born protected; a backup taken while protected
+    also restores protected.
+  - A pre-existing `lxc.hook.destroy` entry elsewhere in the config runs
+    first — hooks run in config order and this block is appended at EOF — so
+    its side effects happen before this hook can veto the destroy.
+  - `lxc-destroy -f` on a *running* protected container stops it first and
+    is vetoed only afterward: the container is left stopped, rootfs and
+    config intact.
+  - `lxc-destroy -s` destroys the clones listed in the container's
+    `lxc_snapshots` file, then its snapshots, then the container: one made
+    *before* protection was added carries no hook and is removed before the
+    parent's veto fires; one made *after* carries the hook (snapshots are
+    clones) and is vetoed itself.
+- Scope follows the invoking EUID: run with `sudo` for privileged
+  (system-scope) containers, run as your user for unprivileged ones.
+- `--status` lists every container under that scope with its protection
+  state and, when protected, the date.
+
+**Usage:**
+
+```bash
+./protect-lxc.sh mycontainer            # Protect a container
+./protect-lxc.sh web db cache           # Protect multiple containers
+./protect-lxc.sh --status               # List every container's protection state
+sudo ./protect-lxc.sh web               # Protect a privileged container
+```
+
+### unprotect-lxc.sh
+
+Removes the sentinel block `protect-lxc.sh` adds, so the container becomes
+destroyable by `lxc-destroy` again. Refuses to edit a protected config unless
+its `BEGIN` fence is the only one and is followed by exactly one `END` fence:
+repair a malformed block by hand first.
+
+**Behavior:**
+- Scope follows the invoking EUID: run with `sudo` for privileged
+  (system-scope) containers, run as your user for unprivileged ones.
+- A container that is not protected is reported and left alone, not treated
+  as an error.
+
+**Usage:**
+
+```bash
+./unprotect-lxc.sh mycontainer            # Unprotect a container
+./unprotect-lxc.sh web db cache           # Unprotect multiple containers
+sudo ./unprotect-lxc.sh web               # Unprotect a privileged container
 ```
 
 ### watch-lxc.sh
@@ -399,3 +492,4 @@ Scripts use standard sysexits.h codes:
 | 69 | EX_UNAVAILABLE | Required tool not available |
 | 74 | EX_IOERR | I/O error |
 | 75 | EX_TEMPFAIL | Temporary failure (user cancelled) |
+| 77 | EX_NOPERM | Refused: the container is protected |

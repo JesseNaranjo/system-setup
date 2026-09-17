@@ -9,6 +9,7 @@ features as of that date; earlier history is not individually recorded.
 ### Added
 
 - **Container-protection helpers in `lxc/utils-lxc.sh`.** `lxc_resolve_path`, `lxc_valid_name`, `lxc_list_containers`, `lxc_is_protected`, `lxc_protected_since`, `lxc_protect_config`, and `lxc_unprotect_config` gate `lxc-destroy` with a fenced `lxc.hook.destroy = /bin/false` block in the container's own config — liblxc runs destroy hooks before it touches the rootfs and aborts on a non-zero exit, so the gate holds against the raw binary. `lxc/tests/test-protect-lxc.sh` covers the round trip, idempotent double-protect, repeated cycles, an unterminated last line, a missing END fence, a stray second BEGIN fence, reversed fence order, and a hand-deleted date line — no LXC, no root, no network.
+- **`lxc/protect-lxc.sh` and `lxc/unprotect-lxc.sh`.** Front-end launchers for the container-protection helpers: `protect-lxc.sh <name> [name ...]` adds the sentinel block (idempotent — reports "Already protected" with its date rather than re-adding it) and `protect-lxc.sh --status` lists every container under the invoking EUID's scope with its protection state; `unprotect-lxc.sh <name> [name ...]` removes it, refusing a malformed block rather than editing it. Both registered in `lxc/_download-lxc-scripts.sh`'s `get_script_list()` and documented in `lxc/README.md`, which also gains the limitations `lxc-destroy`'s hook-based gate does not cover (`rm -rf`, `--rcfile`, `lxc-copy` clones and backups born protected, hook ordering, `-f` and `-s` semantics).
 
 ### Changed
 
