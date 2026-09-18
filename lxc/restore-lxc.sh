@@ -146,6 +146,7 @@ main() {
     fi
 
     local CONTAINER_PATH="${LXC_PATH}/${CONTAINER_NAME}"
+    local CONFIG_FILE="${CONTAINER_PATH}/config"
 
     # ========================================================================
     # Pre-restore Checks
@@ -158,6 +159,12 @@ main() {
     # Check if container already exists
     if [[ -d "$CONTAINER_PATH" ]]; then
         print_warning "⚠ Container '${CONTAINER_NAME}' already exists at ${CONTAINER_PATH}"
+
+        if lxc_is_protected "$CONFIG_FILE"; then
+            print_error "✖ ${CONTAINER_NAME} is protected (since $(lxc_protected_since "$CONFIG_FILE"))"
+            print_info "Run: ${SCRIPT_DIR}/unprotect-lxc.sh ${CONTAINER_NAME}"
+            exit 77  # EX_NOPERM
+        fi
 
         # Check if it's running
         if lxc-info -n "${CONTAINER_NAME}" -s 2>/dev/null | grep -q "RUNNING"; then
@@ -222,7 +229,6 @@ main() {
         sudo mv "${TEMP_DIR}/${ORIGINAL_NAME}" "$CONTAINER_PATH"
 
         # Update lxc.uts.name and lxc.rootfs.path in config file
-        local CONFIG_FILE="${CONTAINER_PATH}/config"
         if [[ -f "$CONFIG_FILE" ]]; then
             print_info "Updating container name and rootfs path in config..."
             sudo sed -i "s/^lxc\.uts\.name\s*=.*/lxc.uts.name = ${CONTAINER_NAME}/" "$CONFIG_FILE"
@@ -236,8 +242,6 @@ main() {
     # ========================================================================
     # Post-restore Configuration
     # ========================================================================
-
-    local CONFIG_FILE="${CONTAINER_PATH}/config"
 
     echo ""
     print_success "✓ Container restored to: ${CONTAINER_PATH}"

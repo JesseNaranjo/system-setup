@@ -158,6 +158,13 @@ main() {
     if lxc-info -n "${CONTAINER_NAME}" &>/dev/null; then
         CONTAINER_EXISTS=true
         print_warning "⚠ Container '${CONTAINER_NAME}' already exists!"
+        local CONFIG_FILE
+        CONFIG_FILE="$(lxc_resolve_path)/${CONTAINER_NAME}/config"
+        if lxc_is_protected "$CONFIG_FILE"; then
+            print_error "✖ ${CONTAINER_NAME} is protected (since $(lxc_protected_since "$CONFIG_FILE"))"
+            print_info "Run: ${SCRIPT_DIR}/unprotect-lxc.sh ${CONTAINER_NAME}"
+            exit 77  # EX_NOPERM
+        fi
         echo ""
         if ! prompt_yes_no "            Do you want to destroy and recreate it?" "n"; then
             print_info "Operation cancelled by user"
