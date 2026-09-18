@@ -21,8 +21,8 @@
 #   --compression   Compression level: fast, balanced, or small (default: small)
 #
 # Compression presets:
-#   fast     - Quick compression, larger files     (-mx=3, -md=32m)
-#   balanced - Moderate compression and speed      (-mx=5, -md=128m)
+#   fast     - Quick compression, larger files     (-mx=3, -md=128m)
+#   balanced - Moderate compression and speed      (-mx=5, -md=512m)
 #   small    - Maximum compression, slower         (-mx=9, -md=1536m)
 #
 # Output: <container>_<YYYYMMDD_HHMMSS>.tar.7z

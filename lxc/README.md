@@ -20,6 +20,7 @@ This directory contains scripts for managing LXC containers on Linux systems. Th
 | `config-lxc-ssh.sh` | Configure SSH keys for container access | Yes (always) |
 | `utils-lxc.sh` | Shared utilities for LXC scripts (output functions, self-update) | No |
 | `_download-lxc-scripts.sh` | Self-updating script manager | No |
+| `tests/` | Unit tests for the container-protection helpers in `utils-lxc.sh` (see [tests/README.md](tests/README.md)) | No |
 
 ## Quick Start
 
@@ -139,6 +140,8 @@ sudo ./setup-lxc.sh --privileged
 Creates an LXC container with auto-detection of distribution, release, and architecture:
 
 - Auto-detects host OS parameters if not specified (falls back to interactive prompt on failure)
+- Refuses to recreate a protected container (`EX_NOPERM` 77) — run
+  `unprotect-lxc.sh` first
 - Prompts before destroying existing containers
 - Uses the sibling `start-lxc.sh` script to start the container
 - When the container name contains `k8s`, prompts to apply Kubernetes settings (`--k8s`)
@@ -370,6 +373,9 @@ sudo ./backup-lxc.sh mycontainer /backups           # Privileged container
 Restores containers from backup archives:
 
 - Detects original container name from archive
+- Refuses to restore over a protected container (`EX_NOPERM` 77) — run
+  `unprotect-lxc.sh` first; the check is repeated immediately before the
+  `sudo rm -rf`, which bypasses the destroy hook entirely
 - Supports renaming during restore
 - Updates config file paths when renaming
 - Offers to edit config before starting
@@ -397,7 +403,11 @@ Permanently destroys a single container.
 - Calls `lxc-destroy` without `-f` or `-s`: a container still running, or one
   with snapshots, fails here with liblxc's own message rather than being
   forced. Destroy a container with snapshots by running `lxc-destroy -s` by
-  hand.
+  hand — that route skips this script's Step 3/3, so the per-container
+  `lxc-bg-start@<name>.service` (or `lxc-priv-bg-start@<name>.service`)
+  instance and its drop-in directory survive, and `destroy-lxc.sh` can no
+  longer clean them up afterwards (the config is gone, so it exits
+  `EX_NOINPUT` 66). Remove them by hand.
 - Last, stops, resets and disables the per-container systemd service
   instance and removes its drop-ins — never the shared `@.service` template.
 - Scope follows the invoking EUID: run with `sudo` for privileged
@@ -449,6 +459,8 @@ Self-updating script manager:
 Individual scripts self-update when run directly via `check_for_updates()`. This checks for updates to both `utils-lxc.sh` and the calling script, showing diffs and prompting before overwriting. Scripts that are sourced (not executed directly) skip the update check.
 
 `utils-lxc.sh` must be present in the same directory as the scripts; it is kept current via `check_for_updates()` (above), not by the `_download-lxc-scripts.sh` download manifest.
+
+`tests/` is development-only and is deliberately absent from `_download-lxc-scripts.sh`'s `get_script_list()` — the tests are not distributed to target hosts.
 
 ## Architecture
 
@@ -563,7 +575,7 @@ Scripts use standard sysexits.h codes:
 | Code | Name | Description |
 |------|------|-------------|
 | 0 | EX_OK | Success |
-| 1 | — | General error. `_download-lxc-scripts.sh` returns it when one or more script downloads failed (the per-file failures are already reported on stdout); `destroy-lxc.sh` returns it when `lxc-destroy` fails. |
+| 1 | — | General error. `_download-lxc-scripts.sh` returns it when one or more script downloads failed (the per-file failures are already reported on stdout); `destroy-lxc.sh` returns it when `lxc-destroy` fails; `protect-lxc.sh` and `unprotect-lxc.sh` return it when any named container failed (the per-container failures are already reported). |
 | 64 | EX_USAGE | Command line usage error |
 | 65 | EX_DATAERR | Data format error |
 | 66 | EX_NOINPUT | Input file not found |

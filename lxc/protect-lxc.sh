@@ -86,7 +86,7 @@ print_protection_status() {
     mapfile -t names < <(lxc_list_containers "$lxc_path")
 
     if [[ ${#names[@]} -eq 0 ]]; then
-        print_warning "⚠ No containers found under ${lxc_path}"
+        print_warning "⚠ No containers defined under ${lxc_path}"
         return 0
     fi
 
@@ -148,7 +148,7 @@ main() {
     fi
 
     if [[ ${#CONTAINERS[@]} -eq 0 ]]; then
-        print_error "✖ No container name given"
+        print_error "✖ Missing required container name argument"
         show_usage
         exit 64  # EX_USAGE
     fi

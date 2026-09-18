@@ -71,7 +71,7 @@ main() {
     done
 
     if [[ -z "$CONTAINER_NAME" ]]; then
-        print_error "✖ No container name given"
+        print_error "✖ Missing required container name argument"
         show_usage
         exit 64  # EX_USAGE
     fi
@@ -104,7 +104,7 @@ main() {
 
     if lxc_is_protected "$CONFIG_FILE"; then
         print_error "✖ ${CONTAINER_NAME} is protected (since $(lxc_protected_since "$CONFIG_FILE"))"
-        print_info "Run: ${SCRIPT_DIR}/unprotect-lxc.sh ${CONTAINER_NAME}"
+        print_info "Run: $( [[ $EUID == 0 ]] && echo "sudo " )./unprotect-lxc.sh ${CONTAINER_NAME}"
         exit 77  # EX_NOPERM
     fi
 
@@ -154,7 +154,10 @@ main() {
     # silently never start. Every call is `|| true`: most containers were never
     # enabled (setup-lxc.sh only prints the enable command as a manual step),
     # and a user-scope call fails outright when no user manager is running —
-    # none of which may turn a completed destroy into a non-zero exit.
+    # none of which may turn a completed destroy into a non-zero exit. The
+    # drop-in removal below warns for the same reason: the container is already
+    # gone by then, so a leftover drop-in directory is a cleanup note, not a
+    # failed destroy.
     local SERVICE="${SERVICE_PREFIX}@${CONTAINER_NAME}.service"
     "${SYSTEMCTL_CMD[@]}" stop "$SERVICE" 2>/dev/null || true
     # The stop's ExecStop (lxc-stop) runs against a container that no longer
@@ -164,10 +167,13 @@ main() {
     "${SYSTEMCTL_CMD[@]}" disable "$SERVICE" 2>/dev/null || true
     local DROPIN_DIR="${DROPIN_BASE}/${SERVICE}.d"
     if [[ -d "$DROPIN_DIR" ]]; then
-        rm -rf "$DROPIN_DIR"
-        "${SYSTEMCTL_CMD[@]}" daemon-reload 2>/dev/null \
-            || print_warning "⚠ daemon-reload failed — run '${SYSTEMCTL_CMD[*]} daemon-reload' by hand"
-        print_success "✓ Drop-ins removed: ${DROPIN_DIR}"
+        if rm -rf "$DROPIN_DIR"; then
+            "${SYSTEMCTL_CMD[@]}" daemon-reload 2>/dev/null \
+                || print_warning "⚠ daemon-reload failed — run '${SYSTEMCTL_CMD[*]} daemon-reload' by hand"
+            print_success "✓ Drop-ins removed: ${DROPIN_DIR}"
+        else
+            print_warning "⚠ Failed to remove drop-ins — remove '${DROPIN_DIR}' by hand"
+        fi
     else
         print_success "- No drop-ins to remove"
     fi

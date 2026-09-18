@@ -162,7 +162,7 @@ main() {
         CONFIG_FILE="$(lxc_resolve_path)/${CONTAINER_NAME}/config"
         if lxc_is_protected "$CONFIG_FILE"; then
             print_error "✖ ${CONTAINER_NAME} is protected (since $(lxc_protected_since "$CONFIG_FILE"))"
-            print_info "Run: ${SCRIPT_DIR}/unprotect-lxc.sh ${CONTAINER_NAME}"
+            print_info "Run: $( [[ $EUID == 0 ]] && echo "sudo " )./unprotect-lxc.sh ${CONTAINER_NAME}"
             exit 77  # EX_NOPERM
         fi
         echo ""

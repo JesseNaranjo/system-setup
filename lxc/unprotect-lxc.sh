@@ -97,7 +97,7 @@ main() {
     LXC_PATH="$(lxc_resolve_path)"
 
     if [[ ${#CONTAINERS[@]} -eq 0 ]]; then
-        print_error "✖ No container name given"
+        print_error "✖ Missing required container name argument"
         show_usage
         exit 64  # EX_USAGE
     fi

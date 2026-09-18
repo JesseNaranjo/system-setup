@@ -99,9 +99,18 @@ lxc_valid_name "a/b";         assert_eq 1 "$?" "rejects a/b"
 lxc_valid_name ".hidden";     assert_eq 1 "$?" "rejects a leading dot"
 lxc_valid_name "";            assert_eq 1 "$?" "rejects an empty name"
 
+echo "== lxc_resolve_path =="
+# Only the non-root branch: this suite never runs as root, so the EUID-0 branch
+# (/var/lib/lxc) cannot be exercised here.
+assert_eq "${HOME}/.local/share/lxc" "$(lxc_resolve_path)" "non-root resolves to the user-scope path"
+
 echo "== protect / detect / unprotect round trip =="
 CFG="$(make_container ct1)"
-BEFORE="$(cat "$CFG")"
+# Compared byte-wise against a copy, not against "$(cat …)": command
+# substitution strips trailing newlines, which is exactly where an
+# accumulating blank-line residue would land.
+BEFORE="${CFG}.before"
+cp "$CFG" "$BEFORE"
 lxc_is_protected "$CFG";              assert_eq 1 "$?" "a fresh config is unprotected"
 lxc_protect_config "$CFG" 2026-09-15; assert_eq 0 "$?" "protect succeeds"
 lxc_is_protected "$CFG";              assert_eq 0 "$?" "now protected"
@@ -114,16 +123,17 @@ lxc_unprotect_config "$CFG";          assert_eq 0 "$?" "unprotect succeeds"
 lxc_is_protected "$CFG";              assert_eq 1 "$?" "unprotected again"
 assert_not_contains "$(cat "$CFG")" "lxc.hook.destroy" "hook gone"
 assert_not_contains "$(cat "$CFG")" "protect-lxc" "fence gone"
-assert_eq "$BEFORE" "$(cat "$CFG")" "config restored to its original content"
+cmp -s "$BEFORE" "$CFG";              assert_eq 0 "$?" "config restored to its original content"
 
 echo "== repeated cycles leave no residue =="
 CFG="$(make_container ct2)"
-BEFORE="$(cat "$CFG")"
+BEFORE="${CFG}.before"
+cp "$CFG" "$BEFORE"
 for _ in 1 2 3; do
     lxc_protect_config "$CFG" 2026-09-15
     lxc_unprotect_config "$CFG"
 done
-assert_eq "$BEFORE" "$(cat "$CFG")" "three protect/unprotect cycles are a no-op"
+cmp -s "$BEFORE" "$CFG";              assert_eq 0 "$?" "three protect/unprotect cycles are a no-op"
 
 echo "== config with no trailing newline =="
 CFG="$(make_container ct3)"
@@ -166,6 +176,22 @@ lxc_protect_config "$CFG" 2026-09-15
 sed -i '/^# protect-lxc: protected /d' "$CFG"           # hand-deleted date line
 assert_eq "unknown" "$(lxc_protected_since "$CFG")" "reports unknown instead of unprotected"
 
+echo "== content after the block survives a successful unprotect =="
+# The three EOF cases above all end in a refusal, so nothing pins the
+# well-formed path: a range that deleted to EOF on a valid block would pass
+# every one of them.
+CFG="$(make_container ct8)"
+BEFORE="${CFG}.before"
+cp "$CFG" "$BEFORE"
+lxc_protect_config "$CFG" 2026-09-15
+echo 'lxc.apparmor.profile = unconfined' >> "$CFG"      # a real config line after the block
+echo 'lxc.apparmor.profile = unconfined' >> "$BEFORE"   # what the file must be once the block goes
+lxc_unprotect_config "$CFG"
+assert_eq 0 "$?" "unprotect succeeds with content after the block"
+assert_contains "$(cat "$CFG")" "lxc.apparmor.profile = unconfined" "the line after the block survived"
+cmp -s "$BEFORE" "$CFG"
+assert_eq 0 "$?" "only the block was removed"
+
 echo "== missing config =="
 lxc_is_protected "${SANDBOX}/nope/config";    assert_eq 1 "$?" "a missing config is unprotected"
 lxc_protected_since "${SANDBOX}/nope/config"; assert_eq 1 "$?" "a missing config has no date"
@@ -177,7 +203,8 @@ ct3
 ct4
 ct5
 ct6
-ct7" "$(lxc_list_containers "$SANDBOX" | sort)" "lists every dir that has a config"
+ct7
+ct8" "$(lxc_list_containers "$SANDBOX" | sort)" "lists every dir that has a config"
 mkdir -p "${SANDBOX}/not-a-container"
 assert_not_contains "$(lxc_list_containers "$SANDBOX")" "not-a-container" "skips dirs without a config"
 mkdir -p "${SANDBOX}/empty-root"

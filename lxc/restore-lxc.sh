@@ -138,11 +138,30 @@ main() {
         exit 65  # EX_DATAERR
     fi
 
+    # Validated where it is first known: on the rename path this name reaches
+    # sudo mv "${TEMP_DIR}/${ORIGINAL_NAME}" and the pattern side of a sed
+    # expression, neither of which the CONTAINER_NAME check below covers. It is
+    # archive content rather than something the user typed, hence EX_DATAERR.
+    if ! lxc_valid_name "$ORIGINAL_NAME"; then
+        print_error "✖ Invalid container name in ${BACKUP_FILE}: ${ORIGINAL_NAME}"
+        exit 65  # EX_DATAERR
+    fi
+
     print_info "Original container name: ${ORIGINAL_NAME}"
 
     # Use original name if no override specified
     if [[ -z "$CONTAINER_NAME" ]]; then
         CONTAINER_NAME="$ORIGINAL_NAME"
+    fi
+
+    # The positional override gets the same treatment ORIGINAL_NAME already had
+    # above; checked after the fallback so both sources pass through a guard
+    # either way. The name below feeds sudo rm -rf, sudo mv and two sudo sed -i
+    # expressions that interpolate it into the replacement text, where an
+    # unescaped & expands to the whole matched line.
+    if ! lxc_valid_name "$CONTAINER_NAME"; then
+        print_error "✖ Invalid container name: ${CONTAINER_NAME}"
+        exit 64  # EX_USAGE
     fi
 
     local CONTAINER_PATH="${LXC_PATH}/${CONTAINER_NAME}"
@@ -162,7 +181,7 @@ main() {
 
         if lxc_is_protected "$CONFIG_FILE"; then
             print_error "✖ ${CONTAINER_NAME} is protected (since $(lxc_protected_since "$CONFIG_FILE"))"
-            print_info "Run: ${SCRIPT_DIR}/unprotect-lxc.sh ${CONTAINER_NAME}"
+            print_info "Run: $( [[ $EUID == 0 ]] && echo "sudo " )./unprotect-lxc.sh ${CONTAINER_NAME}"
             exit 77  # EX_NOPERM
         fi
 
@@ -179,6 +198,16 @@ main() {
         fi
 
         if prompt_yes_no "Delete existing container and restore from backup?" "n"; then
+            # Re-checked here because the check above is separated from this
+            # delete by an lxc-info probe, a stop prompt, a full stop-lxc.sh run
+            # and the prompt just answered. This narrows that window; it does
+            # not make the sequence atomic. rm -rf bypasses the destroy hook, so
+            # this is the only backstop on this path.
+            if lxc_is_protected "$CONFIG_FILE"; then
+                print_error "✖ ${CONTAINER_NAME} is protected (since $(lxc_protected_since "$CONFIG_FILE"))"
+                print_info "Run: $( [[ $EUID == 0 ]] && echo "sudo " )./unprotect-lxc.sh ${CONTAINER_NAME}"
+                exit 77  # EX_NOPERM
+            fi
             print_info "Removing existing container..."
             sudo rm -rf "$CONTAINER_PATH"
         else

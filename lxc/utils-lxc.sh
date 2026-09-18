@@ -328,6 +328,16 @@ lxc_protect_config() {
         echo "lxc.hook.destroy = /bin/false"
         echo "$PROTECT_END"
     } >> "$config"
+
+    # Six separate writes: a full filesystem can leave the config ending at the
+    # BEGIN fence with no hook line, and lxc_is_protected keys off that fence —
+    # so --status, the watch column and every refusal would report "protected"
+    # while a raw lxc-destroy finds no hook and destroys the container. Fail
+    # loudly instead; a re-run would short-circuit on the fence.
+    if ! grep -qxF "lxc.hook.destroy = /bin/false" "$config" || ! grep -qxF "$PROTECT_END" "$config"; then
+        print_error "✖ Protection block in ${config} is incomplete — repair it by hand"
+        return 1
+    fi
 }
 
 # Remove the sentinel block.
