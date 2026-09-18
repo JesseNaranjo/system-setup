@@ -2,21 +2,26 @@
 
 # restore-lxc.sh - Restore an LXC container from a compressed archive
 #
-# Usage: ./restore-lxc.sh <backup_file> [container_name] [--privileged]
+# Usage: ./restore-lxc.sh <backup_file> [container_name]
 #
 # This script:
 # - Restores an LXC container from a .tar.7z archive created by backup-lxc.sh
 # - Preserves all numeric ownership and permissions using tar --numeric-owner
 # - Optionally renames the container during restore
 # - Offers to edit the config file before starting the container
-# - Works with both unprivileged (default) and privileged containers
+# - Works with both unprivileged and privileged containers
+#
+# Container scope follows the invoking EUID: privileged containers require
+# sudo ./restore-lxc.sh <backup_file> (/var/lib/lxc/), while an unprivileged
+# container is restored as your own user (~/.local/share/lxc/).
 #
 # Arguments:
 #   backup_file     Path to the .tar.7z backup archive (required)
 #   container_name  Name for the restored container (default: original name from backup)
-#   --privileged    Restore to /var/lib/lxc/ instead of ~/.local/share/lxc/
 #
-# Note: Requires sudo to restore files with correct ownership in the container's rootfs.
+# Note: Requires sudo to restore files with correct ownership in the container's
+#       rootfs. The internal sudo tar / sudo rm / sudo nano calls are a no-op
+#       elevation when the script already runs as root.
 
 set -euo pipefail
 
@@ -32,17 +37,19 @@ source "${SCRIPT_DIR}/utils-lxc.sh"
 # ============================================================================
 
 show_usage() {
-    echo "Usage: ${0##*/} <backup_file> [container_name] [--privileged]"
+    echo "Usage: ${0##*/} <backup_file> [container_name]"
     echo ""
     echo "Arguments:"
     echo "  backup_file     Path to the .tar.7z backup archive (required)"
     echo "  container_name  Name for the restored container (default: original name from backup)"
-    echo "  --privileged    Restore to /var/lib/lxc/ instead of ~/.local/share/lxc/"
+    echo ""
+    echo "Container scope follows the invoking EUID: a privileged container"
+    echo "(/var/lib/lxc/) requires sudo ${0##*/} <backup_file>."
     echo ""
     echo "Examples:"
     echo "  ${0##*/} my-container_20241222_120000.tar.7z"
     echo "  ${0##*/} my-container_20241222_120000.tar.7z new-container-name"
-    echo "  ${0##*/} my-container_20241222_120000.tar.7z --privileged"
+    echo "  sudo ${0##*/} my-container_20241222_120000.tar.7z"
 }
 
 check_required_tools() {
@@ -68,14 +75,9 @@ main() {
     # Parse arguments
     local BACKUP_FILE=""
     local CONTAINER_NAME=""
-    local PRIVILEGED=false
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --privileged)
-                PRIVILEGED=true
-                shift
-                ;;
             --help|-h)
                 show_usage
                 exit 0
@@ -117,11 +119,7 @@ main() {
     # ========================================================================
 
     local LXC_PATH
-    if [[ "$PRIVILEGED" == true ]]; then
-        LXC_PATH="/var/lib/lxc"
-    else
-        LXC_PATH="${HOME}/.local/share/lxc"
-    fi
+    LXC_PATH="$(lxc_resolve_path)"
 
     # ========================================================================
     # Detect Original Container Name from Archive
@@ -166,11 +164,7 @@ main() {
             print_warning "⚠ Container is currently running"
             if prompt_yes_no "Stop the container?" "y"; then
                 print_info "Stopping container..."
-                if [[ -x "${SCRIPT_DIR}/stop-lxc.sh" ]]; then
-                    "${SCRIPT_DIR}/stop-lxc.sh" "$CONTAINER_NAME"
-                else
-                    lxc-stop --name "$CONTAINER_NAME"
-                fi
+                "${SCRIPT_DIR}/stop-lxc.sh" "$CONTAINER_NAME"
             else
                 print_error "✖ Cannot restore over a running container"
                 exit 75  # EX_TEMPFAIL
@@ -261,12 +255,7 @@ main() {
     echo ""
     if prompt_yes_no "Start the container now?" "n"; then
         print_info "Starting container..."
-        if [[ -x "${SCRIPT_DIR}/start-lxc.sh" ]]; then
-            "${SCRIPT_DIR}/start-lxc.sh" --attach "$CONTAINER_NAME"
-        else
-            lxc-start --name "$CONTAINER_NAME"
-            print_success "✓ Container '${CONTAINER_NAME}' started"
-        fi
+        "${SCRIPT_DIR}/start-lxc.sh" --attach "$CONTAINER_NAME"
     else
         print_info "Container restored but not started"
         print_info "Start with: ./start-lxc.sh ${CONTAINER_NAME}"

@@ -43,7 +43,7 @@ get_script_list() {
 # Add filenames here when scripts are renamed or deprecated
 OBSOLETE_SCRIPTS=(
     "refresh-lxc.sh"      # renamed to restart-lxc.sh
-    "create-priv-lxc.sh"  # absorbed into create-lxc.sh --privileged
+    "create-priv-lxc.sh"  # absorbed into create-lxc.sh (run under sudo for privileged)
 )
 
 # Update all script files (managed scripts)

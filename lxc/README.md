@@ -7,15 +7,15 @@ This directory contains scripts for managing LXC containers on Linux systems. Th
 | Script | Description | Requires Root |
 |--------|-------------|---------------|
 | `setup-lxc.sh` | Configure LXC for a user or privileged mode | Yes (always) |
-| `create-lxc.sh` | Create a new container (auto-detects distro) | With `--privileged` |
-| `start-lxc.sh` | Start container(s) via systemd service | Yes (sudo) |
-| `stop-lxc.sh` | Stop container(s) gracefully | Yes (sudo) |
-| `restart-lxc.sh` | Restart container(s) | Yes (sudo) |
+| `create-lxc.sh` | Create a new container (auto-detects distro) | Matches container scope |
+| `start-lxc.sh` | Start container(s) via systemd service | Matches container scope |
+| `stop-lxc.sh` | Stop container(s) gracefully | Matches container scope |
+| `restart-lxc.sh` | Restart container(s) | Matches container scope |
 | `protect-lxc.sh` | Protect container(s) from destruction; `--status` to list | Matches container scope |
 | `unprotect-lxc.sh` | Remove protection from container(s) | Matches container scope |
-| `watch-lxc.sh` | Live status display refreshed every 5s | No |
-| `backup-lxc.sh` | Backup container to compressed archive | Yes (sudo) |
-| `restore-lxc.sh` | Restore container from backup | Yes (sudo) |
+| `watch-lxc.sh` | Live status display refreshed every 5s | Matches container scope |
+| `backup-lxc.sh` | Backup container to compressed archive | Uses sudo internally; run under sudo for privileged containers |
+| `restore-lxc.sh` | Restore container from backup | Uses sudo internally; run under sudo for privileged containers |
 | `destroy-lxc.sh` | Destroy a container (refuses protected ones) | Matches container scope |
 | `config-lxc-ssh.sh` | Configure SSH keys for container access | Yes (always) |
 | `utils-lxc.sh` | Shared utilities for LXC scripts (output functions, self-update) | No |
@@ -42,8 +42,8 @@ su - myuser
 # 1. Configure LXC for privileged mode (run as root)
 sudo ./setup-lxc.sh --privileged
 
-# 2. Create a privileged container
-sudo ./create-lxc.sh --privileged mycontainer
+# 2. Create a privileged container (sudo selects privileged mode)
+sudo ./create-lxc.sh mycontainer
 
 # 3. Start the container
 sudo ./start-lxc.sh mycontainer
@@ -142,16 +142,17 @@ Creates an LXC container with auto-detection of distribution, release, and archi
 - Prompts before destroying existing containers
 - Uses the sibling `start-lxc.sh` script to start the container
 - When the container name contains `k8s`, prompts to apply Kubernetes settings (`--k8s`)
-- With `--privileged`, creates a truly privileged container (no user namespace remapping)
+- Scope follows the invoking EUID: `sudo` selects privileged mode and creates a
+  truly privileged container (no user namespace remapping)
 
 ```bash
-./create-lxc.sh [--privileged] <container_name> [distribution] [release] [architecture]
+./create-lxc.sh <container_name> [distribution] [release] [architecture]
 
 # Examples:
 ./create-lxc.sh mycontainer                        # Auto-detect everything
 ./create-lxc.sh mycontainer debian bookworm arm64  # Explicit parameters
 ./create-lxc.sh tst-k8s1                           # Prompts for k8s settings
-sudo ./create-lxc.sh --privileged mycontainer      # Privileged container
+sudo ./create-lxc.sh mycontainer                   # Privileged container
 ```
 
 ### start-lxc.sh
@@ -163,6 +164,8 @@ Starts containers using systemd services:
 - Shows container status after starting
 - Supports cgroup delegation and swap restriction flags for Kubernetes containers
 - Persistent settings are applied even if the container is already running (take effect on next restart)
+- Scope follows the invoking EUID: run with `sudo` for privileged
+  (system-scope) containers, run as your user for unprivileged ones
 
 ```bash
 ./start-lxc.sh [options] <container_name> [...]
@@ -214,9 +217,25 @@ Stops containers gracefully:
 - Uses `lxc-stop` for graceful shutdown
 - Stops associated systemd service (user or system scope)
 - Stops all running containers if no arguments provided
+- Scope follows the invoking EUID: run with `sudo` for privileged
+  (system-scope) containers, run as your user for unprivileged ones
 
 ```bash
 ./stop-lxc.sh [container_name] [[container_name], ...]
+```
+
+### restart-lxc.sh
+
+Restarts containers by stopping and then starting them:
+
+- Delegates to the sibling `stop-lxc.sh` and `start-lxc.sh` scripts
+- Restarts all running containers if no arguments provided
+- Rejects every flag (`EX_USAGE` 64)
+- Scope follows the invoking EUID: run with `sudo` for privileged
+  (system-scope) containers, run as your user for unprivileged ones
+
+```bash
+./restart-lxc.sh [container_name] [[container_name], ...]
 ```
 
 ### protect-lxc.sh
@@ -324,9 +343,15 @@ Creates compressed backups of containers:
 - Uses 7z LZMA2 compression with three presets
 - Stops running containers before backup (with confirmation)
 - Supports both unprivileged and privileged containers
+- Uses `sudo tar` for every container so the whole rootfs is readable; scope
+  follows the invoking EUID, so `sudo` selects privileged mode
 
 ```bash
-./backup-lxc.sh <container_name> [backup_dir] [--privileged] [--compression=level]
+./backup-lxc.sh <container_name> [backup_dir] [--compression=level]
+
+# Examples:
+./backup-lxc.sh mycontainer /backups                # Unprivileged container
+sudo ./backup-lxc.sh mycontainer /backups           # Privileged container
 ```
 
 **Compression Presets:**
@@ -344,9 +369,15 @@ Restores containers from backup archives:
 - Supports renaming during restore
 - Updates config file paths when renaming
 - Offers to edit config before starting
+- Uses `sudo tar` / `sudo rm` / `sudo nano` for every container; scope follows
+  the invoking EUID, so `sudo` selects privileged mode
 
 ```bash
-./restore-lxc.sh <backup_file> [container_name] [--privileged]
+./restore-lxc.sh <backup_file> [container_name]
+
+# Examples:
+./restore-lxc.sh mycontainer_20241222_120000.tar.7z       # Unprivileged container
+sudo ./restore-lxc.sh mycontainer_20241222_120000.tar.7z  # Privileged container
 ```
 
 ### destroy-lxc.sh
@@ -425,6 +456,16 @@ Individual scripts self-update when run directly via `check_for_updates()`. This
 | Privileged | `/var/lib/lxc/<container>/` |
 
 ### Privileged vs Unprivileged
+
+`create-lxc.sh`, `start-lxc.sh`, `stop-lxc.sh`, `restart-lxc.sh`,
+`watch-lxc.sh`, `backup-lxc.sh`, `restore-lxc.sh`, `protect-lxc.sh`,
+`unprotect-lxc.sh` and `destroy-lxc.sh` select the mode from the invoking
+EUID — root (typically via `sudo`) means privileged, your own user means
+unprivileged. None of them takes a `--privileged` flag — `create-lxc.sh`,
+`backup-lxc.sh` and `restore-lxc.sh` no longer accept it. **`setup-lxc.sh` and
+`config-lxc-ssh.sh` keep `--privileged`**: both hard-error unless run as root
+and resolve their container path from a `<username>` argument, so EUID cannot
+distinguish the two modes there.
 
 | | Unprivileged | Privileged |
 |---|---|---|

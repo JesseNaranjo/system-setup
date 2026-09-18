@@ -2,19 +2,22 @@
 
 # backup-lxc.sh - Backup an LXC container to a compressed archive
 #
-# Usage: ./backup-lxc.sh <container_name> [backup_dir] [--privileged] [--compression=small|balanced|fast]
+# Usage: ./backup-lxc.sh <container_name> [backup_dir] [--compression=small|balanced|fast]
 #
 # This script:
 # - Backs up an LXC container's config and rootfs to a single .tar.7z archive
 # - Preserves all numeric ownership and permissions using tar --numeric-owner
 # - Supports three compression presets: fast, balanced, small (default: small)
 # - Stops the container before backup if running (with confirmation)
-# - Works with both unprivileged (default) and privileged containers
+# - Works with both unprivileged and privileged containers
+#
+# Container scope follows the invoking EUID: privileged containers require
+# sudo ./backup-lxc.sh <container_name> (/var/lib/lxc/), while an unprivileged
+# container is backed up as your own user (~/.local/share/lxc/).
 #
 # Arguments:
 #   container_name  Name of the container to backup (required)
 #   backup_dir      Directory to store the backup (default: current directory)
-#   --privileged    Backup from /var/lib/lxc/ instead of ~/.local/share/lxc/
 #   --compression   Compression level: fast, balanced, or small (default: small)
 #
 # Compression presets:
@@ -24,7 +27,8 @@
 #
 # Output: <container>_<YYYYMMDD_HHMMSS>.tar.7z
 #
-# Note: Requires sudo to read all files in the container's rootfs.
+# Note: Requires sudo to read all files in the container's rootfs. The internal
+#       sudo tar call is a no-op elevation when the script already runs as root.
 
 set -euo pipefail
 
@@ -53,18 +57,20 @@ readonly COMPRESS_SMALL="-t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on
 # ============================================================================
 
 show_usage() {
-    echo "Usage: ${0##*/} <container_name> [backup_dir] [--privileged] [--compression=small|balanced|fast]"
+    echo "Usage: ${0##*/} <container_name> [backup_dir] [--compression=small|balanced|fast]"
     echo ""
     echo "Arguments:"
     echo "  container_name  Name of the container to backup (required)"
     echo "  backup_dir      Directory to store the backup (default: current directory)"
-    echo "  --privileged    Backup from /var/lib/lxc/ instead of ~/.local/share/lxc/"
     echo "  --compression   Compression level: fast, balanced, or small (default: small)"
+    echo ""
+    echo "Container scope follows the invoking EUID: a privileged container"
+    echo "(/var/lib/lxc/) requires sudo ${0##*/} <container_name>."
     echo ""
     echo "Examples:"
     echo "  ${0##*/} my-container"
     echo "  ${0##*/} my-container /backups --compression=fast"
-    echo "  ${0##*/} my-container --privileged --compression=balanced"
+    echo "  sudo ${0##*/} my-container --compression=balanced"
 }
 
 check_required_tools() {
@@ -90,15 +96,10 @@ main() {
     # Parse arguments
     local CONTAINER_NAME=""
     local BACKUP_DIR="."
-    local PRIVILEGED=false
     local COMPRESSION_LEVEL="small"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --privileged)
-                PRIVILEGED=true
-                shift
-                ;;
             --compression=*)
                 COMPRESSION_LEVEL="${1#*=}"
                 if [[ ! "$COMPRESSION_LEVEL" =~ ^(fast|balanced|small)$ ]]; then
@@ -154,11 +155,7 @@ main() {
     # ========================================================================
 
     local LXC_PATH
-    if [[ "$PRIVILEGED" == true ]]; then
-        LXC_PATH="/var/lib/lxc"
-    else
-        LXC_PATH="${HOME}/.local/share/lxc"
-    fi
+    LXC_PATH="$(lxc_resolve_path)"
 
     local CONTAINER_PATH="${LXC_PATH}/${CONTAINER_NAME}"
 
@@ -199,11 +196,7 @@ main() {
         print_warning "⚠ Container '${CONTAINER_NAME}' is currently running"
         if prompt_yes_no "Stop the container before backup?" "y"; then
             print_info "Stopping container..."
-            if [[ -x "${SCRIPT_DIR}/stop-lxc.sh" ]]; then
-                "${SCRIPT_DIR}/stop-lxc.sh" "$CONTAINER_NAME"
-            else
-                lxc-stop --name "$CONTAINER_NAME"
-            fi
+            "${SCRIPT_DIR}/stop-lxc.sh" "$CONTAINER_NAME"
             echo ""
         else
             print_warning "⚠ Backing up a running container may result in inconsistent data"
