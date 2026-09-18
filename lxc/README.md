@@ -16,6 +16,7 @@ This directory contains scripts for managing LXC containers on Linux systems. Th
 | `watch-lxc.sh` | Live status display refreshed every 5s | No |
 | `backup-lxc.sh` | Backup container to compressed archive | Yes (sudo) |
 | `restore-lxc.sh` | Restore container from backup | Yes (sudo) |
+| `destroy-lxc.sh` | Destroy a container (refuses protected ones) | Matches container scope |
 | `config-lxc-ssh.sh` | Configure SSH keys for container access | Yes (always) |
 | `utils-lxc.sh` | Shared utilities for LXC scripts (output functions, self-update) | No |
 | `_download-lxc-scripts.sh` | Self-updating script manager | No |
@@ -100,6 +101,13 @@ sudo ./start-lxc.sh mycontainer
 
 # Remove protection
 ./unprotect-lxc.sh mycontainer
+```
+
+### Destroying Containers
+
+```bash
+# Destroy a container (refuses if it's protected)
+./destroy-lxc.sh mycontainer
 ```
 
 ## Script Details
@@ -341,6 +349,32 @@ Restores containers from backup archives:
 ./restore-lxc.sh <backup_file> [container_name] [--privileged]
 ```
 
+### destroy-lxc.sh
+
+Permanently destroys a single container.
+
+**Behavior:**
+- Refuses a protected container (`EX_NOPERM` 77) — run `unprotect-lxc.sh`
+  first.
+- Confirms before destroying, default `n`.
+- Stops the container via `stop-lxc.sh` only when `lxc-info` reports it
+  `RUNNING`.
+- Calls `lxc-destroy` without `-f` or `-s`: a container still running, or one
+  with snapshots, fails here with liblxc's own message rather than being
+  forced. Destroy a container with snapshots by running `lxc-destroy -s` by
+  hand.
+- Last, stops, resets and disables the per-container systemd service
+  instance and removes its drop-ins — never the shared `@.service` template.
+- Scope follows the invoking EUID: run with `sudo` for privileged
+  (system-scope) containers, run as your user for unprivileged ones.
+
+**Usage:**
+
+```bash
+./destroy-lxc.sh mycontainer            # Destroy a container
+sudo ./destroy-lxc.sh web               # Destroy a privileged container
+```
+
 ### config-lxc-ssh.sh
 
 Configures SSH key-based authentication for containers:
@@ -484,7 +518,7 @@ Scripts use standard sysexits.h codes:
 | Code | Name | Description |
 |------|------|-------------|
 | 0 | EX_OK | Success |
-| 1 | — | General error. `_download-lxc-scripts.sh` returns it when one or more script downloads failed; the per-file failures are already reported on stdout. |
+| 1 | — | General error. `_download-lxc-scripts.sh` returns it when one or more script downloads failed (the per-file failures are already reported on stdout); `destroy-lxc.sh` returns it when `lxc-destroy` fails. |
 | 64 | EX_USAGE | Command line usage error |
 | 65 | EX_DATAERR | Data format error |
 | 66 | EX_NOINPUT | Input file not found |

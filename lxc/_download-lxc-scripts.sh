@@ -28,6 +28,7 @@ get_script_list() {
     echo "backup-lxc.sh"
     echo "config-lxc-ssh.sh"
     echo "create-lxc.sh"
+    echo "destroy-lxc.sh"
     echo "protect-lxc.sh"
     echo "restart-lxc.sh"
     echo "restore-lxc.sh"
