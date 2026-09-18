@@ -315,11 +315,15 @@ sudo ./unprotect-lxc.sh web               # Unprotect a privileged container
 
 ### watch-lxc.sh
 
-A live status display that refreshes every 5 seconds. Each frame shows the
-output of `lxc-ls --fancy` followed by `df -h /` for the host root filesystem.
-Press Ctrl+C to stop.
+A live status display that refreshes every 5 seconds. Each frame shows a
+`NAME STATE IPV4 IPV6 UNPRIVILEGED PROTECTED` container table followed by
+`df -h /` for the host root filesystem. Press Ctrl+C to stop.
 
 **Behavior:**
+- The `PROTECTED` column is read from each container's own config (the same
+  check `protect-lxc.sh --status` uses), not reported by `lxc-ls` itself.
+- Prints "⚠ No containers defined under `<path>`" instead of an empty table
+  when no containers exist under the invoking EUID's scope.
 - Output reflects the EUID's container scope: run with `sudo` for privileged
   (system-scope) containers, run as your user for unprivileged ones.
 - Forces a full screen clear on terminal resize so column widths re-render

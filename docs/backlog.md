@@ -45,7 +45,7 @@
 - **Source:** 2026-04-27 initial implementation of `lxc/watch-lxc.sh`.
 - **Problem:** `services-check.sh --watch` accepts service-name filters as positional args; `watch-lxc.sh` enforces a strict no-args check in `main()`, so users cannot narrow the display to a single LXC.
 - **Why deferred:** (a) the typical use case is "show everything" at a glance; (b) `lxc-ls --fancy <names...>` already accepts a name filter, so the implementation cost is low when actually requested.
-- **Action on pickup:** Replace the strict no-args check in `main()` with a positional-args collection pattern (see the positional-args loop in `lxc/stop-lxc.sh`), then forward the array as `lxc-ls --fancy "${CONTAINERS[@]}"` inside `watch_loop`.
+- **Action on pickup:** Replace the strict no-args check in `main()` with a positional-args collection pattern (see the positional-args loop in `lxc/stop-lxc.sh`), then forward the array into `render_container_table`'s `lxc-ls --fancy --fancy-format NAME,STATE,IPV4,IPV6,UNPRIVILEGED` call (as of 2026-09-16 that call lives in `render_container_table`, not `watch_loop`, and already carries `--fancy-format`; append `"${CONTAINERS[@]}"` after it).
 
 ### `utils/push-ghostty-terminfo.sh` multi-host targeting (added 2026-07-14)
 
@@ -193,3 +193,17 @@
 - **Problem:** Both `lxc/stop-lxc.sh` and `lxc/restart-lxc.sh` use `RUNNING=( $(/usr/bin/lxc-ls --running) )` (the two `SC2207`s in `lxc/`) — the exact unquoted command-substitution-into-array pattern AGENTS.md §Anti-Patterns forbids. It works today only because container names cannot contain whitespace.
 - **Why deferred:** Neither file is touched by this work, and the fix wants a `mapfile`-based rewrite verified on a host with running containers.
 - **Action on pickup:** Replace `RUNNING=( $(/usr/bin/lxc-ls --running) )` in both files with `mapfile -t RUNNING < <(/usr/bin/lxc-ls -1 --running)` — the `-1` is required because plain `lxc-ls` pads every name to the longest name's column width and separates with a space or newline depending on terminal width, while `-1` prints one bare name per line — then verify against a host with running containers.
+
+### Manual `lxc-destroy -s` leaves the container's systemd state behind (added 2026-09-16)
+
+- **Source:** Review of the container protect/destroy work, 2026-09-16.
+- **Problem:** `lxc/README.md` tells the operator to destroy a container that has snapshots by running `lxc-destroy -s` by hand, because `destroy-lxc.sh` deliberately passes neither `-f` nor `-s`. That manual path skips the script's Step 3/3, so the per-container `lxc-bg-start@<name>.service` / `lxc-priv-bg-start@<name>.service` instance and its drop-in directory survive, and `destroy-lxc.sh` can no longer clean them up afterwards (the config is gone, so it exits 66 `EX_NOINPUT`).
+- **Why deferred:** Needs a host with snapshots to design and verify the right fix.
+- **Action on pickup:** Add either a `--snapshots` pass-through to `destroy-lxc.sh` (so `lxc-destroy -s` runs through the script's own flow) or a cleanup-only mode that removes the systemd service instance and drop-ins for a container whose directory is already gone. Either way, the systemd cleanup must stay reachable after the container directory (and its config) no longer exist.
+
+### `lxc_resolve_path` ignores a custom `lxc.lxcpath` (added 2026-09-16)
+
+- **Source:** Review of the container protect/destroy work, 2026-09-16.
+- **Problem:** `lxc_resolve_path` hardcodes `/var/lib/lxc` for EUID 0 and `${HOME}/.local/share/lxc` otherwise, while the `lxc-*` tools honour `lxc.lxcpath` from `~/.config/lxc/lxc.conf` (and `/etc/lxc/lxc.conf`). On a host that sets it, the seven callers read configs from the wrong root: `protect-lxc.sh --status` and `watch-lxc.sh`'s PROTECTED column would report `no` for a protected container, and `create-lxc.sh`'s guard would not fire (the destroy hook still vetoes, but `lxc-destroy --quiet` hides why).
+- **Why deferred:** No host with a custom `lxc.lxcpath` is available to verify against, and the fix touches every caller.
+- **Action on pickup:** Read the effective path from `lxc-config lxc.lxcpath` (falling back to the current hardcoded pair) inside `lxc_resolve_path`, verify on a host with `lxc.lxcpath` set, and check the `lxc-info`/`lxc-destroy` call sites that currently rely on the tools' own default.
