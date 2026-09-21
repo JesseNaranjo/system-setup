@@ -4,6 +4,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), date-based, ne
 This changelog begins 2026-07-06. Entries below capture the project's major
 features as of that date; earlier history is not individually recorded.
 
+## [2026-09-21]
+
+### Changed
+
+- **`docs/` pointers follow the global rule move.** `docs/README.md`, `docs/backlog.md`, and `docs/lessons.md` name §Project Docs in the global AI-instruction file and `~/.claude/rules/project-docs.md` as the owner of the entry schema, the lessons gate, and the sweep rules, replacing the retired §Backlog and §Lessons Log section names.
+
 ## [2026-09-11]
 
 ### Removed

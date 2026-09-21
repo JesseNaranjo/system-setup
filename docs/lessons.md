@@ -1,7 +1,7 @@
 # Lessons
 
 <!-- DRIFT GUARD — Do not remove the audience line below. -->
-> **Audience: AI coding agents only.** AI-maintained log of standing lessons and decision records. The four-test gate, the entry schema, the word cap and the sweep rules are owned by §Lessons Log in the global AI-instruction file (`~/.claude/CLAUDE.md`) — follow it exactly and do NOT restate it here, or the two copies drift. Open work belongs in `backlog.md`, shipped work in `changelog.md`.
+> **Audience: AI coding agents only.** AI-maintained log of standing lessons and decision records. The four-test gate, the entry schema, the word cap and the sweep rules are owned by §Project Docs in the global AI-instruction file (`~/.claude/CLAUDE.md`) and `~/.claude/rules/project-docs.md` — follow it exactly and do NOT restate it here, or the two copies drift. Open work belongs in `backlog.md`, shipped work in `changelog.md`.
 
 ## Lessons
 

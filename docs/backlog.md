@@ -1,7 +1,7 @@
 # Backlog
 
 <!-- DRIFT GUARD — Do not remove the audience line below. -->
-> **Audience: AI coding agents only.** AI-maintained backlog of open work deferred from plans and reviews. The entry schema and the sweep rules are owned by §Backlog in the global AI-instruction file (`~/.claude/CLAUDE.md`) — follow it exactly and do NOT restate it here, or the two copies drift. Completed work belongs in `changelog.md`, standing lessons and decision records in `lessons.md`.
+> **Audience: AI coding agents only.** AI-maintained backlog of open work deferred from plans and reviews. The entry schema and the sweep rules are owned by §Project Docs in the global AI-instruction file (`~/.claude/CLAUDE.md`) and `~/.claude/rules/project-docs.md` — follow it exactly and do NOT restate it here, or the two copies drift. Completed work belongs in `changelog.md`, standing lessons and decision records in `lessons.md`.
 
 ## Open
 

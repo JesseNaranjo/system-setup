@@ -7,5 +7,5 @@ Project-level documentation that doesn't belong inside a single code folder. Tra
 | File | Purpose |
 |------|---------|
 | `changelog.md` | Curated, human-readable record of completed changes ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format, newest first). |
-| `backlog.md` | AI-maintained backlog of open work deferred from plans and reviews, including concrete feature gaps. The entry schema and sweep rules are owned by §Backlog in the global AI-instruction file. |
+| `backlog.md` | AI-maintained backlog of open work deferred from plans and reviews, including concrete feature gaps. The entry schema and sweep rules are owned by §Project Docs in the global AI-instruction file and `~/.claude/rules/project-docs.md`. |
 | `lessons.md` | Standing lessons and decision records — durable facts that outlive the work that surfaced them. |
