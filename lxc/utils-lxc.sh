@@ -11,6 +11,7 @@ set -euo pipefail
 
 # ── Output ────────────────────────────────────────────────────────────────────
 readonly BLUE='\033[0;34m'
+# shellcheck disable=SC2034  # BOLD_RED is used by setup-lxc.sh, which sources this
 readonly BOLD_RED='\033[1;31m'
 readonly CYAN='\033[0;36m'
 readonly GRAY='\033[0;90m'
@@ -225,6 +226,152 @@ cleanup_obsolete_scripts() {
             fi
         fi
     done
+}
+
+# ── Container protection ──────────────────────────────────────────────────────
+# Protection is a fenced lxc.hook.destroy block in the container's own config.
+# liblxc runs destroy hooks before it touches the rootfs and aborts the destroy
+# when one exits non-zero, so the gate holds against the raw lxc-destroy
+# binary, not just against these scripts.
+
+readonly PROTECT_BEGIN='# --- BEGIN protect-lxc ---'
+readonly PROTECT_END='# --- END protect-lxc ---'
+
+# LXC root directory for the invoking EUID.
+# Usage: lxc_resolve_path
+# Returns: 0; prints the path
+lxc_resolve_path() {
+    # Root = privileged (system-scope), non-root = unprivileged (user-scope)
+    if [[ $EUID == 0 ]]; then
+        echo "/var/lib/lxc"
+    else
+        echo "${HOME}/.local/share/lxc"
+    fi
+}
+
+# A container name safe to use as a path component.
+# Usage: lxc_valid_name "dev-box"
+# Returns: 0 if valid, 1 otherwise
+lxc_valid_name() {
+    # Callers build rm -rf and sed targets from this; a slash or a leading dot
+    # would reach a path the caller never named. Deliberately stricter than
+    # liblxc, which also accepts a leading _ or -; no container here uses one.
+    [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
+}
+
+# Defined containers under an LXC root, one per line.
+# Usage: lxc_list_containers "/var/lib/lxc"
+# Returns: 0; prints nothing when the root holds no containers
+lxc_list_containers() {
+    local lxc_path="$1"
+    local container_dir
+    for container_dir in "$lxc_path"/*; do
+        [[ -d "$container_dir" && -f "$container_dir/config" ]] || continue
+        basename "$container_dir"
+    done
+}
+
+# Usage: lxc_is_protected "/var/lib/lxc/dev-box/config"
+# Returns: 0 when the sentinel block is present, 1 otherwise
+lxc_is_protected() {
+    local config="$1"
+    [[ -f "$config" ]] && grep -qxF "$PROTECT_BEGIN" "$config"
+}
+
+# Usage: lxc_protected_since "/var/lib/lxc/dev-box/config"
+# Returns: 0 and prints YYYY-MM-DD when protected ("unknown" when the block has
+# lost its date line), 1 otherwise. Protection is the fence, not the date line:
+# this must agree with lxc_is_protected so --status never contradicts the gate.
+lxc_protected_since() {
+    local config="$1"
+    local line
+    lxc_is_protected "$config" || return 1
+    if line=$(grep -m1 '^# protect-lxc: protected ' "$config"); then
+        echo "${line##* }"
+    else
+        echo "unknown"
+    fi
+}
+
+# Append the sentinel block. Idempotent: an already-protected config is left
+# unchanged — a second block would be the very shape lxc_unprotect_config refuses.
+# Usage: lxc_protect_config "/var/lib/lxc/dev-box/config" "2026-09-15"
+# Returns: 0 on success or no-op, 1 on error
+lxc_protect_config() {
+    local config="$1" today="$2"
+
+    lxc_is_protected "$config" && return 0
+
+    if [[ ! -w "$config" ]]; then
+        print_error "✖ Config not writable: $config"
+        return 1
+    fi
+
+    # Terminate an unterminated last line first, or the fence is glued onto it.
+    # Hand-edited configs are a real scenario here — restore-lxc.sh opens this
+    # very file in nano.
+    if [[ -s "$config" && -n "$(tail -c1 "$config")" ]]; then
+        echo "" >> "$config"
+    fi
+
+    {
+        echo "$PROTECT_BEGIN"
+        echo "# protect-lxc: protected ${today}"
+        echo "# lxc-destroy aborts here BEFORE the rootfs is touched."
+        # Deliberately NOT interpolating the container name: restore-lxc.sh
+        # restores an archive under a new name, and lxc-copy carries this hook
+        # into a clone, so a baked-in name would outlive the container it names.
+        echo "# Remove with: unprotect-lxc.sh <this container>"
+        # /bin/false, not a hook script: liblxc captures a hook's stdout and
+        # stderr and logs them only at DEBUG, so a script could tell the user
+        # nothing. The refusing script prints the message instead.
+        echo "lxc.hook.destroy = /bin/false"
+        echo "$PROTECT_END"
+    } >> "$config"
+
+    # Six separate writes: a full filesystem can leave the config ending at the
+    # BEGIN fence with no hook line, and lxc_is_protected keys off that fence —
+    # so --status, the watch column and every refusal would report "protected"
+    # while a raw lxc-destroy finds no hook and destroys the container. Fail
+    # loudly instead; a re-run would short-circuit on the fence.
+    if ! grep -qxF "lxc.hook.destroy = /bin/false" "$config" || ! grep -qxF "$PROTECT_END" "$config"; then
+        print_error "✖ Protection block in ${config} is incomplete — repair it by hand"
+        return 1
+    fi
+}
+
+# Remove the sentinel block.
+# Usage: lxc_unprotect_config "/var/lib/lxc/dev-box/config"
+# Returns: 0 on success, 1 on error
+lxc_unprotect_config() {
+    local config="$1"
+
+    if [[ ! -w "$config" ]]; then
+        print_error "✖ Config not writable: $config"
+        return 1
+    fi
+
+    # A sed range whose closing address never matches deletes through end of
+    # file. Verified 2026-09-15 against a config whose END fence had been
+    # removed: the delete also took the lxc.apparmor.profile line that followed.
+    # "END exists" is not enough — a complete block plus a stray second BEGIN
+    # sends the second range to EOF — and neither is counting: a reversed pair
+    # (END above BEGIN) passes both counts and runs to EOF just the same.
+    # Hand-editing this file is a real workflow here (restore-lxc.sh opens it in
+    # nano), so insist on exactly one of each fence, BEGIN first, before touching
+    # it. The order clause only runs once both counts have passed ([[ || ]]
+    # short-circuits), so grep -m1 sees exactly one of each.
+    if [[ "$(grep -cxF "$PROTECT_BEGIN" "$config")" -ne 1 \
+          || "$(grep -cxF "$PROTECT_END" "$config")" -ne 1 \
+          || "$(grep -xF -m1 -e "$PROTECT_BEGIN" -e "$PROTECT_END" "$config")" != "$PROTECT_BEGIN" ]]; then
+        print_error "✖ Malformed protection block in ${config}: expected exactly one BEGIN fence followed by one END fence — repair it by hand"
+        return 1
+    fi
+
+    # Deleted, not commented: this block is machine-written and machine-owned,
+    # and protect-lxc.sh recreates it verbatim. AGENTS.md §No Dead Code's
+    # comment-then-add rule covers operator-authored config values.
+    sed -i "/^${PROTECT_BEGIN}\$/,/^${PROTECT_END}\$/d" "$config"
 }
 
 # ══════════════════════════════════════════════════════════════════════════════

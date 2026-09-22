@@ -162,27 +162,6 @@ generate_ssh_keypair() {
     print_info "Public key: $public_key"
 }
 
-# Get list of all LXC containers for the user
-get_all_containers() {
-    local containers=()
-
-    # Check if LXC directory exists
-    if [[ ! -d "$LXC_ROOT_PATH" ]]; then
-        echo "${containers[@]}"
-        return 0
-    fi
-
-    # Find all directories containing a config file
-    for container_dir in "$LXC_ROOT_PATH"/*; do
-        if [[ -d "$container_dir" && -f "$container_dir/config" ]]; then
-            local container_name=$(basename "$container_dir")
-            containers+=("$container_name")
-        fi
-    done
-
-    echo "${containers[@]}"
-}
-
 # Check if SSH is installed in container
 check_ssh_in_container() {
     local container="$1"
@@ -433,7 +412,7 @@ main() {
     # Get list of all containers
     print_info "Detecting LXC containers for user $TARGET_USER..."
     local containers
-    read -ra containers <<< "$(get_all_containers)"
+    mapfile -t containers < <(lxc_list_containers "$LXC_ROOT_PATH")
 
     if [[ ${#containers[@]} -eq 0 ]]; then
         print_warning "⚠ No containers found for user $TARGET_USER"

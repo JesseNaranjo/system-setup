@@ -224,7 +224,7 @@ For cgroup-level swap restriction (prevents the container from actually using ho
 
 ```bash
 # From the lxc/ directory:
-sudo ./start-lxc.sh --privileged --k8s tst-k8s1
+sudo ./start-lxc.sh --k8s tst-k8s1
 ```
 
 ### 3. /proc/sys writability (privileged containers)
@@ -234,7 +234,7 @@ In privileged LXC containers, `/proc/sys` is read-only by default (LXC `proc:mix
 Fix: start the container with `--k8s` to mount `/proc` and `/sys` read-write:
 
 ```bash
-sudo ./start-lxc.sh --privileged --k8s tst-k8s1
+sudo ./start-lxc.sh --k8s tst-k8s1
 ```
 
 The `initialize-cluster.sh` preflight check will detect read-only `/proc/sys` and fail early with guidance.

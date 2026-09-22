@@ -2,7 +2,7 @@
 
 # create-lxc.sh - Create an LXC container (with optional destroy/recreate)
 #
-# Usage: ./create-lxc.sh [--privileged] <container_name> [distribution] [release] [architecture]
+# Usage: ./create-lxc.sh <container_name> [distribution] [release] [architecture]
 #
 # This script creates an LXC container. If a container with the same name
 # already exists, it prompts for confirmation before stopping, destroying,
@@ -10,13 +10,14 @@
 # will be auto-detected from the host system if not provided. If auto-detection
 # fails, the lxc-create download template will prompt interactively.
 #
-# Options:
-#   --privileged  Create a privileged container (requires root)
+# When run as root (e.g., via sudo), the script creates a privileged
+# (system-scope) container. Otherwise, it creates an unprivileged
+# (user-scope) container.
 #
 # Examples:
 #   ./create-lxc.sh mycontainer
 #   ./create-lxc.sh mycontainer debian bookworm amd64
-#   ./create-lxc.sh --privileged mycontainer
+#   sudo ./create-lxc.sh mycontainer
 
 set -euo pipefail
 
@@ -32,7 +33,7 @@ source "${SCRIPT_DIR}/utils-lxc.sh"
 # ============================================================================
 
 show_usage() {
-    echo "Usage: ${0##*/} [--privileged] <container_name> [distribution] [release] [architecture]"
+    echo "Usage: ${0##*/} <container_name> [distribution] [release] [architecture]"
     echo ""
     echo "Arguments:"
     echo "  container_name  - Name of container to refresh (required)"
@@ -40,13 +41,13 @@ show_usage() {
     echo "  release         - Distribution release (optional, auto-detected if omitted)"
     echo "  architecture    - System architecture (optional, auto-detected if omitted)"
     echo ""
-    echo "Options:"
-    echo "  --privileged    - Create a privileged container (requires root)"
+    echo "Run under sudo to create a privileged (system-scope) container;"
+    echo "run as your user to create an unprivileged (user-scope) one."
     echo ""
     echo "Examples:"
     echo "  ${0##*/} mycontainer"
     echo "  ${0##*/} mycontainer debian bookworm amd64"
-    echo "  ${0##*/} --privileged mycontainer"
+    echo "  sudo ${0##*/} mycontainer"
     echo ""
     echo "If a container with the same name already exists, you will be"
     echo "prompted for confirmation before it is destroyed and recreated."
@@ -59,7 +60,6 @@ show_usage() {
 main() {
     check_for_updates "${BASH_SOURCE[0]}" "$@"
 
-    local PRIVILEGED=false
     local CONTAINER_NAME=""
     local DISTRIBUTION=""
     local RELEASE=""
@@ -67,10 +67,6 @@ main() {
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --privileged)
-                PRIVILEGED=true
-                shift
-                ;;
             --help|-h)
                 show_usage
                 exit 0
@@ -100,12 +96,6 @@ main() {
         echo ""
         show_usage
         exit 64  # EX_USAGE
-    fi
-
-    # Privileged mode requires root
-    if [[ "$PRIVILEGED" == true && $EUID != 0 ]]; then
-        print_error "✖ --privileged requires root."
-        exit 1
     fi
 
     # Detect distribution if not specified
@@ -160,7 +150,7 @@ main() {
     echo "            Distribution: ${DISTRIBUTION:-<will prompt>}"
     echo "            Release: ${RELEASE:-<will prompt>}"
     echo "            Architecture: ${ARCHITECTURE:-<will prompt>}"
-    [[ "$PRIVILEGED" == true ]] && echo "            Mode: privileged"
+    [[ $EUID == 0 ]] && echo "            Mode: privileged"
     echo ""
 
     # Check if container already exists
@@ -168,6 +158,13 @@ main() {
     if lxc-info -n "${CONTAINER_NAME}" &>/dev/null; then
         CONTAINER_EXISTS=true
         print_warning "⚠ Container '${CONTAINER_NAME}' already exists!"
+        local CONFIG_FILE
+        CONFIG_FILE="$(lxc_resolve_path)/${CONTAINER_NAME}/config"
+        if lxc_is_protected "$CONFIG_FILE"; then
+            print_error "✖ ${CONTAINER_NAME} is protected (since $(lxc_protected_since "$CONFIG_FILE"))"
+            print_info "Run: $( [[ $EUID == 0 ]] && echo "sudo " )./unprotect-lxc.sh ${CONTAINER_NAME}"
+            exit 77  # EX_NOPERM
+        fi
         echo ""
         if ! prompt_yes_no "            Do you want to destroy and recreate it?" "n"; then
             print_info "Operation cancelled by user"
@@ -190,19 +187,7 @@ main() {
         # Step: Stop the container
         ((CURRENT_STEP++)) || true
         print_info "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Stopping container..."
-        local PRIV_FLAG=()
-        [[ "$PRIVILEGED" == true ]] && PRIV_FLAG=(--privileged)
-        if [[ -f "$SCRIPT_DIR/stop-lxc.sh" ]]; then
-            "$SCRIPT_DIR/stop-lxc.sh" ${PRIV_FLAG[@]+"${PRIV_FLAG[@]}"} "$CONTAINER_NAME"
-        else
-            print_warning "⚠ stop-lxc.sh not found, attempting to stop manually..."
-            lxc-stop --name "$CONTAINER_NAME" || true
-            if [[ "$PRIVILEGED" == true ]]; then
-                systemctl stop "lxc-priv-bg-start@${CONTAINER_NAME}.service" 2>/dev/null || true
-            else
-                systemctl --user stop "lxc-bg-start@${CONTAINER_NAME}.service" 2>/dev/null || true
-            fi
-        fi
+        "$SCRIPT_DIR/stop-lxc.sh" "$CONTAINER_NAME"
         echo ""
 
         # Step: Destroy the container
@@ -232,7 +217,6 @@ main() {
         print_success "✓ Container created: $CONTAINER_NAME"
 
         # Offer Kubernetes container settings
-        [[ "$PRIVILEGED" == true ]] && START_FLAGS+=(--privileged)
         if [[ "$CONTAINER_NAME" == *k8s* ]]; then
             echo ""
             print_info "This container name suggests Kubernetes usage."
@@ -250,41 +234,7 @@ main() {
     # Step: Start the container
     ((CURRENT_STEP++)) || true
     print_info "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Starting container..."
-    if [[ -f "$SCRIPT_DIR/start-lxc.sh" ]]; then
-        "$SCRIPT_DIR/start-lxc.sh" --attach ${START_FLAGS[@]+"${START_FLAGS[@]}"} "$CONTAINER_NAME"
-    else
-        if [[ ${#START_FLAGS[@]} -gt 0 ]]; then
-            print_warning "⚠ start-lxc.sh not found — cannot apply ${START_FLAGS[*]}; configure manually"
-        fi
-        print_warning "⚠ start-lxc.sh not found, attempting to start manually..."
-        if [[ "$PRIVILEGED" == true ]]; then
-            if systemctl start "lxc-priv-bg-start@${CONTAINER_NAME}.service"; then
-                print_success "✓ Service and Container started: ${CONTAINER_NAME}"
-                echo ""
-                lxc-ls --fancy
-                echo ""
-                print_info "Attaching to ${CONTAINER_NAME} as root (use 'exit' or Ctrl+D to detach)..."
-                echo ""
-                lxc-attach --name "$CONTAINER_NAME" --set-var HOME=/root -- /bin/bash -l
-            else
-                print_error "✖ Failed to start container: ${CONTAINER_NAME}"
-                exit 1
-            fi
-        else
-            if systemctl --user start "lxc-bg-start@${CONTAINER_NAME}.service"; then
-                print_success "✓ Service and Container started: ${CONTAINER_NAME}"
-                echo ""
-                lxc-ls --fancy
-                echo ""
-                print_info "Attaching to ${CONTAINER_NAME} as root (use 'exit' or Ctrl+D to detach)..."
-                echo ""
-                lxc-unpriv-attach --name "$CONTAINER_NAME" --set-var HOME=/root -- /bin/bash -l
-            else
-                print_error "✖ Failed to start container: ${CONTAINER_NAME}"
-                exit 1
-            fi
-        fi
-    fi
+    "$SCRIPT_DIR/start-lxc.sh" --attach ${START_FLAGS[@]+"${START_FLAGS[@]}"} "$CONTAINER_NAME"
 
     echo ""
     print_success "Container $CONTAINER_NAME has been successfully created!"
