@@ -206,7 +206,8 @@ extract_original_stanza() {
     done < "$INTERFACES_FILE"
 
     # Also check sourced files
-    local source_dirs=$(grep -E "^[[:space:]]*(source|source-directory)[[:space:]]+" "$INTERFACES_FILE" 2>/dev/null | awk '{print $2}' || true)
+    local source_dirs
+    source_dirs=$(grep -E "^[[:space:]]*(source|source-directory)[[:space:]]+" "$INTERFACES_FILE" 2>/dev/null | awk '{print $2}' || true)
 
     for source_path in $source_dirs; do
         # Expand globs
@@ -315,12 +316,13 @@ check_unsupported_config() {
     done
 
     # Check original stanza for pre/post commands
-    local stanza=$(get_cached_stanza "$iface")
+    local stanza
+    stanza=$(get_cached_stanza "$iface")
     for keyword in pre-up post-up up pre-down post-down down; do
         if echo "$stanza" | grep -qE "^[[:space:]]+${keyword}[[:space:]]"; then
             # Avoid duplicates
             local entry="$iface: $keyword script"
-            if [[ ! " ${UNSUPPORTED_FOUND[*]} " =~ " ${entry} " ]]; then
+            if [[ " ${UNSUPPORTED_FOUND[*]} " != *" ${entry} "* ]]; then
                 UNSUPPORTED_FOUND+=("$entry")
             fi
         fi
@@ -340,12 +342,10 @@ generate_network_file() {
 
     local content=""
     local is_bridge=false
-    local bridge_ports=""
 
     # Check if this is a bridge
     if echo "$config_inet" | grep -qi "^bridge_ports"; then
         is_bridge=true
-        bridge_ports=$(echo "$config_inet" | grep -i "^bridge_ports" | cut -d: -f2- | xargs)
     fi
 
     # Header
@@ -406,7 +406,8 @@ generate_network_file() {
         # Convert netmask to CIDR if needed
         if [[ -n "$address" ]]; then
             if [[ "$address" != *"/"* && -n "$netmask" ]]; then
-                local cidr=$(netmask_to_cidr "$netmask")
+                local cidr
+                cidr=$(netmask_to_cidr "$netmask")
                 address="${address}/${cidr}"
             fi
             content+="Address=$address"$'\n'
@@ -474,7 +475,8 @@ generate_network_file() {
     content+="# Original /etc/network/interfaces stanza:"$'\n'
     content+="# ============================================================================"$'\n'
 
-    local original_stanza=$(get_cached_stanza "$iface")
+    local original_stanza
+    original_stanza=$(get_cached_stanza "$iface")
     if [[ -n "$original_stanza" ]]; then
         while IFS= read -r line; do
             content+="# $line"$'\n'
@@ -557,7 +559,8 @@ perform_migration() {
     echo ""
 
     # Get list of interfaces
-    local interfaces=$(get_interface_list | sort -u)
+    local interfaces
+    interfaces=$(get_interface_list | sort -u)
 
     if [[ -z "$interfaces" ]]; then
         print_warning "⚠ No interfaces found to migrate."
@@ -578,10 +581,12 @@ perform_migration() {
 
     # First pass: identify bridges and their ports
     for iface in $interfaces; do
-        local config_inet=$(parse_interface_config "$iface")
+        local config_inet
+        config_inet=$(parse_interface_config "$iface")
 
         if echo "$config_inet" | grep -qi "^bridge_ports"; then
-            local ports=$(echo "$config_inet" | grep -i "^bridge_ports" | cut -d: -f2- | xargs)
+            local ports
+            ports=$(echo "$config_inet" | grep -i "^bridge_ports" | cut -d: -f2- | xargs)
             for port in $ports; do
                 bridge_ports_map["$port"]="$iface"
             done
@@ -598,7 +603,8 @@ perform_migration() {
             print_info "  - $iface is a member of bridge $bridge, generating port config"
 
             local port_file="${NETWORKD_DIR}/${PRIORITY_STANDARD}-${iface}.network"
-            local port_content=$(generate_bridge_port_network "$iface" "$bridge")
+            local port_content
+            port_content=$(generate_bridge_port_network "$iface" "$bridge")
 
             write_config_file "$port_file" "$port_content" "network" || return 1
             continue
@@ -624,7 +630,8 @@ perform_migration() {
                 if [[ "$line" =~ ^[[:space:]]*iface[[:space:]]+"$iface"[[:space:]]+inet6 ]]; then
                     in_inet6=true
                     # Extract method
-                    local method6=$(echo "$line" | awk '{print $4}')
+                    local method6
+                    method6=$(echo "$line" | awk '{print $4}')
                     config_inet6+="method: $method6"$'\n'
                     continue
                 fi
@@ -656,14 +663,16 @@ perform_migration() {
 
             # Create .netdev file for bridge
             local netdev_file="${NETWORKD_DIR}/${priority}-${iface}.netdev"
-            local netdev_content=$(generate_bridge_netdev "$iface")
+            local netdev_content
+            netdev_content=$(generate_bridge_netdev "$iface")
 
             write_config_file "$netdev_file" "$netdev_content" "netdev" || return 1
         fi
 
         # Generate .network file
         local network_file="${NETWORKD_DIR}/${priority}-${iface}.network"
-        local network_content=$(generate_network_file "$iface" "$config_inet" "$config_inet6")
+        local network_content
+        network_content=$(generate_network_file "$iface" "$config_inet" "$config_inet6")
 
         write_config_file "$network_file" "$network_content" "network" || return 1
 
@@ -701,7 +710,9 @@ configure_resolv_conf() {
     echo ""
 
     if [[ -L "$RESOLV_CONF" ]]; then
-        local current_target=$(readlink -f "$RESOLV_CONF")
+        # `|| true`: readlink -f exits 1 on a symlink into a missing directory; an empty target falls through to the prompt
+        local current_target
+        current_target=$(readlink -f "$RESOLV_CONF") || true
         if [[ "$current_target" == "$RESOLVED_STUB" || "$current_target" == "/run/systemd/resolve/stub-resolv.conf" ]]; then
             print_success "✓ $RESOLV_CONF is already symlinked to systemd-resolved"
             return 0
@@ -724,7 +735,10 @@ configure_resolv_conf() {
             print_error "✖ Failed to create symlink: $RESOLV_CONF -> $RESOLVED_STUB"
             # Restore from backup
             local latest_backup
-            latest_backup=$(ls -t "${RESOLV_CONF}.backup."*.bak 2>/dev/null | head -1)
+            # backup_file names each copy <file>.backup.<YYYYmmdd_HHMMSS>.bak, so the glob's
+            # sorted order is creation order and its last match is the newest backup
+            local backups=("${RESOLV_CONF}.backup."*.bak)
+            latest_backup="${backups[-1]}"
             if [[ -n "$latest_backup" && -f "$latest_backup" ]]; then
                 cp -p "$latest_backup" "$RESOLV_CONF"
                 print_info "Restored $RESOLV_CONF from backup"
@@ -830,7 +844,7 @@ verify_network_connectivity() {
         if [[ "$configured_count" -gt 0 ]]; then
             print_success "✓ systemd-networkd has $configured_count configured interface(s)"
             # Show interface status for verification
-            echo "$networkctl_output" | while read -r idx name type state; do
+            echo "$networkctl_output" | while read -r _ name _ state; do
                 if [[ "$state" == "routable" || "$state" == "configured" ]]; then
                     print_info "  - $name: $state"
                 fi
@@ -865,14 +879,14 @@ rollback_new_networking() {
         if [[ -f "$file" ]]; then
             rm -f "$file"
             print_info "  Removed $file"
-            ((deleted_count++))
+            ((deleted_count++)) || true
         fi
     done
     for file in "${CREATED_NETDEV_FILES[@]}"; do
         if [[ -f "$file" ]]; then
             rm -f "$file"
             print_info "  Removed $file"
-            ((deleted_count++))
+            ((deleted_count++)) || true
         fi
     done
 
@@ -883,7 +897,10 @@ rollback_new_networking() {
     # Restore resolv.conf from backup if we symlinked it
     if [[ "$RESOLV_CONF_SYMLINKED" == true ]]; then
         local latest_backup
-        latest_backup=$(ls -t "${RESOLV_CONF}.backup."*.bak 2>/dev/null | head -1)
+        # backup_file names each copy <file>.backup.<YYYYmmdd_HHMMSS>.bak, so the glob's
+        # sorted order is creation order and its last match is the newest backup
+        local backups=("${RESOLV_CONF}.backup."*.bak)
+        latest_backup="${backups[-1]}"
         if [[ -n "$latest_backup" && -f "$latest_backup" ]]; then
             rm -f "$RESOLV_CONF"
             cp -p "$latest_backup" "$RESOLV_CONF"
