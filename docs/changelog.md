@@ -6,6 +6,10 @@ features as of that date; earlier history is not individually recorded.
 
 ## [2026-10-01]
 
+### Fixed
+
+- **The three `github/gh_org_*.sh` standalones are shellcheck-clean, and the failure handlers that `local` was masking now run.** Splitting every `local x=$(…)` (SC2155) makes `gh_org_copy.sh`'s `copy_discussions` report a failed GraphQL fetch as such instead of claiming the destination has no discussion categories, stop paging when a page fetch fails (`gh api graphql` prints the partial response before exiting 1, and the old code kept paging through it), and skip rather than count a discussion whose `createDiscussion` mutation failed, while `gh_org_delete_issues.sh` now reports a repository whose issues cannot be listed ("⚠ Could not list issues; skipping") instead of "No issues found", and both delete scripts tell a failed `gh repo list` ("✖ Failed to fetch repositories from <org>") apart from an empty organization ("✖ No repositories found in <org>"). The GraphQL query strings carry narrow per-line `SC2016` disables, and the unused `DST_MS`, `NUM` and `GRAY` are deleted.
+
 ### Removed
 
 - **`github/gh_org_copy-backup.sh`.** The 486-line snapshot of an older `gh_org_copy.sh` was never run, sourced, or listed by any updater, and had missed every cross-copy helper fix since it was taken; git history keeps it. `github/README.md` drops its Legacy row, and the executable-bit assertion in `tests/test-self-update.sh` now allowlists only the five sourced `utils-*.sh` libraries.

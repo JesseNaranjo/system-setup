@@ -39,7 +39,6 @@ set -euo pipefail
 # Colors for output
 readonly BLUE='\033[0;34m'
 readonly CYAN='\033[0;36m'
-readonly GRAY='\033[0;90m'
 readonly GREEN='\033[0;32m'
 readonly RED='\033[0;31m'
 readonly YELLOW='\033[1;33m'
@@ -522,11 +521,15 @@ main() {
         echo ""
 
         # Get repository list
-        local repos_json=$(gh repo list "$ORG" --limit 1000 --json nameWithOwner,isArchived,visibility)
-        local repos=$(echo "$repos_json" | jq -r '.[] | @base64')
+        local repos_json repos
+        if ! repos_json=$(gh repo list "$ORG" --limit 1000 --json nameWithOwner,isArchived,visibility); then
+            print_error "✖ Failed to fetch repositories from ${ORG}"
+            exit 1
+        fi
+        repos=$(echo "$repos_json" | jq -r '.[] | @base64')
 
         if [[ -z "$repos" ]]; then
-            print_error "✖ No repositories found or failed to fetch repositories"
+            print_error "✖ No repositories found in ${ORG}"
             exit 1
         fi
 
@@ -554,7 +557,8 @@ main() {
             local full_repo_name="${ORG}/${repo}"
 
             # Check if repository exists and get details
-            local repo_json=$(gh repo view "$full_repo_name" --json nameWithOwner,isArchived,visibility 2>/dev/null || echo "")
+            local repo_json
+            repo_json=$(gh repo view "$full_repo_name" --json nameWithOwner,isArchived,visibility 2>/dev/null || echo "")
 
             if [[ -z "$repo_json" ]]; then
                 echo ""
@@ -564,9 +568,10 @@ main() {
                 continue
             fi
 
-            local repo_name=$(echo "$repo_json" | jq -r '.nameWithOwner')
-            local is_archived=$(echo "$repo_json" | jq -r '.isArchived')
-            local visibility=$(echo "$repo_json" | jq -r '.visibility')
+            local repo_name is_archived visibility
+            repo_name=$(echo "$repo_json" | jq -r '.nameWithOwner')
+            is_archived=$(echo "$repo_json" | jq -r '.isArchived')
+            visibility=$(echo "$repo_json" | jq -r '.visibility')
 
             if ! should_process_repo "$repo_name" "$is_archived"; then
                 echo ""

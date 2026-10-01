@@ -39,7 +39,6 @@ set -euo pipefail
 # Colors for output
 readonly BLUE='\033[0;34m'
 readonly CYAN='\033[0;36m'
-readonly GRAY='\033[0;90m'
 readonly GREEN='\033[0;32m'
 readonly RED='\033[0;31m'
 readonly YELLOW='\033[1;33m'
@@ -452,15 +451,21 @@ process_repository() {
     echo ""
     echo -e "${CYAN}━━━━ [$visibility] $repo_name ━━━━${NC}"
 
-    # Get issue list
-    local issues=$(gh issue list -R "$repo_name" --state "$state_arg" --limit 2000 --json number,title,state | jq -c '.[]')
+    # Get issue list. A failed listing (issues disabled, no access, network) skips
+    # this repository rather than aborting the whole run under `set -e`.
+    local issues
+    if ! issues=$(gh issue list -R "$repo_name" --state "$state_arg" --limit 2000 --json number,title,state | jq -c '.[]'); then
+        print_warning "⚠ Could not list issues; skipping"
+        return 0
+    fi
 
     if [[ -z "$issues" || "$issues" == "null" ]]; then
         print_info "No issues found"
         return 0
     fi
 
-    local issues_count=$(echo "$issues" | wc -l | tr -d ' ')
+    local issues_count
+    issues_count=$(echo "$issues" | wc -l | tr -d ' ')
     print_info "Found $issues_count issue(s)"
     ((TOTAL_ISSUES_FOUND += issues_count)) || true
     echo ""
@@ -517,6 +522,7 @@ attempt_delete_issue() {
     local node_id
 
     # Get node ID for the issue
+    # shellcheck disable=SC2016  # $owner, $name and $number are GraphQL variables that the API binds, not bash expansions
     node_id=$(gh api graphql -f query='
         query($owner:String!, $name:String!, $number:Int!) {
             repository(owner:$owner, name:$name) {
@@ -534,6 +540,7 @@ attempt_delete_issue() {
     fi
 
     # Attempt deletion
+    # shellcheck disable=SC2016  # $issueId is a GraphQL variable that the API binds, not a bash expansion
     if gh api graphql -f query='
         mutation($issueId:ID!) {
             deleteIssue(input:{issueId:$issueId}) {
@@ -611,16 +618,21 @@ main() {
     echo ""
 
     # Get repository list
-    local repos_json=$(gh repo list "$ORG" --limit 1000 --json nameWithOwner,isArchived,visibility)
-    local repos=$(echo "$repos_json" | jq -r '.[] | @base64')
+    local repos_json repos
+    if ! repos_json=$(gh repo list "$ORG" --limit 1000 --json nameWithOwner,isArchived,visibility); then
+        print_error "✖ Failed to fetch repositories from ${ORG}"
+        exit 1
+    fi
+    repos=$(echo "$repos_json" | jq -r '.[] | @base64')
 
     if [[ -z "$repos" ]]; then
-        print_error "✖ No repositories found or failed to fetch repositories"
+        print_error "✖ No repositories found in ${ORG}"
         exit 1
     fi
 
     local num_repos=0
-    local state_arg=$([[ $ONLY_OPEN -eq 1 ]] && echo "open" || echo "all")
+    local state_arg
+    state_arg=$([[ $ONLY_OPEN -eq 1 ]] && echo "open" || echo "all")
 
     while IFS= read -r enc; do
         local repo_name is_archived visibility

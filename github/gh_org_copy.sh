@@ -611,15 +611,14 @@ copy_labels_and_milestones() {
         --jq '.[] | [.name,.color,(.description//"")] | @tsv')
 
     print_step "Copying milestones for ${name}"
-    # Build map of destination title → destination number
-    declare -A DST_MS=()
     # Create any missing milestones by title
     while read -r row; do
         _j() { echo "$row" | base64 --decode | jq -r "$1"; }
-        local TITLE=$(_j '.title')
-        local DESC=$(_j '.description // empty')
-        local STATE=$(_j '.state')
-        local DUE=$(_j '.due_on // empty')
+        local TITLE DESC STATE DUE
+        TITLE=$(_j '.title')
+        DESC=$(_j '.description // empty')
+        STATE=$(_j '.state')
+        DUE=$(_j '.due_on // empty')
 
         # Check if milestone already exists
         if ! gh_api "/repos/${DST_ORG}/${name}/milestones?state=all&per_page=100" \
@@ -681,7 +680,8 @@ create_issue_in_dest() {
     local created="$7"
 
     # Idempotency: skip if exact title exists already
-    local existing="$(exists_issue_number_by_title "$name" "$title" "$created" || true)"
+    local existing
+    existing="$(exists_issue_number_by_title "$name" "$title" "$created" || true)"
     if [[ -n "$existing" ]]; then
         print_info "Issue already exists in ${DST_ORG}/${name} with same title, skipping (#${existing})"
         ((TOTAL_ISSUES_SKIPPED++)) || true
@@ -696,7 +696,8 @@ create_issue_in_dest() {
     fi
 
     # Build JSON body with jq (correct conditional, no ternary)
-    local json="$(jq -n \
+    local json
+    json="$(jq -n \
         --arg t "$title" \
         --arg b "$body" \
         --argjson lbls "$labels_json" \
@@ -709,11 +710,13 @@ create_issue_in_dest() {
       ')"
 
     # Create issue
-    local resp="$(printf '%s' "$json" \
+    local resp
+    resp="$(printf '%s' "$json" \
            | gh_api -H "Accept: application/vnd.github+json" \
                    -X POST "/repos/${DST_ORG}/${name}/issues" --input -)"
 
-    local newnum="$(printf '%s' "$resp" | jq -r '.number')"
+    local newnum
+    newnum="$(printf '%s' "$resp" | jq -r '.number')"
     ((TOTAL_ISSUES_COPIED++)) || true
 
     # Close it if source was closed
@@ -745,7 +748,7 @@ copy_issues() {
     # Page through all issues from source (includes PRs; we filter those out)
     while IFS= read -r row; do
         # Extract fields
-        local NUM TITLE BODY URL STATE AUTHOR CREATED MIL_TITLE
+        local TITLE BODY URL STATE AUTHOR CREATED MIL_TITLE
         local LABELS_JSON
 
         TITLE=$(jq -r '.title'        <<<"$row")
@@ -772,7 +775,8 @@ copy_issues() {
         fi
 
         # Copy comments for this issue
-        local num=$(jq -r '.number' <<<"$row")
+        local num
+        num=$(jq -r '.number' <<<"$row")
         while IFS= read -r crow; do
             local CAUTH CDATE CBODY CMT
             CAUTH=$(jq -r '.author'      <<<"$crow")
@@ -812,23 +816,26 @@ copy_prs_as_archival_issues() {
 
     while read -r row; do
         _j() { echo "$row" | base64 --decode | jq -r "$1"; }
-        local PRNUM=$(_j '.number')
-        local TITLE=$(_j '.title')
-        local BODY=$(_j '.body // ""')
-        local URL=$(_j '.html_url')
-        local STATE=$(_j '.state')
-        local CREATED=$(_j '.created_at')
-        local MRGD=$(_j '.merged_at // ""')
-        local USER=$(_j '.user.login')
-        local BASE=$(_j '.base.ref')
-        local HEAD=$(_j '.head.ref')
+        local PRNUM TITLE BODY URL STATE CREATED MRGD USER BASE HEAD
+        PRNUM=$(_j '.number')
+        TITLE=$(_j '.title')
+        BODY=$(_j '.body // ""')
+        URL=$(_j '.html_url')
+        STATE=$(_j '.state')
+        CREATED=$(_j '.created_at')
+        MRGD=$(_j '.merged_at // ""')
+        USER=$(_j '.user.login')
+        BASE=$(_j '.base.ref')
+        HEAD=$(_j '.head.ref')
 
         local ITITLE="[PR #${PRNUM}] ${TITLE}"
         local HEADER="**Archived Pull Request** — copied from ${URL}\n\n- Original author: @${USER}\n- State: ${STATE}\n- Merged at: ${MRGD}\n- Base: \`${BASE}\`\n- Head: \`${HEAD}\`\n"
         local IBODY="${HEADER}\n---\n${BODY}"
-        local LABELS_JSON="$(jq -cn --arg a "$LABEL_ARCHIVED_PR" '[$a]')"
+        local LABELS_JSON
+        LABELS_JSON="$(jq -cn --arg a "$LABEL_ARCHIVED_PR" '[$a]')"
 
-        local NEWNUM="$(create_issue_in_dest "$name" "$ITITLE" "$IBODY" "$LABELS_JSON" "" "$STATE" "$CREATED")"
+        local NEWNUM
+        NEWNUM="$(create_issue_in_dest "$name" "$ITITLE" "$IBODY" "$LABELS_JSON" "" "$STATE" "$CREATED")"
 
         # If skipped (duplicate archival issue already exists), don't add comments again
         if [[ -z "$NEWNUM" ]]; then
@@ -852,10 +859,11 @@ copy_prs_as_archival_issues() {
 
         # Merge and sort chronologically
         while read -r c; do
-            local KIND=$(echo "$c" | jq -r '.kind')
-            local AUTH=$(echo "$c" | jq -r '.author')
-            local DATE=$(echo "$c" | jq -r '.created_at')
-            local BODY=$(echo "$c" | jq -r '.body')
+            local KIND AUTH DATE BODY
+            KIND=$(echo "$c" | jq -r '.kind')
+            AUTH=$(echo "$c" | jq -r '.author')
+            DATE=$(echo "$c" | jq -r '.created_at')
+            BODY=$(echo "$c" | jq -r '.body')
             local CMT="**(${KIND//_/ } by @${AUTH} on ${DATE})**\n\n${BODY}"
             if post_issue_comment "$name" "$NEWNUM" "$CMT"; then
                 ((TOTAL_PR_COMMENTS_COPIED++)) || true
@@ -878,6 +886,7 @@ copy_discussions() {
     print_step "Copying discussions for ${name}"
 
     # GraphQL query to fetch discussions and categories from both source and destination
+    # shellcheck disable=SC2016  # $so, $sr, $do, $dr and $after are GraphQL variables that the API binds, not bash expansions
     local q='
     query($so:String!,$sr:String!,$do:String!,$dr:String!,$after:String){
       src: repository(owner:$so,name:$sr){
@@ -901,12 +910,14 @@ copy_discussions() {
     }'
 
     # Build dest category map (name -> id)
-    local dstCatsJSON="$(gh_gql -f query="$q" -F so="$SRC_ORG" -F sr="$name" -F do="$DST_ORG" -F dr="$name" -F after="")" || {
+    local dstCatsJSON
+    dstCatsJSON="$(gh_gql -f query="$q" -F so="$SRC_ORG" -F sr="$name" -F do="$DST_ORG" -F dr="$name" -F after="")" || {
         print_warning "⚠ GraphQL fetch failed for ${name} (likely no Discussions)"
         return
     }
-    local dstCats="$(echo "$dstCatsJSON" | jq -c '.data.dst.discussionCategories.nodes')" || dstCats="[]"
-    local hasCats="$(echo "$dstCats" | jq 'length>0')" || hasCats="false"
+    local dstCats hasCats
+    dstCats="$(echo "$dstCatsJSON" | jq -c '.data.dst.discussionCategories.nodes')" || dstCats="[]"
+    hasCats="$(echo "$dstCats" | jq 'length>0')" || hasCats="false"
     if [[ "$hasCats" != "true" ]]; then
         print_warning "⚠ Destination repo ${DST_ORG}/${name} has no discussion categories; skipping discussions"
         return
@@ -916,7 +927,8 @@ copy_discussions() {
     local cursor=""
     local hasNext="true"
     while [[ "$hasNext" == "true" ]]; do
-        local page="$(gh_gql -f query="$q" -F so="$SRC_ORG" -F sr="$name" -F do="$DST_ORG" -F dr="$name" -F after="$cursor")" || break
+        local page
+        page="$(gh_gql -f query="$q" -F so="$SRC_ORG" -F sr="$name" -F do="$DST_ORG" -F dr="$name" -F after="$cursor")" || break
         hasNext="$(echo "$page" | jq -r '.data.src.discussions.pageInfo.hasNextPage')"
         cursor="$(echo "$page"  | jq -r '.data.src.discussions.pageInfo.endCursor')"
 
@@ -930,26 +942,31 @@ copy_discussions() {
             local BODY="${HEADER}\n\n${DBODY}"
 
             # Resolve category id (name match or first)
-            local CATID="$(echo "$dstCats" | jq -r --arg n "$DCAT" 'first(.[] | select(.name==$n) | .id) // first(.[] | .id)')"
+            local CATID
+            CATID="$(echo "$dstCats" | jq -r --arg n "$DCAT" 'first(.[] | select(.name==$n) | .id) // first(.[] | .id)')"
 
             # Create discussion
             local dstRepoId; dstRepoId="$(echo "$page" | jq -r '.data.dst.id')"
+            # shellcheck disable=SC2016  # $rid, $cid, $title and $body are GraphQL variables that the API binds, not bash expansions
             local m='mutation($rid:ID!,$cid:ID!,$title:String!,$body:String!){
               createDiscussion(input:{repositoryId:$rid,categoryId:$cid,title:$title,body:$body}){
                 discussion{ id number }
               }
             }'
-            local created="$(gh_gql -f query="$m" -F rid="$dstRepoId" -F cid="$CATID" -F title="$DTITLE" -F body="$BODY")" || { print_warning "⚠ Failed to create discussion"; continue; }
+            local created
+            created="$(gh_gql -f query="$m" -F rid="$dstRepoId" -F cid="$CATID" -F title="$DTITLE" -F body="$BODY")" || { print_warning "⚠ Failed to create discussion"; continue; }
             local newDid; newDid="$(echo "$created" | jq -r '.data.createDiscussion.discussion.id')"
             ((TOTAL_DISCUSSIONS_COPIED++)) || true
 
             # Comments (single page or more)
             # First page from current node
             while read -r c; do
-                local CAUTH=$(echo "$c" | jq -r '.author.login // "unknown"')
-                local CDAT=$(echo "$c"  | jq -r '.createdAt')
-                local CBOD=$(echo "$c"  | jq -r '.body // ""')
+                local CAUTH CDAT CBOD
+                CAUTH=$(echo "$c" | jq -r '.author.login // "unknown"')
+                CDAT=$(echo "$c"  | jq -r '.createdAt')
+                CBOD=$(echo "$c"  | jq -r '.body // ""')
                 local CBODY="**(Original comment by @${CAUTH} on ${CDAT})**\n\n${CBOD}"
+                # shellcheck disable=SC2016  # $id and $body are GraphQL variables that the API binds, not bash expansions
                 local cm='mutation($id:ID!,$body:String!){ addDiscussionComment(input:{discussionId:$id, body:$body}){ comment{ id } } }'
                 if gh_gql -f query="$cm" -F id="$newDid" -F body="$CBODY" >/dev/null 2>&1; then
                     ((TOTAL_DISCUSSION_COMMENTS_COPIED++)) || true
@@ -1041,7 +1058,8 @@ main() {
 
     # Record start time
     START_TIME=$(date +%s)
-    local start_display=$(date +'%Y-%m-%d %H:%M:%S')
+    local start_display
+    start_display=$(date +'%Y-%m-%d %H:%M:%S')
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -1062,7 +1080,8 @@ main() {
 
     # Record end time and calculate duration
     END_TIME=$(date +%s)
-    local end_display=$(date +'%Y-%m-%d %H:%M:%S')
+    local end_display
+    end_display=$(date +'%Y-%m-%d %H:%M:%S')
     local duration=$((END_TIME - START_TIME))
     local hours=$((duration / 3600))
     local minutes=$(((duration % 3600) / 60))
