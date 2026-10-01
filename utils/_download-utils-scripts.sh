@@ -143,4 +143,6 @@ main() {
     return "$update_rc"
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

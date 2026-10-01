@@ -5,13 +5,6 @@
 
 ## Open
 
-### Execution-guard form contradicts AGENTS.md §Important Implementation Notes #1
-
-- **Source:** Plan Review of the self-update restart fix, 2026-09-06 (branch `worktree-self-update-restart`; the plan file is local to the author's machine).
-- **Problem:** §Important Implementation Notes #1 mandates `[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"`. The three `_download-*-scripts.sh` use that form, and so does §Complete Download Script Template, but `system-setup/system-setup.sh`, `kubernetes/kubernetes-setup.sh`, and AGENTS.md's other three snippets (the standalone-script example, §Orchestrator Pattern, and the module template) use `if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then main "$@"; fi`. The mandate therefore contradicts most of the repository, and AGENTS.md contradicts itself. A third form is also undocumented: the two test suites (`tests/test-self-update.sh`, `utils/tests/test-rsync-over-tunnel.sh`) have no execution guard at all, which is correct for development-only files that nothing sources and that are never distributed — but no rule records that exemption.
-- **Why deferred:** No self-update behaviour is involved; this is a convention decision, not a defect, and the plan that surfaced it was scoped to the restart ordering.
-- **Action on pickup:** Pick one canonical form and make AGENTS.md and every script agree. Weigh this first: the `&&` form is a false list when the file is sourced, so it returns 1 and the file's own `set -e` exits the sourcing shell — every test that sources such a script must write `source "$f" || true` (see `tests/README.md`). The `if` form returns 0 when sourced, so amending the note is the cheaper direction; standardising on `&&` instead means auditing every `source`-based test. Whichever form wins, state the test-file exemption in the same edit: a development-only test script carries no guard because nothing ever sources it.
-
 ### Reverse-lookup convenience (`-x IP`) in `utils/dig-all.sh` (added 2026-04-18)
 
 - **Source:** 2026-04-18 `utils/dig-all.sh` standardization.

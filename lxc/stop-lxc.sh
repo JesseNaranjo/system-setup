@@ -129,4 +129,6 @@ main() {
     print_success "Container shutdown sequence completed"
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

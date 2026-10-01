@@ -69,4 +69,6 @@ EOF
     exec screen -Uamc "$SCREEN_DOTFILE" -T "${TERM:-screen-256color}"
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

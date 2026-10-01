@@ -49,4 +49,6 @@ main() {
     print_success "Login keychain unlocked for this session."
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

@@ -323,7 +323,7 @@ echo "== kubernetes-setup.sh: flags parsed before the update check =="
 # original_args copy — the parse loop consumes $@ before the call.
 _k8s_main() {   # "$@" = flags, possibly none → "<rc>|<output>"
     local rc=0 out
-    out=$(bash -c 'source "$1" || true   # harmless here (if-form guard returns 0); required for the &&-form downloaders in section 3
+    out=$(bash -c 'source "$1"
             check_for_updates() { echo "CHECK_FOR_UPDATES args=${*:2}"; DOWNLOAD_CMD=curl; }
             update_modules() { echo UPDATE_MODULES; return "${UPDATE_RC:-0}"; }
             cleanup_obsolete_scripts() { :; }
@@ -381,7 +381,7 @@ echo "== system-setup.sh: same orchestrator contract =="
 # dozen modules and configuring the developer's machine.
 _sys_main() {   # "$@" = flags, possibly none → "<rc>|<output>"
     local rc=0 out
-    out=$(bash -c 'source "$1" || true
+    out=$(bash -c 'source "$1"
             check_for_updates() { echo "CHECK_FOR_UPDATES args=${*:2}"; DOWNLOAD_CMD=curl; }
             update_modules() { echo UPDATE_MODULES; return "${UPDATE_RC:-0}"; }
             cleanup_obsolete_scripts() { :; }
@@ -423,13 +423,14 @@ assert_contains "${res#*|}" 'Missing module(s)'         "system-setup.sh missing
 
 echo "== _download-*-scripts.sh: cleanup runs and partial failure is the exit status =="
 readonly DOWNLOADERS=(lxc/_download-lxc-scripts.sh llm/_download-ollama-scripts.sh utils/_download-utils-scripts.sh)
-# Each downloader ends in `[[ … ]] && main "$@"`, which is false when sourced and
-# would exit the child under the file's own set -e — hence `|| true`. The
+# Sourced bare, like the orchestrators above: each downloader ends in the if-form
+# execution guard, which returns 0 when sourced. `|| true` here would suspend the
+# file's own set -e for its whole body and hide a guard that returns 1. The
 # DOWNLOAD_CMD the stubbed check leaves behind is captured into dl_cmd first,
 # because inside the stub `$2` would be the stub's own (empty) argument.
 _dl_main() {   # $1 = downloader (repo-relative), $2 = DOWNLOAD_CMD after the stubbed check → "<rc>|<output>"
     local rc=0 out
-    out=$(bash -c 'source "$1" || true
+    out=$(bash -c 'source "$1"
             dl_cmd="$2"
             sweep_stale_temps() { :; }
             check_for_updates() { DOWNLOAD_CMD="$dl_cmd"; }
@@ -470,6 +471,16 @@ done
 # must not drift apart. The tests/ directories are excluded because they name
 # the retired identifiers on purpose — in this very assertion.
 assert_eq '0' "$(grep -rlE 'scriptUpdated|GH_SCRIPTS_UPDATED|(SYS|K8S|LXC|LLM|UTILS)_SCRIPTS_UPDATED' --include='*.sh' --exclude-dir=tests --exclude-dir=.claude "${REPO_DIR}" | wc -l | tr -d ' ')" 'no retired guard name survives in distributed *.sh'
+
+echo "== execution guard: no distributed script ends in the && form =="
+# AGENTS.md §Important Implementation Notes #1. `[[ … ]] && main "$@"` is a false
+# list when its file is sourced, so the file returns 1 and a sourcing shell under
+# `set -e` exits; the if form returns 0, which is what lets the sections above
+# source a script bare. The three tests/ directories are excluded because this
+# assertion spells the banned form itself.
+# shellcheck disable=SC2016  # single quotes are deliberate: literal source text, not an expansion
+guard_offenders=$(git -C "$REPO_DIR" grep -lF '"${0}" ]] &&' -- '*.sh' ':!tests/*' ':!*/tests/*' | tr '\n' ' ' || true)
+assert_eq '' "$guard_offenders" 'no distributed *.sh ends in the &&-form execution guard'
 
 echo "== executable bits: launchers are 100755 in the index, sourced files 100644 =="
 # Every tracked *.sh is launched as a program — `./x.sh` by a user, or

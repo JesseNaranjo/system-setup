@@ -581,7 +581,7 @@ When adding a NEW helper that is genuinely shared logic (not an existing canonic
 
 ## Important Implementation Notes
 
-1. **Source Guard Required**: All scripts MUST use the `[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"` execution guard.
+1. **Execution Guard Required**: Every distributed script except the five `utils-*.sh` libraries and the two Lightweight utils named below MUST put its logic in `main` (or `main_<module>`) and end in the if-form guard of §Function Organization Order: `if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then` … `fi`, whose body calls the entry point with `"$@"`. That call is `main "$@"`, except in `system-setup/install-desktop.sh` and in every module under `system-setup/system-modules/` and `kubernetes/kubernetes-modules/`, which call `main_<name> "$@"`. A module calls `check_for_updates "${BASH_SOURCE[0]}" "$@"` on the line before (§check_for_updates Pattern), so its guard is four lines. Never write `[[ … ]] && main "$@"`: when the file is sourced the test is false, the file returns 1, and a sourcing shell under `set -e` exits. No guard at all: the five `utils-*.sh` libraries (sourced, never run), the Lightweight `utils/monitor-battery.sh` and `utils/disable-kvm-module.sh`, and the development-only suites under `tests/`, `utils/tests/` and `lxc/tests/` — nothing sources them. `lxc/setup-lxc.sh` still runs at file scope with no `main` and no guard: the one open violation, tracked in `docs/backlog.md`.
 2. **utils-sys.sh Multiple-Source Guard**: Library uses `UTILS_SYS_SH_LOADED` to prevent double-sourcing. Do NOT remove this pattern.
 3. **SCRIPT_DIR Pattern**: Module scripts MUST use the `SCRIPT_DIR` / `source` pattern to locate and load utils-sys.sh.
 4. **Quote Everything**: All variable expansions MUST be quoted: `"$var"`, `"${array[@]}"`.
@@ -2930,7 +2930,9 @@ main() {
     return "$update_rc"
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
 ```
 
 ---

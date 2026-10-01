@@ -34,8 +34,8 @@ TRACE=1 ./lxc/tests/test-protect-lxc.sh  # xtrace
    development-only and is not distributed to target hosts. It carries no
    `main`/execution guard for the same reason — nothing sources it.
 4. Drive a launcher through `_lxc_main <script> <args…>`, which prints
-   `<rc>|<output>`. It sources the script in a child bash (`source "$1" || true`:
-   the `&&`-form execution guard returns 1 when sourced), stubs
+   `<rc>|<output>`. It sources the script in a child bash (its `if`-form
+   execution guard keeps `main()` from running on source), stubs
    `check_for_updates`, `check_required_tools`, `prompt_yes_no`, `lxc-info`,
    `lxc-create`, `sudo`, `7z` and `tar`, points `HOME` into the sandbox and reads
    stdin from `/dev/null`. Before a case can reach any other external command,

@@ -227,8 +227,8 @@ done
 # ------------------------------------------------------- launcher main() --
 
 # Drive a launcher's main() with every side effect stubbed; prints "<rc>|<output>".
-# The script is sourced in a child bash, so its exits stay there; `|| true`
-# because an &&-form execution guard returns 1 when sourced. The stubs follow
+# The script is sourced in a child bash, so its exits stay there; its if-form
+# execution guard keeps main() from running on source. The stubs follow
 # the source so they replace the library's own check_for_updates (network)
 # and prompt_yes_no (/dev/tty). Every external command a path can reach is a
 # stub that never touches a real container or escalates: lxc-info, lxc-create,
@@ -242,7 +242,7 @@ done
 # root; stdin is /dev/null, so a stub that drains its input cannot block.
 _lxc_main() {   # $1 = launcher basename, "${@:2}" = its arguments
     local rc=0 out
-    out=$(HOME="${SANDBOX}/home" bash -c 'source "$1" || true
+    out=$(HOME="${SANDBOX}/home" bash -c 'source "$1"
             check_for_updates()    { :; }
             check_required_tools() { :; }
             prompt_yes_no()        { echo "REACHED prompt_yes_no $1"; return 1; }

@@ -86,4 +86,6 @@ main() {
     print_warning "⚠ Log out or restart for changes to take effect."
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
