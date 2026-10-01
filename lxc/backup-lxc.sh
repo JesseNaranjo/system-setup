@@ -33,7 +33,8 @@
 set -euo pipefail
 
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
-    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    readonly SCRIPT_DIR
 fi
 
 # shellcheck source=utils-lxc.sh
@@ -44,13 +45,13 @@ source "${SCRIPT_DIR}/utils-lxc.sh"
 # ============================================================================
 
 # Compression preset: fast (quick, larger files)
-readonly COMPRESS_FAST="-t7z -m0=lzma2 -mx=3 -md=128m -mfb=64 -mmf=bt2 -ms=on -mmt"
+readonly COMPRESS_FAST=(-t7z -m0=lzma2 -mx=3 -md=128m -mfb=64 -mmf=bt2 -ms=on -mmt)
 
 # Compression preset: balanced (moderate compression and speed)
-readonly COMPRESS_BALANCED="-t7z -m0=lzma2 -mx=5 -md=512m -mfb=128 -mmf=bt4 -ms=on -mmt"
+readonly COMPRESS_BALANCED=(-t7z -m0=lzma2 -mx=5 -md=512m -mfb=128 -mmf=bt4 -ms=on -mmt)
 
 # Compression preset: small (maximum compression, slower)
-readonly COMPRESS_SMALL="-t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt"
+readonly COMPRESS_SMALL=(-t7z -m0=lzma2 -mx=9 -md=1536m -mfb=273 -mmf=bt4 -ms=on -mmt)
 
 # ============================================================================
 # Input Validation
@@ -142,16 +143,16 @@ main() {
     fi
 
     # Set compression options based on level
-    local COMPRESS_OPTS
+    local COMPRESS_OPTS=()
     case "$COMPRESSION_LEVEL" in
         fast)
-            COMPRESS_OPTS="$COMPRESS_FAST"
+            COMPRESS_OPTS=("${COMPRESS_FAST[@]}")
             ;;
         balanced)
-            COMPRESS_OPTS="$COMPRESS_BALANCED"
+            COMPRESS_OPTS=("${COMPRESS_BALANCED[@]}")
             ;;
         small)
-            COMPRESS_OPTS="$COMPRESS_SMALL"
+            COMPRESS_OPTS=("${COMPRESS_SMALL[@]}")
             ;;
     esac
 
@@ -187,7 +188,8 @@ main() {
     # Perform Backup
     # ========================================================================
 
-    local TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    local TIMESTAMP
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     local BACKUP_FILE="${BACKUP_DIR}/${CONTAINER_NAME}_${TIMESTAMP}.tar.7z"
 
     print_info "Backing up container: ${CONTAINER_NAME}"
@@ -220,9 +222,10 @@ main() {
     # Use tar to archive with numeric ownership, pipe to 7z for compression
     # We cd to LXC_PATH and archive the container directory by name to get clean paths
     if sudo tar --xattrs --xattrs-include='*' --acls --numeric-owner -cvf - -C "$LXC_PATH" "$CONTAINER_NAME" | \
-       7z a -si $COMPRESS_OPTS "$BACKUP_FILE"; then
+       7z a -si "${COMPRESS_OPTS[@]}" "$BACKUP_FILE"; then
         echo ""
-        local BACKUP_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
+        local BACKUP_SIZE
+        BACKUP_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
         print_success "Backup completed successfully!"
         print_info "File: ${BACKUP_FILE}"
         print_info "Size: ${BACKUP_SIZE}"

@@ -26,7 +26,8 @@
 set -euo pipefail
 
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
-    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    readonly SCRIPT_DIR
 fi
 
 # shellcheck source=utils-lxc.sh
@@ -130,7 +131,12 @@ main() {
     # List the first entry in the tar archive to get the container directory name
     # The archive structure is: <container_name>/config, <container_name>/rootfs/...
     # We pipe the tar from 7z and list its contents, extracting the top-level directory
-    local ORIGINAL_NAME=$(7z x -so "$BACKUP_FILE" 2>/dev/null | tar -tf - 2>/dev/null | head -1 | cut -d'/' -f1)
+    # `|| true`: head -1 closes the pipe after the first entry, so under pipefail
+    # tar and 7z die of SIGPIPE on any real container's archive and the bare
+    # assignment would abort main with no message. An unreadable archive still
+    # leaves ORIGINAL_NAME empty, which the check below reports as EX_DATAERR.
+    local ORIGINAL_NAME
+    ORIGINAL_NAME=$(7z x -so "$BACKUP_FILE" 2>/dev/null | tar -tf - 2>/dev/null | head -1 | cut -d'/' -f1) || true
 
     if [[ -z "$ORIGINAL_NAME" ]]; then
         print_error "✖ Could not determine container name from backup archive"

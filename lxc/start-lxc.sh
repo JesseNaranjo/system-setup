@@ -44,7 +44,8 @@
 set -euo pipefail
 
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
-    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    readonly SCRIPT_DIR
 fi
 
 # shellcheck source=utils-lxc.sh
@@ -86,7 +87,7 @@ check_session_controllers() {
         return 0
     fi
 
-    local cgroup_file="/sys/fs/cgroup/user.slice/user-$(id -u).slice/cgroup.controllers"
+    local cgroup_file="/sys/fs/cgroup/user.slice/user-${EUID}.slice/cgroup.controllers"
 
     [[ -f "$cgroup_file" ]] || return 0
 

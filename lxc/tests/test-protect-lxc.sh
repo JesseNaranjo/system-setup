@@ -273,5 +273,26 @@ res="$(_lxc_main backup-lxc.sh no-such-box)"
 assert_eq 66 "${res%%|*}" "backup-lxc.sh no-such-box: a valid name reaches the existence check (EX_NOINPUT)"
 assert_not_contains "${res#*|}" "Invalid container name" "backup-lxc.sh no-such-box: a valid name passes the guard"
 
+echo "== backup-lxc.sh hands 7z each preset option as its own argument =="
+mkdir -p "${SANDBOX}/home/.local/share/lxc/dev-box"
+res="$(_lxc_main backup-lxc.sh dev-box "${SANDBOX}/backups" --compression=fast)"
+assert_eq 0 "${res%%|*}" "fast: the backup completes"
+assert_contains "${res#*|}" "7Z_ARGS=a|-si|-t7z|-m0=lzma2|-mx=3|-md=128m|-mfb=64|-mmf=bt2|-ms=on|-mmt|${SANDBOX}/backups/dev-box_" \
+    "fast: every preset option is a separate 7z argument"
+res="$(_lxc_main backup-lxc.sh dev-box "${SANDBOX}/backups" --compression=balanced)"
+assert_eq 0 "${res%%|*}" "balanced: the backup completes"
+assert_contains "${res#*|}" "7Z_ARGS=a|-si|-t7z|-m0=lzma2|-mx=5|-md=512m|-mfb=128|-mmf=bt4|-ms=on|-mmt|${SANDBOX}/backups/dev-box_" \
+    "balanced: every preset option is a separate 7z argument"
+res="$(_lxc_main backup-lxc.sh dev-box "${SANDBOX}/backups")"
+assert_eq 0 "${res%%|*}" "default (small): the backup completes"
+assert_contains "${res#*|}" "7Z_ARGS=a|-si|-t7z|-m0=lzma2|-mx=9|-md=1536m|-mfb=273|-mmf=bt4|-ms=on|-mmt|${SANDBOX}/backups/dev-box_" \
+    "default (small): every preset option is a separate 7z argument"
+
+echo "== restore-lxc.sh reads the container name past head -1's SIGPIPE =="
+: > "${SANDBOX}/restored-box_20260101_000000.tar.7z"
+res="$(_lxc_main restore-lxc.sh "${SANDBOX}/restored-box_20260101_000000.tar.7z")"
+assert_eq 0 "${res%%|*}" "the restore runs to completion against the stubbed archive"
+assert_contains "${res#*|}" "Original container name: restored-box" "the archive's top-level name is read"
+
 printf '\n%d run, %d failed\n' "$TESTS_RUN" "$TESTS_FAILED"
 [[ "$TESTS_FAILED" -eq 0 ]]

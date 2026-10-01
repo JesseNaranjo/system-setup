@@ -27,7 +27,8 @@
 set -euo pipefail
 
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
-    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    readonly SCRIPT_DIR
 fi
 
 # shellcheck source=utils-lxc.sh
@@ -55,7 +56,8 @@ backup_file() {
     done
 
     if [[ -f "$file" ]]; then
-        local backup="${file}.backup.$(date +%Y%m%d_%H%M%S).bak"
+        local backup
+        backup="${file}.backup.$(date +%Y%m%d_%H%M%S).bak"
 
         # Copy file with preserved permissions (-p flag)
         cp -p "$file" "$backup"
@@ -190,7 +192,8 @@ configure_container_ssh() {
         return 1
     fi
 
-    local rootfs=$(grep "^lxc.rootfs.path" "$config_path" | awk '{print $NF}' | sed 's|^dir:||')
+    local rootfs
+    rootfs=$(grep "^lxc.rootfs.path" "$config_path" | awk '{print $NF}' | sed 's|^dir:||')
     if [[ ! -d "$rootfs" ]]; then
         print_warning "⚠ Container rootfs not found: $rootfs - skipping"
         ((CONTAINERS_SKIPPED++)) || true
@@ -224,8 +227,9 @@ configure_container_ssh() {
     fi
 
     # Get user's UID/GID from the container home directory (for proper filesystem ownership)
-    local user_uid=$(stat -c "%u" "$container_home")
-    local user_gid=$(stat -c "%g" "$container_home")
+    local user_uid user_gid
+    user_uid=$(stat -c "%u" "$container_home")
+    user_gid=$(stat -c "%g" "$container_home")
 
     if [[ -z "$user_uid" || -z "$user_gid" ]]; then
         print_warning "⚠ Could not determine UID/GID for user $TARGET_USER - skipping"
@@ -407,7 +411,8 @@ main() {
 
     # Read public key content
     local public_key="${TARGET_USER_HOME}/.ssh/${SSH_KEY_NAME}.pub"
-    local public_key_content=$(cat "$public_key")
+    local public_key_content
+    public_key_content=$(cat "$public_key")
 
     # Get list of all containers
     print_info "Detecting LXC containers for user $TARGET_USER..."
