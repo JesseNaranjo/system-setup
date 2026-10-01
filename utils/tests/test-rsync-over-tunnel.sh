@@ -3,7 +3,9 @@
 #
 # Zero dependencies: no bats, no network, no root, no second host. Sources the
 # script under test (its `BASH_SOURCE == $0` guard keeps main() from running)
-# and asserts on the pure parsers and the generated daemon config.
+# and asserts on the pure parsers, the validators and the generated daemon
+# config; one check runs the script as a child process, with ssh shimmed, to pin
+# main()'s wiring.
 #
 # Usage: ./test-rsync-over-tunnel.sh
 set -euo pipefail
@@ -271,9 +273,10 @@ assert_eq 64 "$(rc validate_options)" "newline in --conf rejected"
 CONF=/run/x.conf
 
 echo "== cmd_source_tunnel option-injection guard =="
-# ssh has no `--` end-of-options marker, so a target beginning with `-` is
-# parsed as an option and `-oProxyCommand=…` runs an arbitrary local command
-# (cf. CVE-2023-51385 / CVE-2025-61984). The identical guard in
+# The ssh target follows EXTRA as a positional, so a target beginning with `-`
+# would be parsed as an option and `-oProxyCommand=…` would run an arbitrary
+# local command (cf. CVE-2023-51385 / CVE-2025-61984). The guard refuses the
+# shape rather than relying on ssh's end-of-options handling. The identical guard in
 # resolve_transfer_path was already covered; this one was not.
 REMOTE=''
 assert_eq 64 "$(rc cmd_source_tunnel)" "missing ssh target -> EX_USAGE"
@@ -467,6 +470,120 @@ compose_transfer_args >/dev/null
 assert_eq "--itemize-changes" "${TRANSFER_ARGS[-1]}"   "EXTRA is appended last"
 assert_contains " ${TRANSFER_ARGS[*]} " ' --no-whole-file ' "EXTRA passed through"
 EXTRA=()
+
+echo "== validate_extra: arguments after -- =="
+# Everything after `--` reaches ssh (source-tunnel) or a ROOT-privileged rsync
+# (source-transfer), so every spelling that makes either run a program, load a
+# library or read more config is pinned as refused, and the everyday options as
+# accepted. Both helpers assign EXTRA inside the command substitution's
+# subshell, so nothing leaks into later sections.
+_extra_rc() {
+    local mode="$1"
+    shift
+    EXTRA=("$@")
+    rc validate_extra "$mode"
+}
+_extra_msg() {
+    local mode="$1"
+    shift
+    EXTRA=("$@")
+    validate_extra "$mode" 2>&1
+}
+
+for _mode in target-tunnel source-tunnel source-transfer; do
+    assert_eq 0 "$(_extra_rc "$_mode")" "$_mode: nothing after -- is fine"
+done
+assert_eq 64 "$(_extra_rc target-tunnel -v)" "target-tunnel refuses anything after --"
+
+# ssh -o takes ONE argument, read as an ssh_config line. Every refused shape
+# below was checked against `ssh -F /dev/null -G` (OpenSSH 10.3): each one that
+# ssh accepts really does set ProxyCommand.
+assert_eq 64 "$(_extra_rc source-tunnel -oProxyCommand=true)"            "ssh: -oKEYWORD=value in one token"
+assert_eq 64 "$(_extra_rc source-tunnel -o ProxyCommand=true)"           "ssh: -o KEYWORD=value as two tokens"
+assert_eq 64 "$(_extra_rc source-tunnel -o 'ProxyCommand true')"         "ssh: -o 'KEYWORD value' (whitespace form)"
+assert_eq 64 "$(_extra_rc source-tunnel -o ProxyCommand true)"           "ssh: -o KEYWORD with its value in a later token"
+assert_eq 64 "$(_extra_rc source-tunnel -o proxycommand=true)"           "ssh: lowercase keyword"
+assert_eq 64 "$(_extra_rc source-tunnel -o PROXYCOMMAND=true)"           "ssh: uppercase keyword"
+assert_eq 64 "$(_extra_rc source-tunnel -o ' ProxyCommand true')"        "ssh: leading whitespace before the keyword"
+assert_eq 64 "$(_extra_rc source-tunnel -o '=ProxyCommand true')"        "ssh: leading '=' before the keyword"
+assert_eq 64 "$(_extra_rc source-tunnel -o '""ProxyCommand true')"       "ssh: empty quote pair before the keyword"
+assert_eq 64 "$(_extra_rc source-tunnel -o '"ProxyCommand"x=true')"      "ssh: quote-delimited keyword with text glued after it"
+assert_eq 64 "$(_extra_rc source-tunnel -4oProxyCommand=true)"           "ssh: flag cluster ending in o, value glued"
+assert_eq 64 "$(_extra_rc source-tunnel -4Co ProxyCommand=true)"         "ssh: flag cluster ending in o, value in the next token"
+assert_eq 64 "$(_extra_rc source-tunnel -o)"                             "ssh: trailing bare -o (ssh would read the target as its value)"
+assert_eq 64 "$(_extra_rc source-tunnel -v -p 2222 -oProxyCommand=true)" "ssh: a refused token after accepted ones"
+for _kw in ProxyCommand ProxyJump LocalCommand PermitLocalCommand KnownHostsCommand \
+           RemoteCommand Include Match PKCS11Provider SmartcardDevice SecurityKeyProvider XAuthLocation; do
+    assert_eq 64 "$(_extra_rc source-tunnel -o "${_kw}=x")" "ssh: -o ${_kw} refused"
+done
+assert_eq 64 "$(_extra_rc source-tunnel -F /tmp/cfg)"         "ssh: -F FILE (a config file carries any directive)"
+assert_eq 64 "$(_extra_rc source-tunnel -F/tmp/cfg)"          "ssh: -FFILE glued"
+assert_eq 64 "$(_extra_rc source-tunnel -vF/tmp/cfg)"         "ssh: flag cluster containing F"
+assert_eq 64 "$(_extra_rc source-tunnel -I /tmp/pkcs11.so)"   "ssh: -I (loads a PKCS#11 library)"
+assert_eq 64 "$(_extra_rc source-tunnel -J jump.example)"     "ssh: -J (a shell ProxyCommand before OpenSSH 10.3)"
+assert_eq 64 "$(_extra_rc source-tunnel -vJjump.example)"     "ssh: flag cluster containing J"
+
+assert_eq 0 "$(_extra_rc source-tunnel -p 2222)"                        "ssh: -p 2222 accepted"
+assert_eq 0 "$(_extra_rc source-tunnel -p2222)"                         "ssh: -p2222 accepted"
+assert_eq 0 "$(_extra_rc source-tunnel -v)"                             "ssh: -v accepted"
+assert_eq 0 "$(_extra_rc source-tunnel -4 -C)"                          "ssh: -4 -C accepted"
+assert_eq 0 "$(_extra_rc source-tunnel -o ServerAliveInterval=15)"      "ssh: harmless -o keyword accepted"
+assert_eq 0 "$(_extra_rc source-tunnel -o 'IdentitiesOnly yes')"       "ssh: harmless -o 'keyword value' accepted"
+assert_eq 0 "$(_extra_rc source-tunnel -i /home/user/.ssh/id_ed25519)" "ssh: -i KEY accepted"
+# -l takes the rest of the token as a login name, so its text is not scanned for flags.
+assert_eq 0 "$(_extra_rc source-tunnel -loperator)"                     "ssh: -l's glued value is not scanned ('-loperator')"
+assert_eq 0 "$(_extra_rc source-tunnel -D 1080)"                        "ssh: -D 1080 accepted"
+
+assert_eq 64 "$(_extra_rc source-transfer -e ssh)"                      "rsync: -e"
+assert_eq 64 "$(_extra_rc source-transfer -essh)"                       "rsync: -e with the value glued"
+assert_eq 64 "$(_extra_rc source-transfer -e=ssh)"                      "rsync: -e=value"
+assert_eq 64 "$(_extra_rc source-transfer -ave ssh)"                    "rsync: flag cluster containing e"
+assert_eq 64 "$(_extra_rc source-transfer -M--log-file=/tmp/x)"         "rsync: -M with the value glued"
+assert_eq 64 "$(_extra_rc source-transfer -vM --foo)"                   "rsync: flag cluster containing M"
+assert_eq 64 "$(_extra_rc source-transfer --rsh=ssh)"                   "rsync: --rsh=COMMAND"
+assert_eq 64 "$(_extra_rc source-transfer --rsh ssh)"                   "rsync: --rsh COMMAND"
+assert_eq 64 "$(_extra_rc source-transfer --rsync-path=/tmp/x)"         "rsync: --rsync-path=PROGRAM"
+assert_eq 64 "$(_extra_rc source-transfer --rsync-path /tmp/x)"         "rsync: --rsync-path PROGRAM"
+assert_eq 64 "$(_extra_rc source-transfer --rsy=/tmp/x)"               "rsync: unique abbreviation of --rsync-path (getopt_long)"
+assert_eq 64 "$(_extra_rc source-transfer --remote-option=--foo)"       "rsync: --remote-option"
+assert_eq 64 "$(_extra_rc source-transfer --remote-opt=--foo)"         "rsync: abbreviation of --remote-option"
+assert_eq 64 "$(_extra_rc source-transfer --daemon)"                    "rsync: --daemon"
+assert_eq 64 "$(_extra_rc source-transfer --daem)"                      "rsync: abbreviation of --daemon"
+assert_eq 64 "$(_extra_rc source-transfer --config=/tmp/x)"             "rsync: --config"
+assert_eq 64 "$(_extra_rc source-transfer --conf=/tmp/x)"               "rsync: abbreviation of --config"
+assert_eq 64 "$(_extra_rc source-transfer --itemize-changes --rsh=ssh)" "rsync: a refused token after accepted ones"
+
+assert_eq 0 "$(_extra_rc source-transfer --itemize-changes)" "rsync: --itemize-changes accepted"
+assert_eq 0 "$(_extra_rc source-transfer --no-whole-file)"   "rsync: --no-whole-file accepted"
+assert_eq 0 "$(_extra_rc source-transfer --bwlimit=1000)"    "rsync: --bwlimit=1000 accepted"
+assert_eq 0 "$(_extra_rc source-transfer -v)"                "rsync: -v accepted"
+assert_eq 0 "$(_extra_rc source-transfer --exclude=.git)"    "rsync: a long option containing e is not a short cluster"
+assert_eq 0 "$(_extra_rc source-transfer --recursive)"       "rsync: --recursive is not a prefix of --remote-option"
+assert_eq 0 "$(_extra_rc source-transfer -zP)"               "rsync: -zP accepted"
+assert_eq 0 "$(_extra_rc source-transfer --filter='- node_modules/')" "rsync: a glued filter rule is accepted"
+# A filter rule as its own token begins with '-' and contains 'e': refused as a
+# cluster would be, so the README tells the user to glue it (fail closed).
+assert_eq 64 "$(_extra_rc source-transfer --filter '- node_modules/')" "rsync: a dash-leading filter value on its own is refused (documented)"
+
+_msg=$(_extra_msg source-tunnel -p 2222 -oProxyCommand=touch) || true
+assert_contains "$_msg" "-oProxyCommand=touch" "ssh refusal names the offending token"
+_msg=$(_extra_msg source-transfer --itemize-changes --rsync-path=/tmp/x) || true
+assert_contains "$_msg" "--rsync-path=/tmp/x"  "rsync refusal names the offending token"
+
+# main() must call validate_extra before it dispatches. Run the real script as a
+# child: SELF_UPDATE_RESTARTED=1 takes check_for_updates' post-restart return,
+# which fetches nothing, and ssh is a shim that exits 99 — so 99 means the
+# refused option reached ssh and 64 means main refused it first.
+_wire_dir=$(mktemp -d)
+TEST_TEMP_DIRS+=("$_wire_dir")
+printf '#!/usr/bin/env bash\nexit 99\n' > "${_wire_dir}/ssh"
+chmod +x "${_wire_dir}/ssh"
+_wire_rc=0
+_wire_out=$(PATH="${_wire_dir}:${PATH}" SELF_UPDATE_RESTARTED=1 \
+    bash "${TESTS_DIR}/../rsync-over-tunnel.sh" source-tunnel user@target -- -oProxyCommand=false \
+    </dev/null 2>&1) || _wire_rc=$?
+assert_eq 64 "$_wire_rc" "main refuses a denied token before ssh runs"
+assert_contains "$_wire_out" "refusing '-oProxyCommand=false'" "main's refusal comes from validate_extra, not another usage error"
 
 echo "== download_script content gate =="
 # The downloaded file is about to be chmod +x'd, mv'd over a running script and

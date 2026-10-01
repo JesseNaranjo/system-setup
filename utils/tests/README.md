@@ -6,10 +6,10 @@ Unit tests for the pure functions in `utils/`.
 
 | File | Covers |
 |------|--------|
-| `test-rsync-over-tunnel.sh` | `rsync-over-tunnel.sh`: the `rsync --version` implementation / capability / protocol parsers, the `@RSYNCD:` greeting parser, `detect_os`, `require_rsync`'s wiring, `resolve_transfer_path`'s option-injection guards, `validate_options` (port / module / control-character rejection), `cmd_source_tunnel`'s ssh option-injection guard, `cmd_target_tunnel`'s refusal to write over an existing `--conf` or lock file, every confinement directive in the generated `rsyncd.conf` including the chroot ↔ `munge symlinks` pairing, `compose_transfer_args` (the flag set a root-privileged rsync runs with), `_sanitize_ansi`, and `print_warning_box`'s column alignment |
+| `test-rsync-over-tunnel.sh` | `rsync-over-tunnel.sh`: the `rsync --version` implementation / capability / protocol parsers, the `@RSYNCD:` greeting parser, `detect_os`, `require_rsync`'s wiring, `resolve_transfer_path`'s option-injection guards, `validate_options` (port / module / control-character rejection), `validate_extra` (every refused ssh and rsync spelling after `--`, the accepted everyday options, and `main`'s call to it before dispatch), `cmd_source_tunnel`'s ssh option-injection guard, `cmd_target_tunnel`'s refusal to write over an existing `--conf` or lock file, every confinement directive in the generated `rsyncd.conf` including the chroot ↔ `munge symlinks` pairing, `compose_transfer_args` (the flag set a root-privileged rsync runs with), `_sanitize_ansi`, and `print_warning_box`'s column alignment |
 | `test-rsync-two-way.sh` | `rsync-two-way.sh`: `validate_sync_args` — the `user@host` / `host` split into `REMOTE_USER_HOST` and `REMOTE_HOST`, the option-injection guard on a remote user or host that begins with `-` (including the dash-leading user part a host-only check misses, and a dash-leading host after a second `@`) and on a local directory that begins with `-` even when that directory exists, the `./` escape its error message offers, the missing-colon format error, and — in one child-process run with `ssh` and `rsync` shimmed — that `main` refuses a bad spec before either runs |
 
-`rsync` and `sudo` are shimmed where `test-rsync-over-tunnel.sh` needs them, and
+`rsync`, `sudo`, `curl` and `ssh` are shimmed where `test-rsync-over-tunnel.sh` needs them, and
 `test-rsync-two-way.sh` shims `ssh` and `rsync` for its one child-process check and
 stops before either would run elsewhere, so both suites run the same on a host that
 has none of them installed.
@@ -32,7 +32,7 @@ and exits 69 on an older shell. Sourcing is safe because each script's
 UTF-8 locale; under `LC_ALL=C` they compare bytes and will report a mismatch on
 the multi-byte rows.
 
-Everything here is pure text processing or pure decision logic, except one child-process check in `test-rsync-two-way.sh` (`ssh` and `rsync` shimmed, `SELF_UPDATE_RESTARTED=1` so nothing is fetched) proving `main` refuses an option-like argument before either runs. Daemon startup,
+Everything here is pure text processing or pure decision logic, except one child-process check in each suite (`ssh` shimmed, plus `rsync` in `test-rsync-two-way.sh`; `SELF_UPDATE_RESTARTED=1` so nothing is fetched), proving `main` refuses an option-like or denied argument before `ssh` can start. Daemon startup,
 chroot enforcement, and real transfers need two hosts and are still covered only
 by manual verification — see `docs/backlog.md` for exactly what that manual
 pass did and did not exercise.

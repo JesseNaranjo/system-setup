@@ -83,7 +83,7 @@ REMOTE=''                       # [user@]target, source-tunnel only
 SSH_KEY=''
 DRY_RUN=0
 DELETE=0
-EXTRA=()                        # everything after `--` is handed to rsync/ssh
+EXTRA=()                        # everything after `--`; validate_extra screens it, then ssh/rsync get it
 
 # Daemon config paths to reap on exit; set by cmd_target_tunnel, honored by cleanup().
 DAEMON_CONF=''
@@ -347,6 +347,10 @@ ${CYAN}STEP 2 — on the SOURCE host, terminal 1: open the tunnel${NC}
   -p, --port    N     forwarded on both ends     (default: $PORT)
   -i, --identity KEY  ssh private key            (default: ssh's own selection)
       --cipher  NAME  ssh cipher                 (default: ssh's negotiated choice)
+  --  SSH_ARGS...     extra ssh options; -F, -I, -J and any -o keyword that runs
+                      a command, loads a library or reads more config
+                      (ProxyCommand, ProxyJump, LocalCommand, PKCS11Provider, …)
+                      are refused — set those in ~/.ssh/config
   ExitOnForwardFailure + keepalives are set, so a silent half-open tunnel
   cannot masquerade as a working one.
 
@@ -357,6 +361,8 @@ ${CYAN}STEP 3 — on the SOURCE host, terminal 2: run the transfer${NC}
   -m, --module  NAME  rsyncd module name         (default: $MODULE)
   -n, --dry-run       change nothing; pair with '-- --itemize-changes' to verify
       --delete        mirror deletions — OFF by default, think before using it
+  --  RSYNC_ARGS...   extra rsync options, appended last; -e/--rsh, --rsync-path,
+                      -M/--remote-option, --daemon and --config are refused
   Runs: sudo rsync -aHS --numeric-ids -W --partial-dir=.rsync-migrate
         plus -A -X (ACLs/xattrs) when BOTH hosts support them — this host's rsync
         must be built with them and the target must speak protocol 30+ — and
@@ -563,9 +569,10 @@ cmd_source_tunnel() {
     [[ -n "$REMOTE" ]] || die 64 "source-tunnel needs an ssh target, e.g. '$SCRIPT_NAME source-tunnel jesse@target-host'"
     # Option-injection guard (defense-in-depth). The arg parser's `-*)` arm already
     # rejects any dash-leading token, so REMOTE cannot normally start with `-`; this
-    # is a belt-and-suspenders check because ssh has no `--` end-of-options marker and
-    # a target like `-oProxyCommand=...` would otherwise be parsed as an ssh option and
-    # run an arbitrary command (cf. CVE-2023-51385 / CVE-2025-61984).
+    # is a belt-and-suspenders check because the target follows EXTRA as a positional
+    # and a target like `-oProxyCommand=...` would be parsed as an ssh option and run
+    # an arbitrary command (cf. CVE-2023-51385 / CVE-2025-61984). The guard refuses the
+    # shape rather than relying on ssh's end-of-options handling.
     [[ "$REMOTE" == -* ]] && die 64 "refusing ssh target that begins with '-' (option-injection guard): $REMOTE"
 
     local -a args=(
@@ -745,6 +752,121 @@ validate_options() {
     return 0
 }
 
+# True when $1, read the way `ssh -o` reads an ssh_config line, starts with a
+# keyword that makes ssh run a program, load a library or read more config.
+# ssh_config(5): "keywords are case-insensitive and arguments are
+# case-sensitive". readconf.c splits the keyword off more loosely than it looks.
+# With `ssh -F /dev/null -G` on OpenSSH 10.3 (2026-09-28), each of these set
+# ProxyCommand: 'proxycommand=x', ' ProxyCommand x', '=ProxyCommand x',
+# '""ProxyCommand x', and '"ProxyCommand"x=true' (value "x=true": the quotes
+# end the keyword). So drop every quote and every leading space or '=', then
+# match the keyword as a PREFIX, never as a whole word. Do not "simplify" either
+# step back.
+# ProxyJump: ssh builds a shell ProxyCommand from the jump user and host, and
+# validates them only from OpenSSH 10.3 on (release notes). PKCS11Provider and
+# SecurityKeyProvider name a shared library ssh loads, and SmartcardDevice is
+# readconf.c's alias for PKCS11Provider (`ssh -F /dev/null -G -o
+# SmartcardDevice=/x.so` prints `pkcs11provider /x.so` on OpenSSH 10.3).
+# XAuthLocation names the program ssh runs for X11 forwarding. OpenSSH 10.3
+# already refuses Include and Match on the command line; they stay listed so
+# this guard does not depend on it.
+_ssh_directive_denied() {
+    local directive keyword
+    directive="${1//\"/}"
+    directive="${directive#"${directive%%[![:space:]=]*}"}"
+    directive="${directive,,}"
+    for keyword in proxycommand proxyjump localcommand permitlocalcommand \
+                   knownhostscommand remotecommand include match \
+                   pkcs11provider smartcarddevice securitykeyprovider xauthlocation; do
+        [[ "$directive" == "$keyword"* ]] && return 0
+    done
+    return 1
+}
+
+# Refuse the EXTRA tokens (everything after `--`) that would make ssh, or the
+# ROOT-privileged rsync of step 3, run a program of the caller's choosing, load
+# a library, or read another config file. Deny-list, not allowlist: EXTRA is a
+# deliberate power-user escape hatch, so everything else stays open. Every
+# token is checked on its own and none is skipped as "the value of the option
+# before it", so a refused spelling is caught wherever it sits and a false
+# positive fails closed. Split out of main() like validate_options so it is
+# testable without the self-update and temp sweep that main() runs first.
+# Reads: EXTRA. Exits 64 on the first refused token, naming it.
+validate_extra() {
+    local mode="$1"
+    local i token flags flag directive shown name denied
+    ((${#EXTRA[@]})) || return 0
+
+    case "$mode" in
+        target-tunnel)
+            die 64 "unexpected arguments after '--': only source-tunnel and source-transfer accept them" ;;
+        source-tunnel)
+            for ((i = 0; i < ${#EXTRA[@]}; i++)); do
+                token="${EXTRA[i]}"
+                # ssh has no long options, and a bare word is a value or the
+                # destination, so only a single-dash cluster carries flags.
+                [[ "$token" == -?* && "$token" != --* ]] || continue
+                flags="${token#-}"
+                # ssh parses with getopt: a cluster of no-argument flags may end
+                # in one that takes the rest of the token, or the next token, as
+                # its argument. The argument-taking letters come from ssh.c's
+                # optstring "B:D:E:F:I:J:L:O:P:Q:R:S:W:b:c:e:i:l:m:o:p:w:".
+                while [[ -n "$flags" ]]; do
+                    flag="${flags:0:1}"
+                    flags="${flags:1}"
+                    case "$flag" in
+                        F) die 64 "refusing '$token' after '--': ssh -F reads a config file, which can carry any directive" ;;
+                        I) die 64 "refusing '$token' after '--': ssh -I loads a PKCS#11 shared library" ;;
+                        J) die 64 "refusing '$token' after '--': ssh -J builds a shell command from the jump host — set ProxyJump in ~/.ssh/config instead" ;;
+                        o)
+                            if [[ -n "$flags" ]]; then
+                                directive="$flags"
+                                shown="$token"
+                            elif ((i + 1 < ${#EXTRA[@]})); then
+                                directive="${EXTRA[i + 1]}"
+                                shown="$token $directive"
+                            else
+                                # cmd_source_tunnel appends the ssh target after
+                                # EXTRA, so ssh would take the target as -o's value.
+                                die 64 "refusing a trailing '$token' after '--': ssh would read the ssh target as its value"
+                            fi
+                            _ssh_directive_denied "$directive" &&
+                                die 64 "refusing '$shown' after '--': that ssh keyword runs a command, loads a library or reads more config"
+                            break ;;
+                        [BDELOPQRSWbceilmpw])
+                            break ;;   # takes an argument: the rest of the token is its value
+                    esac
+                done
+            done ;;
+        source-transfer)
+            for token in "${EXTRA[@]}"; do
+                case "$token" in
+                    --?*)
+                        # GNU rsync's popt matches a long name exactly, but
+                        # openrsync parses with getopt_long, which also takes any
+                        # unique abbreviation (--rsync-p, --daem). So refuse every
+                        # NAME that is a prefix of a refused option. rsync already
+                        # rejects a prefix that is not unique, so this refuses
+                        # nothing rsync would have run.
+                        name="${token#--}"
+                        name="${name%%=*}"
+                        for denied in rsh rsync-path remote-option daemon config; do
+                            [[ -n "$name" && "$denied" == "$name"* ]] &&
+                                die 64 "refusing '$token' after '--': rsync --$denied runs a program or reads a daemon config"
+                        done ;;
+                    -*[eM]*)
+                        # -e is --rsh and -M is --remote-option. No rsync
+                        # no-argument flag is spelled e or M, so either letter in a
+                        # cluster is one of them, or sits inside a glued value or a
+                        # dash-leading value token such as a filter rule passed on
+                        # its own (--filter '- node_modules/'): glue those instead.
+                        die 64 "refusing '$token' after '--': rsync -e/-M run a program — spell other short options separately or in long form (e.g. --filter=…)" ;;
+                esac
+            done ;;
+    esac
+    return 0
+}
+
 main() {
     sweep_stale_temps '~*.tmp.??????'
     check_for_updates "${BASH_SOURCE[0]}" "$@"
@@ -784,6 +906,8 @@ main() {
     if [[ -n "$REMOTE" && "$mode" != "source-tunnel" ]]; then
         die 64 "unexpected argument '$REMOTE' — only 'source-tunnel' takes an ssh target"
     fi
+
+    validate_extra "$mode"
 
     # Re-derive after parsing: --conf may have replaced CONF since the defaults
     # block set these. This and the defaults block are the ONLY two places the

@@ -52,6 +52,21 @@ updated, pass `--module lxc` on **both** hosts.
 is *deleted on exit*, together with the `.lock` file derived from it. Pointing `--conf` at a real
 `rsyncd.conf` is refused (exit 73) rather than obeyed.
 
+**Arguments after `--` are screened.** `source-tunnel` passes them to `ssh` and `source-transfer`
+to a root-privileged `rsync`, so any that would make either run a program, load a library, or read
+another config file is refused with exit 64 before anything runs: ssh's `-F`, `-I`, `-J`, and `-o`
+keywords such as `ProxyCommand`, `ProxyJump`, and `LocalCommand` (in any case or quoting ssh
+accepts), and rsync's `-e`/`--rsh`, `--rsync-path`, `-M`/`--remote-option`, `--daemon`, and
+`--config`, including any abbreviation. In `source-transfer`, any argument that begins with a single
+`-` and contains `e` or `M` is refused too: a cluster like `-ave ssh`, and also a filter rule passed as its own argument,
+`--filter '- node_modules/'`. Glue the value to its long option instead: `--filter='- node_modules/'`.
+Set a jump host as `ProxyJump`
+in `~/.ssh/config` rather than with `-J`. `target-tunnel` accepts nothing after `--`. Options that
+read or write files are NOT screened (`--log-file`, `--write-batch`, `--files-from`,
+`--exclude-from`, `--password-file`), and neither is a bare extra source path: `source-transfer`
+runs `rsync` as root, so everything after `--` is root-equivalent input — never pass text you did
+not write.
+
 ## Usage
 
 ```bash

@@ -75,13 +75,6 @@
 - **Why deferred:** Correctness is fine as-is.
 - **Action on pickup:** On the system-mode failure path, probe `ssh host 'test -w /usr/share/terminfo'` (or detect the write-error text) and, when the dir is read-only, redirect the user to `--user` or the OS's layered-image mechanism instead of the generic failure.
 
-### `rsync-over-tunnel.sh`: everything after `--` (`EXTRA`) reaches `ssh` and `rsync` unvalidated (added 2026-07-24)
-
-- **Source:** rsync-over-tunnel standardization plan, 2026-07-24.
-- **Problem:** In `utils/rsync-over-tunnel.sh` the leading-`-` ssh-target guard is in place and the arg parser rejects dash-leading tokens, but everything after `--` (`EXTRA`) is passed verbatim to `ssh` (`source-tunnel`) and `rsync` (`source-transfer`). A crafted `-- -oProxyCommand=...` or hostile rsync flag can still execute commands — the same live class as CVE-2023-51385 / CVE-2025-61984.
-- **Why deferred:** `EXTRA` is a deliberate power-user escape hatch (operator-trust boundary); hardening needs an allowlist/validation design.
-- **Action on pickup:** Design allowlist/validation for `EXTRA` before it reaches `ssh` and `rsync`. `utils/rsync-two-way.sh` is already hardened by `validate_sync_args`. Read the `docs/lessons.md` entry "rsync's `--` cannot protect the host it hands to ssh: guard the first character of every token instead" first — it constrains the fix.
-
 ### `rsync-over-tunnel.sh`: the generated rsync module is unauthenticated, so any local user on the TARGET can write the destination as root while step 1 runs (added 2026-07-24)
 
 - **Source:** rsync-over-tunnel post-implementation review finding F5, 2026-07-24.
