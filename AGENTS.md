@@ -220,15 +220,22 @@ an empty array under `set -u` are all fair game.
 
 #### Linting
 
-Run `shellcheck -x` on every `*.sh` you touch. **Warnings are errors: the target
-is 0.** Use `-x` (follow `source`) or a sourced library's symbols show up as
-SC2154 false positives. Where a warning is genuinely wrong, silence it with a
-narrow `# shellcheck disable=SCxxxx` on the line plus a comment saying why —
-never a file-wide disable.
+Run a bare `shellcheck <file>` on every `*.sh` you touch — no `-x`, no `-P`.
+**Every finding is an error: the target is 0 at the default severity
+(`style`).** The repo-root `.shellcheckrc` sets `external-sources=true` and
+`source-path=SCRIPTDIR`, so `source` is followed relative to the script's own
+directory and a sourced library's symbols never surface as SC1091/SC2154 false
+positives. Where a finding is genuinely wrong, silence it with a narrow
+`# shellcheck disable=SCxxxx` on the line plus a comment saying why — never a
+file-wide disable, and never a `disable=` in `.shellcheckrc`. Splitting a
+`local x=$(cmd)` for SC2155 unmasks `cmd`'s exit status: where errexit is live
+and `cmd` fails in normal operation, keep the tolerance explicit (`|| true` with
+a comment, or `if ! x=$(cmd); then …; fi`) instead of a bare split.
 
-Several pre-existing files are not yet at 0; they are inventoried in
-`docs/backlog.md`. Do NOT let a file you touch get worse: compare the count
-before and after your change.
+`tests/test-shellcheck.sh` is the gate: it lints every tracked `*.sh` and exits 1
+naming each file with a finding. `./test-all.sh` runs it with every other suite
+and is the pre-commit check (§Running the Scripts). No CI workflow runs it, by
+the owner's ruling (2026-09-27): do NOT add one.
 
 #### Common Conditionals
 
@@ -533,7 +540,7 @@ done
 
 ### Helper Library Duplication (Intentional)
 
-These helper functions are **deliberately duplicated**. The roster is exhaustive for distributed code — if a function is not listed here, the all-copies rule does not cover it, so ADD IT to this table when you duplicate anything new. Development-only files that are never distributed (`tests/`, `utils/tests/`, `lxc/tests/`) are outside the roster; the assertion trio they share is tracked in `tests/README.md` instead:
+These helper functions are **deliberately duplicated**. The roster is exhaustive for distributed code — if a function is not listed here, the all-copies rule does not cover it, so ADD IT to this table when you duplicate anything new. Development-only files that are never distributed (`test-all.sh`, `tests/`, `utils/tests/`, `lxc/tests/`) are outside the roster; the assertion trio their unit-test suites share is tracked in `tests/README.md` instead:
 
 | Helper | Copies | Where |
 |--------|--------|-------|
@@ -2958,7 +2965,7 @@ Each significant folder contains a `README.md` that documents its contents, patt
 | `utils/README.md` | Cross-platform utilities | ✅ |
 | `utils/tests/README.md` | Unit tests for the pure functions in `utils/` | ✅ |
 | `lxc/tests/README.md` | Unit tests for the `lxc/` suite: container-protection helpers and launcher behaviour | ✅ |
-| `tests/README.md` | Repo-wide self-update mechanism tests | ✅ |
+| `tests/README.md` | Repo-wide tests: the self-update mechanism and the shellcheck gate | ✅ |
 
 #### Documentation Folders
 
@@ -3171,6 +3178,8 @@ sudo ./kubernetes-setup.sh  # Full orchestrated setup
 ./start-k8s.sh              # Start k8s services
 ./stop-k8s.sh               # Stop k8s services
 ```
+
+**Tests:** `./test-all.sh` runs every tracked `test-*.sh` below the repository root, listed from the git index, and exits 1 naming each suite that failed — `tests/test-shellcheck.sh`, the lint gate, included. Run it before every commit that changes a script or a suite, and never commit while it is red. To add a suite, see `tests/README.md` §Adding Tests.
 
 ### Script Naming Conventions
 - **Main scripts**: `action-noun.sh` (e.g., `system-setup.sh`, `ollama-screen.sh`)

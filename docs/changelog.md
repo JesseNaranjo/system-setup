@@ -6,6 +6,11 @@ features as of that date; earlier history is not individually recorded.
 
 ## [2026-10-01]
 
+### Added
+
+- **Lint gate: a repo-root `.shellcheckrc` and `tests/test-shellcheck.sh`.** The rc sets `external-sources=true` and `source-path=SCRIPTDIR`, so a bare `shellcheck <file>` follows each script's `source` relative to its own directory from any working directory; the suite lints every tracked `*.sh` at the default severity and exits 1 naming each file with a finding, rejects a `disable=` in the rc or a nested rc that would shadow it, and unsets `SHELLCHECK_OPTS` so a personal default cannot weaken it. `AGENTS.md` §Linting names it the gate and drops the allowance for pre-existing findings, since every tracked script is now at 0.
+- **`test-all.sh` at the repository root runs every test suite.** It lists each tracked `test-*.sh` below the root from the git index, so a new suite is picked up once it is committed, runs them in turn, and exits 1 naming each suite that failed — the lint gate included. `AGENTS.md` §Running the Scripts makes it the check before every commit that changes a script.
+
 ### Fixed
 
 - **The three `github/gh_org_*.sh` standalones are shellcheck-clean, and the failure handlers that `local` was masking now run.** Splitting every `local x=$(…)` (SC2155) makes `gh_org_copy.sh`'s `copy_discussions` report a failed GraphQL fetch as such instead of claiming the destination has no discussion categories, stop paging when a page fetch fails (`gh api graphql` prints the partial response before exiting 1, and the old code kept paging through it), and skip rather than count a discussion whose `createDiscussion` mutation failed, while `gh_org_delete_issues.sh` now reports a repository whose issues cannot be listed ("⚠ Could not list issues; skipping") instead of "No issues found", and both delete scripts tell a failed `gh repo list` ("✖ Failed to fetch repositories from <org>") apart from an empty organization ("✖ No repositories found in <org>"). The GraphQL query strings carry narrow per-line `SC2016` disables, and the unused `DST_MS`, `NUM` and `GRAY` are deleted.
