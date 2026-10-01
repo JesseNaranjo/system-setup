@@ -261,8 +261,9 @@ $bash_prompt"
     backup_file "$shell_config"
 
     # Check how many PS1 definitions exist
+    # `|| true`: grep -c prints 0 and exits 1 when no line matches; the -eq 0 branch below handles it
     local ps1_count
-    ps1_count=$(grep -c "^[[:space:]]*PS1=" "$shell_config" 2>/dev/null || echo "0")
+    ps1_count=$(grep -c "^[[:space:]]*PS1=" "$shell_config" 2>/dev/null) || true
 
     if [[ "$ps1_count" -eq 0 ]]; then
         # No existing PS1, just add at the end
