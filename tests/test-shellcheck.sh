@@ -34,7 +34,10 @@ if [[ ! -f .shellcheckrc ]]; then
     exit 1
 fi
 # AGENTS.md §Linting allows only a per-line disable with its reason beside it.
-if rc_disables=$(grep -nE '^[[:space:]]*disable[[:space:]]*=' .shellcheckrc); then
+# Not anchored at the line start: shellcheck reads several key=value pairs from
+# one rc line, so `external-sources=true disable=SC2155` would slip past an
+# anchored match. Text after a `#` is a comment and is ignored.
+if rc_disables=$(grep -nE '^[^#]*(^|[[:space:]])disable[[:space:]]*=' .shellcheckrc); then
     printf '  FAIL .shellcheckrc carries a repo-wide disable:\n%s\n' "$rc_disables"
     exit 1
 fi
