@@ -12,8 +12,8 @@
 # - Provides detailed progress reporting and logging
 # - Creates automatic backups of overwritten/deleted files (optional)
 # - Validates connectivity before sync operations
-# - Refuses a LOCAL_DIR, or a REMOTE_SPEC user or host, that begins with '-'
-#   (option-injection guard, exit 1)
+# - Refuses a LOCAL_DIR, or a REMOTE_SPEC user or host, that begins with '-',
+#   and a REMOTE_SPEC host in [ ] (option-injection guard, exit 1)
 #
 # Exit codes: 0 OK | 1 usage error | 2 rsync error | 3 connectivity error
 
@@ -113,6 +113,20 @@ validate_sync_args() {
         return 1
     fi
 
+    # A host in [ ] is refused outright. rsync's parse_hostspec (options.c)
+    # takes everything up to ']' as the host, '@' and ':' included, and rsync
+    # then splits that at its last '@': '[a@b:c@-oProxyCommand=x]:/p' reaches
+    # the remote shell as the option '-oProxyCommand=x' on rsync before 3.4.3,
+    # while the split below would see host 'b'. That split stops at the first
+    # ':', so a bracketed (IPv6-literal) host has never worked here; refusing
+    # it costs nothing and needs no copy of rsync's parser. The pattern is
+    # rsync's own test for a bracketed host: '[' at the start, or right after
+    # an '@', before any ':' or '/'.
+    if [[ "$remote_spec" =~ ^([^:/]*@)?\[ ]]; then
+        print_error "✖ Refusing a remote host in [ ] (option-injection guard): $remote_spec"
+        return 1
+    fi
+
     if [[ ! "$remote_spec" =~ ^([^@]+@)?([^:]+):(.+)$ ]]; then
         print_error "✖ Invalid remote specification format: $remote_spec"
         print_info "Expected format: user@host:/path or host:/path"
@@ -129,11 +143,7 @@ validate_sync_args() {
     # begins with '-' is an ssh option wherever rsync's remote-shell command
     # line places it. A guard on the host alone misses '-oProxyCommand=x@host:/p':
     # the host is clean, but ssh parses the whole destination as an option.
-    # rsync also strips one pair of [ ] from the host (parse_hostspec in its
-    # options.c, the IPv6-literal form), so '[-oProxyCommand=x]:/p' reaches the
-    # remote shell as a dash-leading host on rsync before 3.4.3: test the host
-    # with a leading '[' removed.
-    if [[ "$REMOTE_USER_HOST" == -* || "${REMOTE_HOST#\[}" == -* ]]; then
+    if [[ "$REMOTE_USER_HOST" == -* || "$REMOTE_HOST" == -* ]]; then
         print_error "✖ Refusing a remote user or host that begins with '-' (option-injection guard): $remote_spec"
         return 1
     fi

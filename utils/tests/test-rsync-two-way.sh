@@ -129,15 +129,31 @@ assert_eq 1 "$(rc validate_sync_args "$sandbox" 'user@-oProxyCommand=x:/p')" \
 # rsync take the host after the last '@', and that token is an option.
 assert_eq 1 "$(rc validate_sync_args "$sandbox" 'user@x@-oProxyCommand=y:/p')" \
     "dash-leading host after a second @ rejected"
-# rsync strips one pair of [ ] from a host (its IPv6-literal form) before the
-# host reaches the remote shell, so a bracketed dash-leading host is the same
-# injection as a bare one.
+assert_contains "$(_stderr validate_sync_args "$sandbox" '-oProxyCommand=x@host:/p')" \
+    'option-injection guard' "remote rejection names the guard"
+
+echo "== validate_sync_args: a host in [ ] is refused =="
+# rsync takes everything inside [ ] as the host, '@' and ':' included, and then
+# splits it at its last '@', so brackets can hide a dash-leading host from the
+# script's own split at the first ':'. The script never supported a bracketed
+# host, so every such spec is refused, harmless ones included.
 assert_eq 1 "$(rc validate_sync_args "$sandbox" '[-oProxyCommand=x]:/p')" \
     "dash-leading host inside [ ] rejected"
 assert_eq 1 "$(rc validate_sync_args "$sandbox" 'user@[-oProxyCommand=x]:/p')" \
     "dash-leading host inside [ ] after user@ rejected"
-assert_contains "$(_stderr validate_sync_args "$sandbox" '-oProxyCommand=x@host:/p')" \
-    'option-injection guard' "remote rejection names the guard"
+assert_eq 1 "$(rc validate_sync_args "$sandbox" '[a@b:c@-oProxyCommand=x]:/p')" \
+    "dash-leading host hidden behind @ and : inside [ ] rejected"
+assert_eq 1 "$(rc validate_sync_args "$sandbox" 'user@[a@b:c@-oProxyCommand=x]:/p')" \
+    "the same shape after user@ rejected"
+assert_eq 1 "$(rc validate_sync_args "$sandbox" '[::1]:/p')" \
+    "a harmless bracketed host is refused too"
+assert_contains "$(_stderr validate_sync_args "$sandbox" '[::1]:/p')" \
+    'Refusing a remote host in [ ]' "bracket rejection names the guard"
+# Brackets in the path are not a bracketed host.
+assert_eq 0 "$(rc validate_sync_args "$sandbox" 'host:/srv/[x]')" \
+    "brackets in the path accepted"
+assert_eq 0 "$(rc validate_sync_args "$sandbox" 'user@host:/srv/a@[b]')" \
+    "an @[ in the path accepted"
 
 echo "== validate_sync_args: local option-injection guard =="
 assert_eq 1 "$(cd "$sandbox" && rc validate_sync_args '--rsh=touch pwned' 'host:/p')" \
