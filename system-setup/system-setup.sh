@@ -25,7 +25,8 @@
 set -euo pipefail
 
 # Get the directory where this script is located
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 
 # Source utilities
 # shellcheck source=utils-sys.sh
@@ -73,7 +74,8 @@ update_modules() {
         local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
 
         # Ensure the local directory exists (so the adjacent mktemp template below resolves)
-        local script_dir="$(dirname "$LOCAL_SCRIPT")"
+        local script_dir
+        script_dir="$(dirname "$LOCAL_SCRIPT")"
         mkdir -p "$script_dir"
 
         # Path-aware atomic-rename temp: mktemp adjacent to LOCAL_SCRIPT (which may

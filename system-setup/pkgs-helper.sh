@@ -20,7 +20,8 @@
 set -euo pipefail
 
 # Get the directory where this script is located
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 
 # Source utilities
 # shellcheck source=utils-sys.sh
@@ -79,7 +80,8 @@ supports_diagnostics() {
 # Get the release codename from /etc/os-release (apt/Debian-specific)
 # Returns: codename via stdout
 get_release_codename() {
-    local release=$(grep "^VERSION_CODENAME=" /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"')
+    local release
+    release=$(grep "^VERSION_CODENAME=" /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"')
     if [[ -z "$release" ]]; then
         release=$(grep "^VERSION_ID=" /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"')
     fi
@@ -171,7 +173,8 @@ list_backports_upgrades() {
         return 1
     fi
 
-    local release=$(get_release_codename)
+    local release
+    release=$(get_release_codename)
 
     if [[ -z "$release" ]]; then
         print_error "✖ Could not determine release codename from /etc/os-release"
@@ -242,10 +245,12 @@ list_residual_configs() {
     echo ""
 
     # Capture the output of apt list '~c'
-    local output=$(apt list '~c' 2>/dev/null) || true
+    local output
+    output=$(apt list '~c' 2>/dev/null) || true
 
     # Check if there are any results (filter out the "Listing..." header line)
-    local packages=$(echo "$output" | grep -v "^Listing" | grep -v "^$" || true)
+    local packages
+    packages=$(echo "$output" | grep -v "^Listing" | grep -v "^$" || true)
 
     if [[ -z "$packages" ]]; then
         print_success "- No packages with residual configuration files found."
