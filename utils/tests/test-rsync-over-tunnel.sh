@@ -11,7 +11,11 @@ set -euo pipefail
 
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly TESTS_DIR
+# SCRIPTDIR/.. lets shellcheck follow rsync-over-tunnel.sh's own
+# `source=utils-misc.sh` from here; without it download_script is invisible
+# and DOWNLOAD_CMD reads as unused (SC2034).
 # shellcheck source-path=SCRIPTDIR
+# shellcheck source-path=SCRIPTDIR/..
 # shellcheck source=../rsync-over-tunnel.sh
 source "${TESTS_DIR}/../rsync-over-tunnel.sh"
 
