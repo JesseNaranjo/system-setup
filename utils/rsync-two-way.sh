@@ -129,7 +129,11 @@ validate_sync_args() {
     # begins with '-' is an ssh option wherever rsync's remote-shell command
     # line places it. A guard on the host alone misses '-oProxyCommand=x@host:/p':
     # the host is clean, but ssh parses the whole destination as an option.
-    if [[ "$REMOTE_USER_HOST" == -* || "$REMOTE_HOST" == -* ]]; then
+    # rsync also strips one pair of [ ] from the host (parse_hostspec in its
+    # options.c, the IPv6-literal form), so '[-oProxyCommand=x]:/p' reaches the
+    # remote shell as a dash-leading host on rsync before 3.4.3: test the host
+    # with a leading '[' removed.
+    if [[ "$REMOTE_USER_HOST" == -* || "${REMOTE_HOST#\[}" == -* ]]; then
         print_error "✖ Refusing a remote user or host that begins with '-' (option-injection guard): $remote_spec"
         return 1
     fi

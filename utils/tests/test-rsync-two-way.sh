@@ -129,6 +129,13 @@ assert_eq 1 "$(rc validate_sync_args "$sandbox" 'user@-oProxyCommand=x:/p')" \
 # rsync take the host after the last '@', and that token is an option.
 assert_eq 1 "$(rc validate_sync_args "$sandbox" 'user@x@-oProxyCommand=y:/p')" \
     "dash-leading host after a second @ rejected"
+# rsync strips one pair of [ ] from a host (its IPv6-literal form) before the
+# host reaches the remote shell, so a bracketed dash-leading host is the same
+# injection as a bare one.
+assert_eq 1 "$(rc validate_sync_args "$sandbox" '[-oProxyCommand=x]:/p')" \
+    "dash-leading host inside [ ] rejected"
+assert_eq 1 "$(rc validate_sync_args "$sandbox" 'user@[-oProxyCommand=x]:/p')" \
+    "dash-leading host inside [ ] after user@ rejected"
 assert_contains "$(_stderr validate_sync_args "$sandbox" '-oProxyCommand=x@host:/p')" \
     'option-injection guard' "remote rejection names the guard"
 
