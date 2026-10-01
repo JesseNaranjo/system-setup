@@ -1,16 +1,17 @@
 # lxc/tests
 
-Unit tests for the container-protection helpers in `lxc/utils-lxc.sh`.
+Unit tests for the `lxc/` suite: the container-protection helpers in `lxc/utils-lxc.sh`, and launcher behaviour no helper owns.
 
 ## Tests
 
 | File | Covers |
 |------|--------|
-| `test-protect-lxc.sh` | `lxc_valid_name`, `lxc_resolve_path`, `lxc_is_protected`, `lxc_protect_config`, `lxc_unprotect_config`, `lxc_protected_since`, and `lxc_list_containers`: the protect/unprotect round trip, idempotent double-protect, repeated protect/unprotect cycles leaving no residue, a successful unprotect with a real config line after the block, an unterminated last line, a block with no END fence, a stray second BEGIN fence, fences in the wrong order, a fenced block with a hand-deleted date line, and a missing config file |
+| `test-protect-lxc.sh` | `lxc_valid_name`, `lxc_resolve_path`, `lxc_is_protected`, `lxc_protect_config`, `lxc_unprotect_config`, `lxc_protected_since`, and `lxc_list_containers`: the protect/unprotect round trip, idempotent double-protect, repeated protect/unprotect cycles leaving no residue, a successful unprotect with a real config line after the block, an unterminated last line, a block with no END fence, a stray second BEGIN fence, fences in the wrong order, a fenced block with a hand-deleted date line, and a missing config file. Launchers: `stop-lxc.sh` and `restart-lxc.sh` capture `lxc-ls -1 --running` and split it with `mapfile` (pinned as source text — both call `/usr/bin/lxc-ls` by absolute path, which no stub can replace) |
 
 No LXC, no root, no network — every case runs against a config file in a
-`mktemp -d` sandbox. Run it as your own user: the `lxc_resolve_path` case
-asserts the non-root path, and the EUID-0 branch cannot be exercised here.
+`mktemp -d` sandbox or reads a launcher's source text. Run it as your own
+user: the `lxc_resolve_path` case asserts the non-root path, and the EUID-0
+branch cannot be exercised here.
 
 ## Running
 

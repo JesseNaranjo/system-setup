@@ -20,7 +20,7 @@ This directory contains scripts for managing LXC containers on Linux systems. Th
 | `config-lxc-ssh.sh` | Configure SSH keys for container access | Yes (always) |
 | `utils-lxc.sh` | Shared utilities for LXC scripts (output functions, self-update) | No |
 | `_download-lxc-scripts.sh` | Self-updating script manager | No |
-| `tests/` | Unit tests for the container-protection helpers in `utils-lxc.sh` (see [tests/README.md](tests/README.md)) | No |
+| `tests/` | Unit tests for the `lxc/` suite: the container-protection helpers in `utils-lxc.sh` and launcher behaviour no helper owns (see [tests/README.md](tests/README.md)) | No |
 
 ## Quick Start
 

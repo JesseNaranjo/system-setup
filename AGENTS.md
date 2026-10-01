@@ -2957,7 +2957,7 @@ Each significant folder contains a `README.md` that documents its contents, patt
 | `raspberry-pi/README.md` | Raspberry Pi setup scripts | ❌ |
 | `utils/README.md` | Cross-platform utilities | ✅ |
 | `utils/tests/README.md` | Unit tests for the pure functions in `utils/` | ✅ |
-| `lxc/tests/README.md` | Unit tests for the container-protection helpers in `lxc/utils-lxc.sh` | ✅ |
+| `lxc/tests/README.md` | Unit tests for the `lxc/` suite: container-protection helpers and launcher behaviour | ✅ |
 | `tests/README.md` | Repo-wide self-update mechanism tests | ✅ |
 
 #### Documentation Folders

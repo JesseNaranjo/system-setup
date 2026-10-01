@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# test-protect-lxc.sh - Unit tests for the container-protection helpers in
-# lxc/utils-lxc.sh
+# test-protect-lxc.sh - Unit tests for the lxc/ suite: the container-protection
+# helpers in lxc/utils-lxc.sh, and launcher behaviour no helper owns
 #
 # Zero dependencies: no LXC, no root, no network. Every case runs against a
-# config file in a mktemp -d sandbox. Development-only — never listed in
-# get_script_list().
+# config file in a mktemp -d sandbox or reads a launcher's source text.
+# Development-only — never listed in get_script_list().
 #
 # Usage: ./test-protect-lxc.sh
 set -euo pipefail
@@ -209,6 +209,19 @@ mkdir -p "${SANDBOX}/not-a-container"
 assert_not_contains "$(lxc_list_containers "$SANDBOX")" "not-a-container" "skips dirs without a config"
 mkdir -p "${SANDBOX}/empty-root"
 assert_eq "" "$(lxc_list_containers "${SANDBOX}/empty-root")" "an empty root lists nothing"
+
+echo "== stop-lxc.sh and restart-lxc.sh split lxc-ls output one name per line =="
+# Both call /usr/bin/lxc-ls by absolute path, which no PATH shim or function
+# stub can stand in for, so these pin the source text instead — the same shape
+# tests/test-self-update.sh uses for the github/ restart guard.
+# shellcheck disable=SC2016  # the single quotes are deliberate: these are the
+# literal source lines being searched for, not expansions.
+for script in stop-lxc.sh restart-lxc.sh; do
+    assert_eq 1 "$(grep -cF 'running_list=$(/usr/bin/lxc-ls -1 --running)' "${TESTS_DIR}/../${script}")" \
+        "${script}: captures lxc-ls -1 --running, so a failing lxc-ls still aborts"
+    assert_eq 1 "$(grep -cF 'mapfile -t RUNNING <<< "$running_list"' "${TESTS_DIR}/../${script}")" \
+        "${script}: splits the capture one line per element"
+done
 
 printf '\n%d run, %d failed\n' "$TESTS_RUN" "$TESTS_FAILED"
 [[ "$TESTS_FAILED" -eq 0 ]]

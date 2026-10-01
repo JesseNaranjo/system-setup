@@ -180,13 +180,6 @@
 - **Why deferred:** Blocked on "`setup-lxc.sh` has no `main()` or execution guard": the file runs everything at file scope, so `backup_file` cannot be sourced into a test until that restructure lands, and neither change can be exercised without a real LXC host.
 - **Action on pickup:** Convert `BACKED_UP_FILES` to an array and replace the substring match with the standard "check if already in array" loop pattern (AGENTS.md §Array Iteration) — `lxc/config-lxc-ssh.sh`'s own `backup_file` already has that shape. Land it with the `main()` restructure.
 
-### Unquoted word-splitting in `stop-lxc.sh` and `restart-lxc.sh` (added 2026-09-16)
-
-- **Source:** Plan Review of the container protect/unprotect work, 2026-09-16.
-- **Problem:** Both `lxc/stop-lxc.sh` and `lxc/restart-lxc.sh` use `RUNNING=( $(/usr/bin/lxc-ls --running) )` (the two `SC2207`s in `lxc/`) — the exact unquoted command-substitution-into-array pattern AGENTS.md §Anti-Patterns forbids. It works today only because container names cannot contain whitespace.
-- **Why deferred:** Neither file is touched by this work, and the fix wants a `mapfile`-based rewrite verified on a host with running containers.
-- **Action on pickup:** Replace `RUNNING=( $(/usr/bin/lxc-ls --running) )` in both files with `mapfile -t RUNNING < <(/usr/bin/lxc-ls -1 --running)` — the `-1` is required because plain `lxc-ls` pads every name to the longest name's column width and separates with a space or newline depending on terminal width, while `-1` prints one bare name per line — then verify against a host with running containers.
-
 ### Manual `lxc-destroy -s` leaves the container's systemd state behind (added 2026-09-16)
 
 - **Source:** Review of the container protect/destroy work, 2026-09-16.

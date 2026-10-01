@@ -50,12 +50,21 @@ main() {
         # No LXCs specified, so restart all running LXCs
         print_info "No containers specified, restarting all running containers..."
 
-        RUNNING=( $(/usr/bin/lxc-ls --running) )
+        # -1: one bare name per line. lxc-ls already prints that way when stdout
+        # is not a tty (lxc-ls(1)), which a command substitution never is; the
+        # flag makes the format explicit rather than a side effect of the capture.
+        # Captured first rather than fed to mapfile through a process
+        # substitution: mapfile cannot report lxc-ls's exit status, so a failing
+        # lxc-ls would read as "no running containers" instead of aborting.
+        local running_list
+        running_list=$(/usr/bin/lxc-ls -1 --running)
 
-        if [[ ${#RUNNING[@]} -eq 0 ]]; then
+        if [[ -z "$running_list" ]]; then
             print_warning "⚠ No running containers found"
             exit 0
         fi
+
+        mapfile -t RUNNING <<< "$running_list"
     else
         RUNNING=("${CONTAINERS[@]}")
     fi
