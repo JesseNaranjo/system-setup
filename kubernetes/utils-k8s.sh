@@ -34,11 +34,10 @@ readonly NC='\033[0m' # No Color
 # (kubernetes-setup.sh) must ensure proper initialization order:
 #
 # 1. detect_environment() must be called first - sets DETECTED_OS, RUNNING_IN_CONTAINER
-# 2. install-k8s-packages.sh populates *_INSTALLED flags via track_special_packages()
-# 3. Other modules read *_INSTALLED flags to decide what to configure
+# 2. install-k8s-packages.sh and kubernetes-setup.sh populate the *_INSTALLED flags via track_special_packages()
+# 3. kubernetes-setup.sh reads the *_INSTALLED flags to gate the steps that depend on them
 #
-# When running modules standalone, call detect_environment() and verify that
-# any required *_INSTALLED flags are set (they default to false).
+# When running modules standalone, call detect_environment() first.
 # ============================================================================
 
 DEBUG_MODE=false
@@ -161,15 +160,16 @@ show_diff_box() {
 }
 
 # Package installation tracking flags
-# Set by: track_special_packages() called from install-k8s-packages.sh
-# Read by: other modules to determine what to configure
-KUBECTL_INSTALLED=false
+# Set by: track_special_packages(), called from install-k8s-packages.sh and kubernetes-setup.sh
+# Read by: kubernetes-setup.sh, to gate the steps that depend on each package
+# shellcheck disable=SC2034  # KUBEADM_INSTALLED is read by kubernetes-setup.sh, which sources this
 KUBEADM_INSTALLED=false
+# shellcheck disable=SC2034  # KUBELET_INSTALLED is read by kubernetes-setup.sh, which sources this
 KUBELET_INSTALLED=false
+# shellcheck disable=SC2034  # CRIO_INSTALLED is read by kubernetes-setup.sh, which sources this
 CRIO_INSTALLED=false
 
 declare -A SPECIAL_PACKAGE_FLAGS=(
-    [kubectl]=KUBECTL_INSTALLED
     [kubeadm]=KUBEADM_INSTALLED
     [kubelet]=KUBELET_INSTALLED
     [cri-o]=CRIO_INSTALLED
@@ -312,6 +312,7 @@ detect_os() {
 
 # Detect if running inside a container (LXC, Docker, or other)
 # Sets the global RUNNING_IN_CONTAINER variable
+# shellcheck disable=SC2034  # RUNNING_IN_CONTAINER is read by the scripts that source this
 detect_container() {
     # Check for LXC container via environment variable
     if [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ 2>/dev/null; then
@@ -358,6 +359,7 @@ detect_environment() {
 # Detect the system's package manager
 # Sets DETECTED_PKG_MANAGER to: "apt", "brew", "dnf", "zypper", or "unknown"
 # Extensible: Add new package managers by adding to the array
+# shellcheck disable=SC2034  # DETECTED_PKG_MANAGER is read by install-update-minikube.sh, which sources this
 detect_package_manager() {
     local -a pkg_managers=("apt" "brew" "dnf" "zypper")
 
@@ -475,7 +477,8 @@ needs_elevation() {
     fi
 
     # Check if parent directory requires elevated permissions
-    local dir=$(dirname "$file")
+    local dir
+    dir=$(dirname "$file")
     if [[ ! -w "$dir" ]]; then
         return 0
     fi
@@ -702,7 +705,8 @@ create_config_file() {
 
     if [[ -f "$file" ]]; then
         # File exists - check permissions and warn if different
-        local actual_perms=$(get_file_permissions "$file")
+        local actual_perms
+        actual_perms=$(get_file_permissions "$file")
         if [[ "$actual_perms" != "$perms" ]]; then
             print_warning "⚠ $file exists with permissions $actual_perms (expected $perms)"
         fi
@@ -746,7 +750,8 @@ backup_file() {
     fi
 
     if [[ -f "$file" ]]; then
-        local backup="${file}.backup.$(date +%Y%m%d_%H%M%S).bak"
+        local backup
+        backup="${file}.backup.$(date +%Y%m%d_%H%M%S).bak"
 
         # Copy file with preserved permissions (-p flag)
         if needs_elevation "$file"; then
@@ -868,12 +873,14 @@ update_config_line() {
 
     if config_exists "$file" "$setting_pattern"; then
         # Setting exists, check if it's already correct
-        local escaped_full_line=$(escape_regex "$full_line")
+        local escaped_full_line
+        escaped_full_line=$(escape_regex "$full_line")
         if grep_file -qE "^[[:space:]]*${escaped_full_line}[[:space:]]*$" "$file"; then
             print_success "- $description already configured correctly"
             return 0
         else
-            local current_value=$(grep_file -E "^[[:space:]]*${setting_pattern}" "$file" | head -n 1)
+            local current_value
+            current_value=$(grep_file -E "^[[:space:]]*${setting_pattern}" "$file" | head -n 1)
             print_warning "⚠ $description has different value: '$current_value' in $file"
             backup_file "$file"
             add_change_header "$file" "$config_type"
@@ -881,7 +888,8 @@ update_config_line() {
             local temp_file
             temp_file=$(mktemp)
             TEMP_FILES+=("$temp_file")
-            local original_perms=$(get_file_permissions "$file")
+            local original_perms
+            original_perms=$(get_file_permissions "$file")
 
             # Use awk to find the line, comment it, and append the new line at the end of the file
             if ! awk -v pattern="^[[:space:]]*${setting_pattern}" -v new_line="${full_line}" '
@@ -951,12 +959,14 @@ add_config_if_needed() {
     fi
 
     # Escape regex special characters in the setting for pattern matching
-    local escaped_setting=$(escape_regex "$setting")
+    local escaped_setting
+    escaped_setting=$(escape_regex "$setting")
 
     # The pattern is the setting key itself
     if [[ $setting =~ ^[[:space:]]*set[[:space:]]+ ]]; then
         local setting_key=${setting#set }
-        local escaped_key=$(escape_regex "$setting_key")
+        local escaped_key
+        escaped_key=$(escape_regex "$setting_key")
         local setting_pattern="set[[:space:]]+${escaped_key}"
     else
         local setting_pattern="${escaped_setting}"
