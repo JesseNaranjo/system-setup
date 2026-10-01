@@ -162,11 +162,17 @@ show_diff_box() {
 # Package installation tracking flags
 # Set by: track_special_packages() called from package-management.sh
 # Read by: system-configuration.sh to determine what to configure
+# shellcheck disable=SC2034  # CURL_INSTALLED is read by the scripts that source this
 CURL_INSTALLED=false
+# shellcheck disable=SC2034  # FASTFETCH_INSTALLED is read by the scripts that source this
 FASTFETCH_INSTALLED=false
+# shellcheck disable=SC2034  # GIT_INSTALLED is read by the scripts that source this
 GIT_INSTALLED=false
+# shellcheck disable=SC2034  # NANO_INSTALLED is read by the scripts that source this
 NANO_INSTALLED=false
+# shellcheck disable=SC2034  # OPENSSH_SERVER_INSTALLED is read by the scripts that source this
 OPENSSH_SERVER_INSTALLED=false
+# shellcheck disable=SC2034  # TMUX_INSTALLED is read by the scripts that source this
 TMUX_INSTALLED=false
 
 declare -A SPECIAL_PACKAGE_FLAGS=(
@@ -315,6 +321,7 @@ detect_os() {
 
 # Detect if running inside a container (LXC, Docker, or other)
 # Sets the global RUNNING_IN_CONTAINER variable
+# shellcheck disable=SC2034  # RUNNING_IN_CONTAINER is read by the scripts that source this
 detect_container() {
     # Check for LXC container via environment variable
     if [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ 2>/dev/null; then
@@ -361,6 +368,7 @@ detect_environment() {
 # Detect the system's package manager
 # Sets DETECTED_PKG_MANAGER to: "apt", "brew", "dnf", "zypper", or "unknown"
 # Extensible: Add new package managers by adding to the array
+# shellcheck disable=SC2034  # DETECTED_PKG_MANAGER is read by the scripts that source this
 detect_package_manager() {
     local -a pkg_managers=("apt" "brew" "dnf" "zypper")
 
@@ -435,7 +443,8 @@ needs_elevation() {
     fi
 
     # Check if parent directory requires elevated permissions
-    local dir=$(dirname "$file")
+    local dir
+    dir=$(dirname "$file")
     if [[ ! -w "$dir" ]]; then
         return 0
     fi
@@ -584,8 +593,10 @@ populate_package_cache() {
     local installed_packages
     if [[ "$DETECTED_OS" == "macos" ]]; then
         # Get all installed packages from brew (both formulae and casks)
-        local installed_formulae=$(brew list --formula -1 2>/dev/null || true)
-        local installed_casks=$(brew list --cask -1 2>/dev/null || true)
+        local installed_formulae
+        installed_formulae=$(brew list --formula -1 2>/dev/null || true)
+        local installed_casks
+        installed_casks=$(brew list --cask -1 2>/dev/null || true)
         installed_packages=$(printf "%s\n%s" "$installed_formulae" "$installed_casks")
     else
         # Get all installed packages from dpkg
@@ -726,7 +737,8 @@ create_config_file() {
 
     if [[ -f "$file" ]]; then
         # File exists - check permissions and warn if different
-        local actual_perms=$(get_file_permissions "$file")
+        local actual_perms
+        actual_perms=$(get_file_permissions "$file")
         if [[ "$actual_perms" != "$perms" ]]; then
             print_warning "⚠ $file exists with permissions $actual_perms (expected $perms)"
         fi
@@ -796,7 +808,8 @@ backup_file() {
     fi
 
     if [[ -f "$file" ]]; then
-        local backup="${file}.backup.$(date +%Y%m%d_%H%M%S).bak"
+        local backup
+        backup="${file}.backup.$(date +%Y%m%d_%H%M%S).bak"
 
         # Copy file with preserved permissions (-p flag)
         if needs_elevation "$file"; then
@@ -908,12 +921,14 @@ update_config_line() {
 
     if config_exists "$file" "$setting_pattern"; then
         # Setting exists, check if it's already correct
-        local escaped_full_line=$(escape_regex "$full_line")
+        local escaped_full_line
+        escaped_full_line=$(escape_regex "$full_line")
         if grep_file -qE "^[[:space:]]*${escaped_full_line}[[:space:]]*$" "$file"; then
             print_success "- $description already configured correctly"
             return 0
         else
-            local current_value=$(grep_file -E "^[[:space:]]*${setting_pattern}" "$file" | head -n 1)
+            local current_value
+            current_value=$(grep_file -E "^[[:space:]]*${setting_pattern}" "$file" | head -n 1)
             print_warning "⚠ $description has different value: '$current_value' in $file"
             backup_file "$file"
             add_change_header "$file" "$config_type"
@@ -1003,12 +1018,14 @@ add_config_if_needed() {
     fi
 
     # Escape regex special characters in the setting for pattern matching
-    local escaped_setting=$(escape_regex "$setting")
+    local escaped_setting
+    escaped_setting=$(escape_regex "$setting")
 
     # The pattern is the setting key itself
     if [[ $setting =~ ^[[:space:]]*set[[:space:]]+ ]]; then
         local setting_key=${setting#set }
-        local escaped_key=$(escape_regex "$setting_key")
+        local escaped_key
+        escaped_key=$(escape_regex "$setting_key")
         local setting_pattern="set[[:space:]]+${escaped_key}"
     else
         local setting_pattern="${escaped_setting}"
