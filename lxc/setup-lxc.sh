@@ -33,7 +33,8 @@
 set -euo pipefail
 
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
-    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    readonly SCRIPT_DIR
 fi
 
 # shellcheck source=utils-lxc.sh
@@ -52,20 +53,22 @@ backup_file() {
     fi
 
     if [[ -f "$file" ]]; then
-        local backup="${file}.backup.$(date +%Y%m%d_%H%M%S).bak"
+        local backup
+        backup="${file}.backup.$(date +%Y%m%d_%H%M%S).bak"
 
         # Copy file with preserved permissions (-p flag)
         cp -p "$file" "$backup"
 
         # Preserve ownership (requires appropriate permissions)
         # Get the owner and group of the original file
+        local owner
         if [[ "$OSTYPE" == "darwin"* ]]; then
             # macOS stat syntax
-            local owner=$(stat -f "%u:%g" "$file")
+            owner=$(stat -f "%u:%g" "$file")
             chown "$owner" "$backup" 2>/dev/null || true
         else
             # Linux stat syntax
-            local owner=$(stat -c "%u:%g" "$file")
+            owner=$(stat -c "%u:%g" "$file")
             chown "$owner" "$backup" 2>/dev/null || true
         fi
 
@@ -446,11 +449,11 @@ lxc.net.0.link = $BRIDGE_LINK
 lxc.net.0.flags = up
 EOF
 
-chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG"
+chown "${LIMITED_USER}:${LIMITED_USER}" "$LIMITED_USER_CONFIG"
 
 chmod 644 "$LIMITED_USER_CONFIG_LXC/default.conf"
-chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_LXC"
-chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_LXC/default.conf"
+chown "${LIMITED_USER}:${LIMITED_USER}" "$LIMITED_USER_CONFIG_LXC"
+chown "${LIMITED_USER}:${LIMITED_USER}" "$LIMITED_USER_CONFIG_LXC/default.conf"
 print_success "✓ Created LXC default configuration"
 echo ""
 
@@ -504,7 +507,7 @@ echo ""
 
 # Enable systemd lingering
 print_info "Enabling systemd lingering for user: $LIMITED_USER"
-if loginctl enable-linger ${LIMITED_USER}; then
+if loginctl enable-linger "${LIMITED_USER}"; then
     print_success "✓ Systemd lingering enabled"
 else
     print_warning "⚠ Failed to enable systemd lingering (may need manual intervention)"
@@ -512,9 +515,9 @@ fi
 echo ""
 
 # Set ownership on systemd files
-chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_SYSTEMD"
-chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_SYSTEMD_USER"
-chown ${LIMITED_USER}:${LIMITED_USER} "$LIMITED_USER_CONFIG_SYSTEMD_USER/lxc-bg-start@.service"
+chown "${LIMITED_USER}:${LIMITED_USER}" "$LIMITED_USER_CONFIG_SYSTEMD"
+chown "${LIMITED_USER}:${LIMITED_USER}" "$LIMITED_USER_CONFIG_SYSTEMD_USER"
+chown "${LIMITED_USER}:${LIMITED_USER}" "$LIMITED_USER_CONFIG_SYSTEMD_USER/lxc-bg-start@.service"
 
 fi  # end unprivileged-only sections
 

@@ -169,16 +169,16 @@
 ### `setup-lxc.sh` has no `main()` or execution guard (added 2026-09-16)
 
 - **Source:** Plan Review of the container protect/unprotect work, 2026-09-16.
-- **Problem:** `lxc/setup-lxc.sh` runs everything at file scope and calls `check_for_updates` outside any function — the only `lxc/` script that does. This violates AGENTS.md §Important Implementation Notes #1.
-- **Why deferred:** Restructuring a 600-line root-only host-setup script is unrelated to protection and cannot be exercised without a real LXC host.
-- **Action on pickup:** Wrap `setup-lxc.sh`'s file-scope logic in a `main()` and add the standard `[[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"` execution guard, matching every other `lxc/` script.
+- **Problem:** `lxc/setup-lxc.sh` runs everything at file scope and calls `check_for_updates` outside any function — the only `lxc/` script that does. This violates AGENTS.md §Important Implementation Notes #1, and it is why nothing in the file can be sourced into a test. The file is otherwise at 0 shellcheck findings; only this restructure and the `BACKED_UP_FILES` array conversion remain.
+- **Why deferred:** Restructuring a 600-line root-only host-setup script cannot be exercised without a real LXC host; the lint pass that brought the file to 0 findings was limited to quoting and declaration splits for that reason.
+- **Action on pickup:** Wrap `setup-lxc.sh`'s file-scope logic in a `main()` and end the file in the if-form execution guard (`if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then main "$@"; fi`, on three lines — AGENTS.md §Important Implementation Notes #1), matching every other `lxc/` script. Do it in the same change as "`setup-lxc.sh` tracks backups in a string, not an array" — same file, same host verification — and verify on a real LXC host in both modes: `sudo ./setup-lxc.sh <username>` and `sudo ./setup-lxc.sh --privileged`. Design-principle candidates for the same change: `backup_file`'s macOS `stat -f` branch and `get_network_interfaces`' `networksetup` branch are dead in a root-only LXC host script; `setup-lxc.sh` and `config-lxc-ssh.sh` each carry a private `backup_file` that is a DRY candidate for `lxc/utils-lxc.sh`.
 
 ### `setup-lxc.sh` tracks backups in a string, not an array (added 2026-09-16)
 
 - **Source:** Plan Review of the container protect/unprotect work, 2026-09-16.
-- **Problem:** `lxc/setup-lxc.sh` tracks backed-up files with `BACKED_UP_FILES=""`, substring-matched with `[[ "$BACKED_UP_FILES" == *"$file"* ]]`. AGENTS.md §Critical Syntax Rules mandates arrays for collections, and a path containing a space corrupts the substring match.
-- **Why deferred:** Same file and same blocker as "`setup-lxc.sh` has no `main()` or execution guard" — restructuring is unrelated to protection and cannot be exercised without a real LXC host.
-- **Action on pickup:** Convert `BACKED_UP_FILES` to an array and replace the substring match with the standard "check if already in array" loop pattern (AGENTS.md §Array Iteration).
+- **Problem:** `lxc/setup-lxc.sh` tracks backed-up files with `BACKED_UP_FILES=""`, substring-matched with `[[ "$BACKED_UP_FILES" == *"$file"* ]]`. AGENTS.md §Critical Syntax Rules mandates arrays for collections, and a path containing a space corrupts the substring match. shellcheck does not flag this pattern, so the file's 0-finding lint status does not cover it.
+- **Why deferred:** Blocked on "`setup-lxc.sh` has no `main()` or execution guard": the file runs everything at file scope, so `backup_file` cannot be sourced into a test until that restructure lands, and neither change can be exercised without a real LXC host.
+- **Action on pickup:** Convert `BACKED_UP_FILES` to an array and replace the substring match with the standard "check if already in array" loop pattern (AGENTS.md §Array Iteration) — `lxc/config-lxc-ssh.sh`'s own `backup_file` already has that shape. Land it with the `main()` restructure.
 
 ### Unquoted word-splitting in `stop-lxc.sh` and `restart-lxc.sh` (added 2026-09-16)
 
