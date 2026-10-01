@@ -138,13 +138,6 @@
 - **Why deferred:** Out of scope for the push-ghostty-terminfo review that surfaced them; each file is a mechanical per-file cleanup that warrants its own focused pass so diffs stay reviewable.
 - **Action on pickup:** One focused pass per file, not a repo-wide sweep. Dominant codes: SC2155 (split `local x; x=$(...)`), SC2034 (unused vars), SC2016 (single-quoted `$` in GraphQL heredocs — usually intentional, annotate with a disable).
 
-### `github/gh_org_copy-backup.sh` is a tracked backup file (added 2026-07-15)
-
-- **Source:** 2026-07-15 canonical-helper review.
-- **Problem:** `github/gh_org_copy-backup.sh` is committed as a backup file. Git history is the backup; a committed `-backup.sh` is drift-prone — it does NOT carry the canonical helpers, so it silently misses cross-copy fixes (e.g. the 2026-07-15 reconciliation skipped it).
-- **Why deferred:** Removal needs a reference check first, and the file's intent — throwaway backup versus deliberate reference snapshot — was never settled during the review.
-- **Action on pickup:** Confirm nothing references `github/gh_org_copy-backup.sh`, then remove it — or, if it is a deliberate reference snapshot, document why and exclude it from the Helper-Duplication audit.
-
 ### No `.shellcheckrc` and no CI gate for the "0 warnings, warnings→errors" standard (added 2026-07-17)
 
 - **Source:** 2026-07-17 `utils/` Modular Standalone documentation cascade.

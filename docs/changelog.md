@@ -4,6 +4,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), date-based, ne
 This changelog begins 2026-07-06. Entries below capture the project's major
 features as of that date; earlier history is not individually recorded.
 
+## [2026-10-01]
+
+### Removed
+
+- **`github/gh_org_copy-backup.sh`.** The 486-line snapshot of an older `gh_org_copy.sh` was never run, sourced, or listed by any updater, and had missed every cross-copy helper fix since it was taken; git history keeps it. `github/README.md` drops its Legacy row, and the executable-bit assertion in `tests/test-self-update.sh` now allowlists only the five sourced `utils-*.sh` libraries.
+
 ## [2026-09-21]
 
 ### Changed

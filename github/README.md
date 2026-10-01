@@ -9,7 +9,6 @@ This directory contains scripts for bulk operations on GitHub organizations. The
 | `gh_org_copy.sh` | Copy organization repositories without forking | Self-update |
 | `gh_org_delete_issues.sh` | Bulk close/lock/delete issues across repos | Dry-run default |
 | `gh_org_delete_repos.sh` | Bulk delete repositories | Dry-run default |
-| `gh_org_copy-backup.sh` | Backup version of org copy script | Legacy |
 
 ## Quick Start
 
@@ -173,7 +172,7 @@ Bulk repository deletion tool with safety features.
 
 ### Self-Update
 
-The main scripts (`gh_org_copy.sh`, `gh_org_delete_issues.sh`, `gh_org_delete_repos.sh`) include self-update functionality:
+All three scripts (`gh_org_copy.sh`, `gh_org_delete_issues.sh`, `gh_org_delete_repos.sh`) include self-update functionality:
 
 - Checks for updates from the repository on startup
 - Shows diff before updating
