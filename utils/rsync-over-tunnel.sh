@@ -408,14 +408,13 @@ EOF
 # rsyncd's: openrsync treats an unknown key as an UNRECOVERABLE error, so one
 # stray directive kills step 1 on every macOS host running Apple's
 # /usr/bin/rsync. Check any new key against `rsync_daemon_params[]` in
-# openrsync/daemon_cfg.c (apple-oss-distributions/rsync) BEFORE adding it.
+# openrsync/daemon_cfg.c (apple-oss-distributions/rsync) BEFORE adding it, then
+# add it to OPENRSYNC_VERIFIED_KEYS in utils/tests/test-rsync-over-tunnel.sh:
+# that suite pins the emitted key set to that list and fails until you do.
 #
-# Verified 2026-08-06 against that table: all 16 keys emitted below — uid, gid,
-# use chroot, munge symlinks, numeric ids, max connections, lock file, address,
-# port, hosts allow, hosts deny, log file, path, comment, read only, list — are
-# present. "reverse lookup" is NOT, which is why it is deliberately absent here;
-# and with a loopback-only `address` and a numeric `hosts allow` there was no
-# hostname to resolve, so it bought nothing on GNU rsync either.
+# "reverse lookup" is NOT in that table, which is why it is deliberately absent
+# here; and with a loopback-only `address` and a numeric `hosts allow` there was
+# no hostname to resolve, so it bought nothing on GNU rsync either.
 build_daemon_config() {
     local use_chroot="$1" stamp="$2"
 

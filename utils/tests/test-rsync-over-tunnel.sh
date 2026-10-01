@@ -348,6 +348,43 @@ else
     assert_eq "invariant holds" "VIOLATED"        "chroot/munge pairing is never contradictory"
 fi
 
+# Every key build_daemon_config may emit: 16 with `use chroot = no`, 15 with
+# `yes`, which omits `munge symlinks`. Each was verified present in
+# rsync_daemon_params[] in openrsync/daemon_cfg.c (apple-oss-distributions/rsync)
+# on 2026-08-06. openrsync rejects an unknown key as an unrecoverable error, so
+# a key missing from that table kills step 1 on every macOS target running
+# Apple's /usr/bin/rsync. To add a key: find it in that table, cite the ref you
+# read in the commit, then add it here and in build_daemon_config together.
+# Keys the table accepts that the script does not use yet: auth users, secrets
+# file, refuse options, timeout, pre-xfer exec, post-xfer exec, strict modes,
+# incoming chmod, outgoing chmod, write only, filter, include, exclude.
+readonly -a OPENRSYNC_VERIFIED_KEYS=(
+    'uid' 'gid' 'use chroot' 'munge symlinks' 'numeric ids' 'max connections'
+    'lock file' 'address' 'port' 'hosts allow' 'hosts deny' 'log file'
+    'path' 'comment' 'read only' 'list'
+)
+
+# Print the key of every `key = value` line in a generated rsyncd.conf, one per
+# line. Comments, blank lines and [module] headers are skipped; indentation and
+# the space before `=` are trimmed. A line with no `=` prints whole, so a stray
+# bare word still fails the comparison below.
+_daemon_conf_keys() {
+    local line key
+    while IFS= read -r line; do
+        line="${line#"${line%%[![:space:]]*}"}"
+        [[ -z "$line" || "$line" == '#'* || "$line" == '['* ]] && continue
+        key="${line%%=*}"
+        printf '%s\n' "${key%"${key##*[![:space:]]}"}"
+    done <<< "$1"
+}
+
+_expected_no=$(printf '%s\n' "${OPENRSYNC_VERIFIED_KEYS[@]}" | sort | tr '\n' ',')
+_expected_yes=$(printf '%s\n' "${OPENRSYNC_VERIFIED_KEYS[@]}" | grep -vx 'munge symlinks' | sort | tr '\n' ',')
+assert_eq "$_expected_no"  "$(_daemon_conf_keys "$conf_no"  | sort | tr '\n' ',')" \
+    "chroot=no emits exactly the 16 openrsync-verified keys"
+assert_eq "$_expected_yes" "$(_daemon_conf_keys "$conf_yes" | sort | tr '\n' ',')" \
+    "chroot=yes emits exactly those keys minus munge symlinks (15)"
+
 echo "== cmd_target_tunnel refuses to clobber existing files =="
 # The generated config and its derived .lock are DELETED by the EXIT trap, so
 # writing over an existing file destroys it. `--conf /etc/rsyncd.conf` used to
