@@ -12,6 +12,8 @@
 # - Provides detailed progress reporting and logging
 # - Creates automatic backups of overwritten/deleted files (optional)
 # - Validates connectivity before sync operations
+# - Refuses a LOCAL_DIR, or a REMOTE_SPEC user or host, that begins with '-'
+#   (option-injection guard, exit 1)
 #
 # Exit codes: 0 OK | 1 usage error | 2 rsync error | 3 connectivity error
 
@@ -30,6 +32,11 @@ readonly SCRIPT_NAME
 STAMP="$(date +%F_%H-%M-%S)"
 readonly STAMP
 readonly LOG_FILE="${HOME}/.rsync-two-way.log"
+
+# ssh destination (user@host or host) and the host after its last '@', split
+# out of REMOTE_SPEC by validate_sync_args.
+REMOTE_USER_HOST=""
+REMOTE_HOST=""
 
 # Single-use section-banner helper kept inline (not provided by utils-misc.sh).
 print_section() {
@@ -77,6 +84,57 @@ ${YELLOW}Exit Codes:${NC}
   3  Connectivity error
 
 EOF
+}
+
+# Validate LOCAL_DIR and REMOTE_SPEC, then split REMOTE_SPEC into the ssh
+# destination and the host after its last '@'. main calls it before ssh or
+# rsync runs (check_for_updates has already fetched this script by then).
+# Usage: validate_sync_args "local_dir" "remote_spec"
+# Sets: REMOTE_USER_HOST, REMOTE_HOST
+# Returns: 0 on success, 1 on a usage error (message already printed)
+validate_sync_args() {
+    local local_dir="$1"
+    local remote_spec="$2"
+
+    # Option-injection guard. Quoting stops word splitting, not option parsing:
+    # a token that begins with '-' is read as an option by the command it
+    # reaches. LOCAL_DIR is an rsync positional in both passes, and rsync's man
+    # page documents no `--` end-of-options marker, so check the shape instead
+    # (the same defense rsync-over-tunnel.sh uses in resolve_transfer_path).
+    if [[ "$local_dir" == -* ]]; then
+        print_error "✖ Refusing a local directory that begins with '-' (option-injection guard): $local_dir"
+        print_info "Pass './$local_dir' or an absolute path instead"
+        return 1
+    fi
+
+    if [[ ! -d "$local_dir" ]]; then
+        print_error "✖ Local directory does not exist: $local_dir"
+        log "ERROR: Local directory does not exist: $local_dir"
+        return 1
+    fi
+
+    if [[ ! "$remote_spec" =~ ^([^@]+@)?([^:]+):(.+)$ ]]; then
+        print_error "✖ Invalid remote specification format: $remote_spec"
+        print_info "Expected format: user@host:/path or host:/path"
+        return 1
+    fi
+    REMOTE_USER_HOST="${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
+    # The host is what follows the LAST '@', where ssh and rsync split a destination.
+    REMOTE_HOST="${REMOTE_USER_HOST##*@}"
+
+    # The same guard on the remote side. REMOTE_USER_HOST is ssh's destination
+    # in main's connectivity check, which runs before the confirmation prompt,
+    # and it begins with the same character as REMOTE_SPEC, the rsync
+    # positional. REMOTE_HOST is checked on its own because a bare host that
+    # begins with '-' is an ssh option wherever rsync's remote-shell command
+    # line places it. A guard on the host alone misses '-oProxyCommand=x@host:/p':
+    # the host is clean, but ssh parses the whole destination as an option.
+    if [[ "$REMOTE_USER_HOST" == -* || "$REMOTE_HOST" == -* ]]; then
+        print_error "✖ Refusing a remote user or host that begins with '-' (option-injection guard): $remote_spec"
+        return 1
+    fi
+
+    return 0
 }
 
 main() {
@@ -149,23 +207,8 @@ main() {
       OPTS+=(--exclude="$e")
     done
 
-    # Validate local directory exists
-    if [[ ! -d "$LOCAL" ]]; then
-        print_error "✖ Local directory does not exist: $LOCAL"
-        log "ERROR: Local directory does not exist: $LOCAL"
-        exit 1
-    fi
-
-    # Extract remote host and path for connectivity check
-    local REMOTE_USER_HOST REMOTE_HOST
-    if [[ "$REMOTE" =~ ^([^@]+@)?([^:]+):(.+)$ ]]; then
-        REMOTE_USER_HOST="${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
-        REMOTE_HOST="${BASH_REMATCH[2]}"
-    else
-        print_error "✖ Invalid remote specification format: $REMOTE"
-        print_info "Expected format: user@host:/path or host:/path"
-        exit 1
-    fi
+    # Validate both arguments and set REMOTE_USER_HOST / REMOTE_HOST
+    validate_sync_args "$LOCAL" "$REMOTE" || exit 1
 
     # Check if rsync is installed
     if ! command -v rsync &>/dev/null; then

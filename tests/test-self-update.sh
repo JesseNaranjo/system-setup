@@ -28,9 +28,10 @@ _test_cleanup() {
 }
 trap _test_cleanup EXIT
 
-# assert_eq / assert_contains / assert_not_contains: one of three copies of the
-# trio — utils/tests/test-rsync-over-tunnel.sh and lxc/tests/test-protect-lxc.sh
-# carry the other two. All three are development-only; change them together.
+# assert_eq / assert_contains / assert_not_contains: one of four copies of the
+# trio — utils/tests/test-rsync-over-tunnel.sh, utils/tests/test-rsync-two-way.sh
+# and lxc/tests/test-protect-lxc.sh carry the other three. All four are
+# development-only; change them together.
 assert_eq() {
     local expected="$1" actual="$2" label="$3"
     ((TESTS_RUN++)) || true

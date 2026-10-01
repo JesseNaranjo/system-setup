@@ -24,11 +24,12 @@ TRACE=1 ./lxc/tests/test-protect-lxc.sh  # xtrace
 ## Adding Tests
 
 1. Add fixtures with `make_container`, not paraphrased config content.
-2. Use `assert_eq` / `assert_contains` / `assert_not_contains`. They are the trio's
-   **third** copy — `tests/test-self-update.sh` and `utils/tests/test-rsync-over-tunnel.sh`
-   carry the other two (all three are development-only, so the suite-isolation rule
-   that forbids sharing does not apply and neither does the AGENTS.md §Helper Library
-   Duplication roster); change all three files together.
+2. Use `assert_eq` / `assert_contains` / `assert_not_contains`. They are one of the
+   trio's four copies — `tests/test-self-update.sh`, `utils/tests/test-rsync-over-tunnel.sh`
+   and `utils/tests/test-rsync-two-way.sh` carry the other three (all four are
+   development-only, so the suite-isolation rule that forbids sharing does not apply
+   and neither does the AGENTS.md §Helper Library Duplication roster); change all four
+   files together.
 3. This file is NOT in `_download-lxc-scripts.sh`'s `get_script_list()`: it is
    development-only and is not distributed to target hosts. It carries no
    `main`/execution guard for the same reason — nothing sources it.
