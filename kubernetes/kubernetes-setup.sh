@@ -31,7 +31,8 @@
 set -euo pipefail
 
 # Get the directory where this script is located
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 
 # Source utilities
 # shellcheck source=utils-k8s.sh
@@ -95,7 +96,8 @@ update_modules() {
         local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
 
         # Ensure the local directory exists before mktemp lands its template adjacent to LOCAL_SCRIPT
-        local script_dir="$(dirname "$LOCAL_SCRIPT")"
+        local script_dir
+        script_dir="$(dirname "$LOCAL_SCRIPT")"
         mkdir -p "$script_dir"
 
         # Path-aware mktemp adjacent to destination so mv -f is atomic rename(2), not cross-FS
@@ -382,6 +384,7 @@ main() {
         print_info "----------------------"
         source "${SCRIPT_DIR}/kubernetes-modules/configure-kernel-modules.sh"
         if main_configure_kernel_modules; then
+            # shellcheck disable=SC2034  # read through ${!dep_var} in check_step_prerequisites
             STEP_KERNEL_MODULES_OK=true
         else
             print_error "✖ Kernel module configuration failed. Continuing..."
@@ -410,6 +413,7 @@ main() {
         print_info "Step 2: Skipping package installation (skip role)"
         # Packages may already be installed from a prior run — mark OK for dependent steps
         if [[ "$KUBEADM_INSTALLED" == true || "$KUBELET_INSTALLED" == true ]]; then
+            # shellcheck disable=SC2034  # read through ${!dep_var} in check_step_prerequisites
             STEP_PACKAGES_OK=true
         fi
         echo ""
@@ -424,6 +428,7 @@ main() {
         if check_step_prerequisites "Network Configuration" "STEP_KERNEL_MODULES_OK"; then
             source "${SCRIPT_DIR}/kubernetes-modules/configure-networking.sh"
             if main_configure_networking; then
+                # shellcheck disable=SC2034  # read through ${!dep_var} in check_step_prerequisites
                 STEP_NETWORKING_OK=true
             else
                 print_error "✖ Network configuration failed. Continuing..."
@@ -436,6 +441,7 @@ main() {
         print_info "--------------------------"
         source "${SCRIPT_DIR}/kubernetes-modules/configure-swap.sh"
         if main_configure_swap; then
+            # shellcheck disable=SC2034  # read through ${!dep_var} in check_step_prerequisites
             STEP_SWAP_OK=true
         else
             print_error "✖ Swap configuration failed. Continuing..."
