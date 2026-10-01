@@ -6,12 +6,13 @@ Unit tests for the `lxc/` suite: the container-protection helpers in `lxc/utils-
 
 | File | Covers |
 |------|--------|
-| `test-protect-lxc.sh` | `lxc_valid_name`, `lxc_resolve_path`, `lxc_is_protected`, `lxc_protect_config`, `lxc_unprotect_config`, `lxc_protected_since`, and `lxc_list_containers`: the protect/unprotect round trip, idempotent double-protect, repeated protect/unprotect cycles leaving no residue, a successful unprotect with a real config line after the block, an unterminated last line, a block with no END fence, a stray second BEGIN fence, fences in the wrong order, a fenced block with a hand-deleted date line, and a missing config file. Launchers: `stop-lxc.sh` and `restart-lxc.sh` capture `lxc-ls -1 --running` and split it with `mapfile` (pinned as source text — both call `/usr/bin/lxc-ls` by absolute path, which no stub can replace) |
+| `test-protect-lxc.sh` | `lxc_valid_name`, `lxc_resolve_path`, `lxc_is_protected`, `lxc_protect_config`, `lxc_unprotect_config`, `lxc_protected_since`, and `lxc_list_containers`: the protect/unprotect round trip, idempotent double-protect, repeated protect/unprotect cycles leaving no residue, a successful unprotect with a real config line after the block, an unterminated last line, a block with no END fence, a stray second BEGIN fence, fences in the wrong order, a fenced block with a hand-deleted date line, and a missing config file. Launchers: `stop-lxc.sh` and `restart-lxc.sh` capture `lxc-ls -1 --running` and split it with `mapfile` (pinned as source text — both call `/usr/bin/lxc-ls` by absolute path, which no stub can replace); `create-lxc.sh` and `backup-lxc.sh` refuse `../etc`, `a/b` and `.hidden` with exit 64 before any `lxc-*` or `sudo` call, and let a valid name through |
 
-No LXC, no root, no network — every case runs against a config file in a
-`mktemp -d` sandbox or reads a launcher's source text. Run it as your own
-user: the `lxc_resolve_path` case asserts the non-root path, and the EUID-0
-branch cannot be exercised here.
+No LXC, no root, no network — every case runs in a `mktemp -d` sandbox or
+reads a launcher's source text. Run it as your own user: the `lxc_resolve_path`
+case asserts the non-root path, the EUID-0 branch cannot be exercised here, and
+the launcher cases rely on `lxc_resolve_path` resolving under the sandboxed
+`HOME`, which root bypasses for `/var/lib/lxc`.
 
 ## Running
 
@@ -31,3 +32,11 @@ TRACE=1 ./lxc/tests/test-protect-lxc.sh  # xtrace
 3. This file is NOT in `_download-lxc-scripts.sh`'s `get_script_list()`: it is
    development-only and is not distributed to target hosts. It carries no
    `main`/execution guard for the same reason — nothing sources it.
+4. Drive a launcher through `_lxc_main <script> <args…>`, which prints
+   `<rc>|<output>`. It sources the script in a child bash (`source "$1" || true`:
+   the `&&`-form execution guard returns 1 when sourced), stubs
+   `check_for_updates`, `check_required_tools`, `prompt_yes_no`, `lxc-info`,
+   `lxc-create`, `sudo`, `7z` and `tar`, points `HOME` into the sandbox and reads
+   stdin from `/dev/null`. Before a case can reach any other external command,
+   add a stub for it to `_lxc_main` — a test never runs a real `lxc-*`, `sudo`
+   or `rm`.

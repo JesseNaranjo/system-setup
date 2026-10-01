@@ -136,6 +136,11 @@ main() {
         exit 64  # EX_USAGE
     fi
 
+    if ! lxc_valid_name "$CONTAINER_NAME"; then
+        print_error "✖ Invalid container name: ${CONTAINER_NAME}"
+        exit 64  # EX_USAGE
+    fi
+
     # Set compression options based on level
     local COMPRESS_OPTS
     case "$COMPRESSION_LEVEL" in

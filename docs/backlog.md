@@ -194,13 +194,6 @@
 - **Why deferred:** No host with a custom `lxc.lxcpath` is available to verify against, and the fix touches every caller.
 - **Action on pickup:** Read the effective path from `lxc-config lxc.lxcpath` (falling back to the current hardcoded pair) inside `lxc_resolve_path`, verify on a host with `lxc.lxcpath` set, and check the `lxc-info`/`lxc-destroy` call sites that currently rely on the tools' own default.
 
-### `create-lxc.sh` and `backup-lxc.sh` build paths from an unvalidated container name (added 2026-09-16)
-
-- **Source:** Whole-branch review of the container protect/destroy work, 2026-09-16.
-- **Problem:** `destroy-lxc.sh`, `protect-lxc.sh`, `unprotect-lxc.sh` and `restore-lxc.sh` (both its positional argument and the name it reads out of the archive) all run their container name through `lxc_valid_name` before building a path from it; `create-lxc.sh` and `backup-lxc.sh` do not. Both interpolate the raw name into paths (`$(lxc_resolve_path)/${CONTAINER_NAME}/config`, the backup archive path) and into `lxc-*` arguments.
-- **Why deferred:** Lower exposure than the `restore-lxc.sh` case that prompted the guard — neither script runs `rm -rf` or `sed -i` on a path built from the name, and the `lxc-*` tools reject a name they cannot use — so the fix is a consistency sweep rather than a defect, and it wants a host with real containers to re-exercise both scripts end to end.
-- **Action on pickup:** Add the same `lxc_valid_name` guard (`print_error "✖ Invalid container name: …"`, `exit 64`) to `create-lxc.sh` and `backup-lxc.sh` right after their name argument is parsed.
-
 ### The protect-append integrity check does not cover the re-run or the fence-scope case (added 2026-09-16)
 
 - **Source:** Whole-branch review of the container protect/destroy work, 2026-09-16.

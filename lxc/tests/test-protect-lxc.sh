@@ -2,8 +2,9 @@
 # test-protect-lxc.sh - Unit tests for the lxc/ suite: the container-protection
 # helpers in lxc/utils-lxc.sh, and launcher behaviour no helper owns
 #
-# Zero dependencies: no LXC, no root, no network. Every case runs against a
-# config file in a mktemp -d sandbox or reads a launcher's source text.
+# Zero dependencies: no LXC, no root, no network. Every case runs in a
+# mktemp -d sandbox — launchers through _lxc_main, with every side effect
+# stubbed — or reads a launcher's source text.
 # Development-only — never listed in get_script_list().
 #
 # Usage: ./test-protect-lxc.sh
@@ -222,6 +223,55 @@ for script in stop-lxc.sh restart-lxc.sh; do
     assert_eq 1 "$(grep -cF 'mapfile -t RUNNING <<< "$running_list"' "${TESTS_DIR}/../${script}")" \
         "${script}: splits the capture one line per element"
 done
+
+# ------------------------------------------------------- launcher main() --
+
+# Drive a launcher's main() with every side effect stubbed; prints "<rc>|<output>".
+# The script is sourced in a child bash, so its exits stay there; `|| true`
+# because an &&-form execution guard returns 1 when sourced. The stubs follow
+# the source so they replace the library's own check_for_updates (network)
+# and prompt_yes_no (/dev/tty). Every external command a path can reach is a
+# stub that never touches a real container or escalates: lxc-info, lxc-create,
+# sudo and prompt_yes_no print REACHED (lxc-info and prompt_yes_no return 1, so
+# no existing-container, stop or start path is reachable); 7z joins its
+# arguments with | so a word-split regression shows; tar -tf emits a 20000-line
+# listing, far past the pipe buffer, so restore-lxc.sh's `head -1` closes the
+# pipe on it exactly as on a real archive, and a reader that drains to EOF still
+# terminates; any other tar call prints REACHED and returns. HOME points
+# into the sandbox, so lxc_resolve_path never names the real user-scope LXC
+# root; stdin is /dev/null, so a stub that drains its input cannot block.
+_lxc_main() {   # $1 = launcher basename, "${@:2}" = its arguments
+    local rc=0 out
+    out=$(HOME="${SANDBOX}/home" bash -c 'source "$1" || true
+            check_for_updates()    { :; }
+            check_required_tools() { :; }
+            prompt_yes_no()        { echo "REACHED prompt_yes_no $1"; return 1; }
+            lxc-info()   { echo "REACHED lxc-info $*"; return 1; }
+            lxc-create() { echo "REACHED lxc-create $*"; return 1; }
+            sudo()       { echo "REACHED sudo $*"; }
+            7z()  { cat > /dev/null; [[ "$1" == a ]] || return 0; : > "${!#}"; local IFS="|"; echo "7Z_ARGS=$*"; }
+            tar() { cat > /dev/null; [[ "$1" == -tf ]] || { echo "REACHED tar $*"; return 0; }; printf "restored-box/rootfs/etc\n%.0s" {1..20000}; }
+            main "${@:2}"' _ "${TESTS_DIR}/../$1" "${@:2}" </dev/null 2>&1) || rc=$?
+    printf '%s|%s' "$rc" "$out"
+}
+
+echo "== create-lxc.sh and backup-lxc.sh refuse an unsafe container name =="
+for script in create-lxc.sh backup-lxc.sh; do
+    for name in "../etc" "a/b" ".hidden"; do
+        res="$(_lxc_main "$script" "$name")"
+        assert_eq 64 "${res%%|*}" "${script} ${name}: exits 64 (EX_USAGE)"
+        assert_contains "${res#*|}" "✖ Invalid container name: ${name}" "${script} ${name}: names the rejected value"
+        assert_not_contains "${res#*|}" "REACHED" "${script} ${name}: refused before any lxc-* or sudo call"
+    done
+done
+# Explicit distribution/release/architecture skip create-lxc.sh's
+# /etc/os-release probe, so the valid-name case does not depend on the host.
+res="$(_lxc_main create-lxc.sh dev-box debian trixie amd64)"
+assert_not_contains "${res#*|}" "Invalid container name" "create-lxc.sh dev-box: a valid name passes the guard"
+assert_contains "${res#*|}" "REACHED lxc-create --name dev-box" "create-lxc.sh dev-box: reaches lxc-create"
+res="$(_lxc_main backup-lxc.sh no-such-box)"
+assert_eq 66 "${res%%|*}" "backup-lxc.sh no-such-box: a valid name reaches the existence check (EX_NOINPUT)"
+assert_not_contains "${res#*|}" "Invalid container name" "backup-lxc.sh no-such-box: a valid name passes the guard"
 
 printf '\n%d run, %d failed\n' "$TESTS_RUN" "$TESTS_FAILED"
 [[ "$TESTS_FAILED" -eq 0 ]]

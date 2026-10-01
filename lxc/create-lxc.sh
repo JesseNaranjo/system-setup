@@ -98,6 +98,11 @@ main() {
         exit 64  # EX_USAGE
     fi
 
+    if ! lxc_valid_name "$CONTAINER_NAME"; then
+        print_error "✖ Invalid container name: ${CONTAINER_NAME}"
+        exit 64  # EX_USAGE
+    fi
+
     # Detect distribution if not specified
     if [[ -z "$DISTRIBUTION" ]]; then
         if [[ -f /etc/os-release ]]; then
