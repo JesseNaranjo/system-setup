@@ -12,7 +12,8 @@ set -euo pipefail
 
 # Get the directory where this script is located
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
-    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    readonly SCRIPT_DIR
 fi
 
 # Source utilities
@@ -52,11 +53,6 @@ get_interface_type() {
     fi
 
     # Check if it's a virtual ethernet (veth, docker, lxc)
-    local dev_id=""
-    if [[ -f "/sys/class/net/${iface}/dev_id" ]]; then
-        dev_id=$(cat "/sys/class/net/${iface}/dev_id" 2>/dev/null)
-    fi
-
     # veth pairs typically used by containers
     if [[ "$iface" == veth* ]]; then
         echo "veth"
@@ -82,13 +78,15 @@ get_network_interfaces() {
     other_interfaces=()
 
     for iface in /sys/class/net/*; do
-        local iface_name=$(basename "$iface")
+        local iface_name
+        iface_name=$(basename "$iface")
         # Skip loopback
         if [[ "$iface_name" == "lo" ]]; then
             continue
         fi
 
-        local iface_type=$(get_interface_type "$iface_name")
+        local iface_type
+        iface_type=$(get_interface_type "$iface_name")
         case "$iface_type" in
             wire)
                 wire_interfaces+=("$iface_name")
@@ -127,7 +125,8 @@ get_existing_issue_interfaces() {
 
 # Helper to generate the new /etc/issue content box
 generate_issue_content() {
-    local temp_box=$(mktemp)
+    local temp_box
+    temp_box=$(mktemp)
 
     {
         # Add box with network interfaces
@@ -137,15 +136,15 @@ generate_issue_content() {
 
         # Add wired, wireless, and other interfaces
         for iface in "${wire_interfaces[@]+"${wire_interfaces[@]}"}"; do
-            echo "  ║ - wire:    \\4{${iface}} / \\6{${iface}} (${iface})"
+            printf '%s\n' "  ║ - wire:    \\4{${iface}} / \\6{${iface}} (${iface})"
         done
         for iface in "${wifi_interfaces[@]+"${wifi_interfaces[@]}"}"; do
-            echo "  ║ - wifi:    \\4{${iface}} / \\6{${iface}} (${iface})"
+            printf '%s\n' "  ║ - wifi:    \\4{${iface}} / \\6{${iface}} (${iface})"
         done
         for iface_info in "${other_interfaces[@]+"${other_interfaces[@]}"}"; do
             local iface="${iface_info%%:*}"
             local type="${iface_info##*:}"
-            echo "  ║ - ${type}:  \\4{${iface}} / \\6{${iface}} (${iface})"
+            printf '%s\n' "  ║ - ${type}:  \\4{${iface}} / \\6{${iface}} (${iface})"
         done
 
         echo "  ╚═════════════════════════════════════════════════════════════════════════════"
@@ -181,8 +180,10 @@ configure_issue_network() {
     get_existing_issue_interfaces
 
     # Compare current interfaces with existing ones to see if an update is needed
-    local current_ifaces=$(printf "%s\n" "${wire_interfaces[@]}" "${wifi_interfaces[@]}" "${other_interfaces[@]%%:*}" | sort)
-    local existing_ifaces=$(printf "%s\n" "${existing_interfaces[@]}" | sort)
+    local current_ifaces
+    current_ifaces=$(printf "%s\n" "${wire_interfaces[@]}" "${wifi_interfaces[@]}" "${other_interfaces[@]%%:*}" | sort)
+    local existing_ifaces
+    existing_ifaces=$(printf "%s\n" "${existing_interfaces[@]}" | sort)
 
     if [[ "$current_ifaces" == "$existing_ifaces" ]]; then
         print_success "- Network interfaces in $issue_file are already up-to-date"
@@ -197,8 +198,10 @@ configure_issue_network() {
     backup_file "$issue_file"
 
     # Generate the new network info box content
-    local temp_box_path=$(generate_issue_content)
-    local new_content=$(<"$temp_box_path")
+    local temp_box_path
+    temp_box_path=$(generate_issue_content)
+    local new_content
+    new_content=$(<"$temp_box_path")
     rm -f "$temp_box_path"
 
     # If the marker doesn't exist, add the box at the end of the file.
@@ -210,7 +213,8 @@ configure_issue_network() {
         print_success "✓ Added network interface info to $issue_file"
     else
         # If the marker exists, replace the entire block.
-        local temp_issue=$(mktemp)
+        local temp_issue
+        temp_issue=$(mktemp)
         # Use awk to replace the block between the start and end markers
         # Export new_content so awk can access it via ENVIRON (preserves backslashes)
         export new_content

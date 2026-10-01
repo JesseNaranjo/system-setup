@@ -12,7 +12,8 @@ set -euo pipefail
 
 # Get the directory where this script is located
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
-    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    readonly SCRIPT_DIR
 fi
 
 # Source utilities
@@ -58,7 +59,9 @@ modernize_apt_sources() {
     fi
 
     # Extract the release name (e.g., "bookworm")
-    local release=$(grep -m 1 "^Suites:" "$sources_file" | sed -E 's/^Suites:\s*([a-z]+).*/\1/')
+    # `|| true`: grep exits 1 when the file has no Suites: line; the empty-release check below skips
+    local release
+    release=$(grep -m 1 "^Suites:" "$sources_file" | sed -E 's/^Suites:\s*([a-z]+).*/\1/') || true
 
     if [[ -z "$release" ]]; then
         print_warning "⚠ Could not determine Debian release from $sources_file. Skipping."
@@ -68,7 +71,8 @@ modernize_apt_sources() {
     print_info "Detected Debian release: $release"
 
     # Create a temporary file for the new, cleaned-up content
-    local temp_sources=$(mktemp)
+    local temp_sources
+    temp_sources=$(mktemp)
 
     # Use a robust awk script to parse and modify the stanzas
     awk -v release="$release" '

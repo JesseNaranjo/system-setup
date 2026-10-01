@@ -16,7 +16,8 @@ set -euo pipefail
 
 # Get the directory where this script is located
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
-    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    readonly SCRIPT_DIR
 fi
 
 # Source utilities

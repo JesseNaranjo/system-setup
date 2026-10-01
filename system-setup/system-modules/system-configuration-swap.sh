@@ -12,7 +12,8 @@ set -euo pipefail
 
 # Get the directory where this script is located
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
-    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    readonly SCRIPT_DIR
 fi
 
 # Source utilities
@@ -279,7 +280,9 @@ configure_swap() {
     print_info "Checking swap configuration..."
 
     # Check if swap is currently enabled
-    local swap_status=$(swapon --show 2>/dev/null)
+    # `|| true`: a missing or failing swapon leaves swap_status empty, which reads as swap disabled
+    local swap_status
+    swap_status=$(swapon --show 2>/dev/null) || true
 
     if [[ -n "$swap_status" ]]; then
         print_success "- Swap is already enabled:"
@@ -303,7 +306,8 @@ configure_swap() {
     print_info "Configuring swap memory..."
 
     # Get total RAM in GB
-    local ram_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+    local ram_kb
+    ram_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
     local ram_gb=$((ram_kb / 1024 / 1024))
 
     # Calculate swap size based on RAM

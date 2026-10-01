@@ -61,7 +61,8 @@ All modules follow the same structure:
 set -euo pipefail
 
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
-    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    readonly SCRIPT_DIR
 fi
 
 source "${SCRIPT_DIR}/utils-sys.sh"
@@ -74,6 +75,7 @@ main_module_name() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
     main_module_name "$@"
 fi
 ```

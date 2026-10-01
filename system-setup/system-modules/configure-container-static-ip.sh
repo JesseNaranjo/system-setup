@@ -12,7 +12,8 @@ set -euo pipefail
 
 # Get the directory where this script is located
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
-    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    readonly SCRIPT_DIR
 fi
 
 # Source utilities
@@ -51,7 +52,8 @@ configure_container_static_ip() {
     # Get primary network interface (exclude lo, docker, veth, etc.)
     local primary_interface=""
     for iface in /sys/class/net/*; do
-        local iface_name=$(basename "$iface")
+        local iface_name
+        iface_name=$(basename "$iface")
 
         # Skip loopback, docker, and veth interfaces
         if [[ "$iface_name" == "lo" ]] || [[ "$iface_name" == docker* ]] || [[ "$iface_name" == veth* ]] || [[ "$iface_name" == br-* ]]; then
@@ -73,7 +75,9 @@ configure_container_static_ip() {
 
     # Get all current IP addresses
     if command -v ip &>/dev/null; then
-        local ip_addresses=$(ip -4 addr show "$primary_interface" 2>/dev/null | grep "inet " | awk '{print $2}')
+        # `|| true`: grep exits 1 when the interface has no IPv4 address; the empty value reaches the warning below
+        local ip_addresses
+        ip_addresses=$(ip -4 addr show "$primary_interface" 2>/dev/null | grep "inet " | awk '{print $2}') || true
         if [[ -n "$ip_addresses" ]]; then
             echo "            - Current IP address(es):"
             while IFS= read -r ip_addr; do
@@ -88,14 +92,14 @@ configure_container_static_ip() {
 
     # Check if static IP is already configured
     local network_file="/etc/systemd/network/10-${primary_interface}.network"
-    local has_static_ip=false
 
     if [[ -f "$network_file" ]] &&  grep -q "^\[Address\]" "$network_file" 2>/dev/null; then
-        has_static_ip=true
         print_success "- Static IP configuration already exists in $network_file"
 
         # Show configured static IPs
-        local static_ips=$(grep -A 1 "^\[Address\]" "$network_file" | grep "^Address=" | cut -d= -f2)
+        # `|| true`: grep exits 1 when the line after [Address] is not Address=; an empty list prints nothing
+        local static_ips
+        static_ips=$(grep -A 1 "^\[Address\]" "$network_file" | grep "^Address=" | cut -d= -f2) || true
         if [[ -n "$static_ips" ]]; then
             echo "            - Configured static IP(s):"
             while IFS= read -r ip; do

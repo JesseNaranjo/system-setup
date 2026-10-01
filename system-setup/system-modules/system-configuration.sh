@@ -12,7 +12,8 @@ set -euo pipefail
 
 # Get the directory where this script is located
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
-    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    readonly SCRIPT_DIR
 fi
 
 # Source utilities
@@ -43,7 +44,8 @@ configure_nano() {
 
     print_info "Configuring nano..."
 
-    local config_file=$(get_nano_config_file "$scope")
+    local config_file
+    config_file=$(get_nano_config_file "$scope")
 
     # Create config file if it doesn't exist (with world-readable permissions)
     if [[ ! -f "$config_file" ]]; then
@@ -153,6 +155,7 @@ configure_tmux() {
 
     # Split pane keybindings (use current pane's working directory)
     add_config_if_needed "tmux" "$config_file" "bind |" 'split-window -hc "#{pane_current_path}"' "horizontal split with pipe"
+    # shellcheck disable=SC1003  # deliberate: tmux.conf needs the backslash key escaped, so the literal setting is bind \\
     add_config_if_needed "tmux" "$config_file" 'bind \\' 'split-window -hc "#{pane_current_path}"' "horizontal split with backslash"
     add_config_if_needed "tmux" "$config_file" "unbind %" "" "unbind default horizontal split"
     add_config_if_needed "tmux" "$config_file" "bind -" 'split-window -vc "#{pane_current_path}"' "vertical split with dash"
@@ -258,7 +261,8 @@ $bash_prompt"
     backup_file "$shell_config"
 
     # Check how many PS1 definitions exist
-    local ps1_count=$(grep -c "^[[:space:]]*PS1=" "$shell_config" 2>/dev/null || echo "0")
+    local ps1_count
+    ps1_count=$(grep -c "^[[:space:]]*PS1=" "$shell_config" 2>/dev/null || echo "0")
 
     if [[ "$ps1_count" -eq 0 ]]; then
         # No existing PS1, just add at the end
@@ -267,13 +271,15 @@ $bash_prompt"
         print_success "✓ Custom PS1 prompt configured in $shell_config"
     elif [[ "$ps1_count" -eq 1 ]]; then
         # Find the line number of the PS1 definition
-        local ps1_line_num=$(grep -n "^[[:space:]]*PS1=" "$shell_config" | cut -d: -f1)
+        local ps1_line_num
+        ps1_line_num=$(grep -n "^[[:space:]]*PS1=" "$shell_config" | cut -d: -f1)
 
         # Comment out the line
         run_elevated sed -i.bak "${ps1_line_num}s/^\([[:space:]]*\)\(PS1=.*\)/\1# \2  # Replaced by system-setup.sh on $(date +%Y-%m-%d)/" "$shell_config" && run_elevated rm -f "${shell_config}.bak"
 
         # Create a temporary file with the new PS1 content
-        local temp_ps1=$(mktemp)
+        local temp_ps1
+        temp_ps1=$(mktemp)
         add_change_header "$temp_ps1" "shell"
         echo "$custom_ps1_pattern" > "$temp_ps1"
 
@@ -487,6 +493,7 @@ configure_shell_for_user() {
             add_change_header "$shell_config" "shell"
             append_to_file "$shell_config" "" "# Linux ls configuration"
         fi
+        # shellcheck disable=SC2016  # a literal line for the shell config: $(dircolors -b) expands when that shell starts
         add_config_if_needed "shell" "$shell_config" 'eval "$(dircolors -b)"' "" "dircolors initialization"
         add_alias_if_needed "$shell_config" "ls" "ls --color=auto --group-directories-first -AFHhl" "Linux ls with colors and formatting"
     fi
@@ -538,6 +545,7 @@ configure_shell_for_user() {
             add_change_header "$shell_config" "shell"
             append_to_file "$shell_config" "" "# Homebrew curl configuration"
         fi
+        # shellcheck disable=SC2016  # a literal value for the shell config: $PATH expands when that shell starts
         add_export_if_needed "$shell_config" "PATH" '"/opt/homebrew/opt/curl/bin:$PATH"' "Homebrew curl PATH"
         # Add commented compiler flags if not already present
         if ! grep_file -q 'LDFLAGS.*curl' "$shell_config" 2>/dev/null; then
@@ -683,7 +691,8 @@ configure_shell() {
             local user_count=0
             for user_home in "$users_dir"/*; do
                 if [[ -d "$user_home" ]]; then
-                    local username=$(basename "$user_home")
+                    local username
+                    username=$(basename "$user_home")
                     # Skip system users on macOS (Shared, Guest, etc.)
                     if [[ "$DETECTED_OS" == "macos" ]] && [[ "$username" == "Shared" || "$username" == "Guest" ]]; then
                         continue
@@ -762,7 +771,7 @@ main_configure_system() {
     # Verify package manager availability
     if verify_package_manager; then
         # Identify all installed special packages
-        while IFS=: read -r display_name package_name; do
+        while IFS=: read -r _ package_name; do
             if is_package_installed "$package_name"; then
                 track_special_packages "$package_name"
             fi

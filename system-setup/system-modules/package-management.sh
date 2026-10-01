@@ -12,7 +12,8 @@ set -euo pipefail
 
 # Get the directory where this script is located
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
-    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    readonly SCRIPT_DIR
 fi
 
 # Source utilities
@@ -33,17 +34,20 @@ install_packages() {
 
     if [[ "$DETECTED_OS" == "macos" ]]; then
         # Get dependencies, excluding the requested packages themselves
-        local dependencies=$(brew deps "${packages[@]}" 2>/dev/null || true)
+        local dependencies
+        dependencies=$(brew deps "${packages[@]}" 2>/dev/null || true)
 
         # Get a sorted, unique list of the packages the user actually requested
-        local sorted_packages=$(printf "%s\n" "${packages[@]}" | sort -u | tr '\n' ' ')
+        local sorted_packages
+        sorted_packages=$(printf "%s\n" "${packages[@]}" | sort -u | tr '\n' ' ')
 
         echo "Installing:"
         echo "  $sorted_packages"
 
         if [[ -n "$dependencies" ]]; then
             # Get a sorted, unique list of dependencies
-            local sorted_deps=$(printf "%s\n" $dependencies | sort -u)
+            local sorted_deps
+            sorted_deps=$(printf "%s\n" "$dependencies" | sort -u)
             echo ""
             echo "Installing dependencies:"
             # Attempt to format into columns if 'column' command is available
@@ -140,7 +144,8 @@ uninstall_packages() {
 
     if [[ "$DETECTED_OS" == "macos" ]]; then
         # Get a sorted, unique list of the packages to remove
-        local sorted_packages=$(printf "%s\n" "${packages[@]}" | sort -u | tr '\n' ' ')
+        local sorted_packages
+        sorted_packages=$(printf "%s\n" "${packages[@]}" | sort -u | tr '\n' ' ')
 
         echo "Removing:"
         echo "  $sorted_packages"
