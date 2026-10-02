@@ -52,6 +52,9 @@ readonly DST_ORG="${DST_ORG:-}"
 readonly WORKDIR="${WORKDIR:-${TMPDIR:-/tmp}/org-copy-${SRC_ORG}-to-${DST_ORG}}"
 readonly THROTTLE="${THROTTLE:-1.5}"
 readonly LABEL_ARCHIVED_PR="${LABEL_ARCHIVED_PR:-archived-pr}"
+# A real line break for the issue, comment and discussion bodies built below:
+# "\n" inside double quotes stays a backslash and an n, and GitHub shows it as text.
+readonly NL=$'\n'
 
 # Global counters
 TOTAL_REPOS_PROCESSED=0
@@ -639,7 +642,7 @@ copy_labels_and_milestones() {
         if ! gh_api "/repos/${DST_ORG}/${name}/milestones?state=all&per_page=100" \
             --jq ".[] | select(.title==\"$TITLE\") | .number" | grep -q .; then
             # Create milestone
-            args=(-X POST "/repos/${DST_ORG}/${name}/milestones" -f title="$TITLE")
+            args=(-X POST "/repos/${DST_ORG}/${name}/milestones" -f title="$TITLE" -f state="$STATE")
             [[ -n "$DESC" ]] && args+=(-f description="$DESC")
             [[ -n "$DUE"  ]] && args+=(-f due_on="$DUE")
             if gh_api "${args[@]}" >/dev/null 2>&1; then
@@ -779,7 +782,7 @@ copy_issues() {
         [[ -z "$LABELS_JSON" || "$LABELS_JSON" == "null" ]] && LABELS_JSON='[]'
 
         local NEWBODY NEWNUM
-        NEWBODY="(Copied from ${URL}\nOriginal author: @${AUTHOR} • Opened: ${CREATED})\n\n${BODY}"
+        NEWBODY="(Copied from ${URL}${NL}Original author: @${AUTHOR} • Opened: ${CREATED})${NL}${NL}${BODY}"
 
         # Create issue (function returns "" if duplicate title exists)
         NEWNUM="$(create_issue_in_dest "$name" "$TITLE" "$NEWBODY" "$LABELS_JSON" "$MIL_TITLE" "$STATE" "$CREATED")"
@@ -797,7 +800,7 @@ copy_issues() {
             CAUTH=$(jq -r '.author'      <<<"$crow")
             CDATE=$(jq -r '.created_at'  <<<"$crow")
             CBODY=$(jq -r '.body'        <<<"$crow")
-            CMT="**(Original comment by @${CAUTH} on ${CDATE})**\n\n${CBODY}"
+            CMT="**(Original comment by @${CAUTH} on ${CDATE})**${NL}${NL}${CBODY}"
             post_issue_comment "$name" "$NEWNUM" "$CMT"
         done < <(gh_api --paginate "/repos/${SRC_ORG}/${name}/issues/${num}/comments?per_page=100" 2>/dev/null \
         | jq -c '.[]? | {author:(.user.login // "unknown"), created_at, body:(.body // "")}')
@@ -844,8 +847,8 @@ copy_prs_as_archival_issues() {
         HEAD=$(_j '.head.ref')
 
         local ITITLE="[PR #${PRNUM}] ${TITLE}"
-        local HEADER="**Archived Pull Request** — copied from ${URL}\n\n- Original author: @${USER}\n- State: ${STATE}\n- Merged at: ${MRGD}\n- Base: \`${BASE}\`\n- Head: \`${HEAD}\`\n"
-        local IBODY="${HEADER}\n---\n${BODY}"
+        local HEADER="**Archived Pull Request** — copied from ${URL}${NL}${NL}- Original author: @${USER}${NL}- State: ${STATE}${NL}- Merged at: ${MRGD}${NL}- Base: \`${BASE}\`${NL}- Head: \`${HEAD}\`${NL}"
+        local IBODY="${HEADER}${NL}---${NL}${BODY}"
         local LABELS_JSON
         LABELS_JSON="$(jq -cn --arg a "$LABEL_ARCHIVED_PR" '[$a]')"
 
@@ -879,11 +882,11 @@ copy_prs_as_archival_issues() {
             AUTH=$(echo "$c" | jq -r '.author')
             DATE=$(echo "$c" | jq -r '.created_at')
             BODY=$(echo "$c" | jq -r '.body')
-            local CMT="**(${KIND//_/ } by @${AUTH} on ${DATE})**\n\n${BODY}"
-            if post_issue_comment "$name" "$NEWNUM" "$CMT"; then
+            local CMT="**(${KIND//_/ } by @${AUTH} on ${DATE})**${NL}${NL}${BODY}"
+            if gh_api -X POST "/repos/${DST_ORG}/${name}/issues/${NEWNUM}/comments" -f body="$CMT" >/dev/null; then
                 ((TOTAL_PR_COMMENTS_COPIED++)) || true
             fi
-        done < <(jq -s 'add | sort_by(.created_at)' "${WORKDIR}/ic.json" "${WORKDIR}/rc.json" "${WORKDIR}/rv.json" 2>/dev/null \
+        done < <(jq -s 'sort_by(.created_at)' "${WORKDIR}/ic.json" "${WORKDIR}/rc.json" "${WORKDIR}/rv.json" \
         | jq -c '.[]') || true
     done < <(gh_api --paginate "/repos/${SRC_ORG}/${name}/pulls?state=all&per_page=100" \
         --jq '.[] | @base64')
@@ -954,7 +957,7 @@ copy_discussions() {
             DURL="$(echo "$d" | jq -r '.url')"
             DCAT="$(echo "$d" | jq -r '.category.name')"
             local HEADER="(Copied from ${DURL})"
-            local BODY="${HEADER}\n\n${DBODY}"
+            local BODY="${HEADER}${NL}${NL}${DBODY}"
 
             # Resolve category id (name match or first)
             local CATID
@@ -980,7 +983,7 @@ copy_discussions() {
                 CAUTH=$(echo "$c" | jq -r '.author.login // "unknown"')
                 CDAT=$(echo "$c"  | jq -r '.createdAt')
                 CBOD=$(echo "$c"  | jq -r '.body // ""')
-                local CBODY="**(Original comment by @${CAUTH} on ${CDAT})**\n\n${CBOD}"
+                local CBODY="**(Original comment by @${CAUTH} on ${CDAT})**${NL}${NL}${CBOD}"
                 # shellcheck disable=SC2016  # $id and $body are GraphQL variables that the API binds, not bash expansions
                 local cm='mutation($id:ID!,$body:String!){ addDiscussionComment(input:{discussionId:$id, body:$body}){ comment{ id } } }'
                 if gh_gql -f query="$cm" -F id="$newDid" -F body="$CBODY" >/dev/null 2>&1; then

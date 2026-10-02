@@ -523,12 +523,19 @@ generate_bridge_port_network() {
     echo "$content"
 }
 
-# Convert dotted netmask to CIDR notation
-# Args: $1 = netmask (e.g., 255.255.255.0)
+# Convert a netmask to a CIDR prefix length
+# Args: $1 = netmask, a dotted quad (255.255.255.0) or a bit count (24);
+#       interfaces(5) allows both forms for an inet static stanza
 # Outputs: CIDR prefix (e.g., 24)
 netmask_to_cidr() {
     local netmask="$1"
     local cidr=0
+
+    # A regex, not (( )): a leading-zero value such as 08 would be read as octal
+    if [[ "$netmask" =~ ^([0-9]|[12][0-9]|3[0-2])$ ]]; then
+        echo "$netmask"
+        return 0
+    fi
 
     IFS='.' read -ra octets <<< "$netmask"
     for octet in "${octets[@]}"; do
@@ -542,7 +549,8 @@ netmask_to_cidr() {
             192) ((cidr+=2)) ;;
             128) ((cidr+=1)) ;;
             0) ;;
-            *) print_warning "⚠ Unexpected netmask octet: $octet" ;;
+            # stderr: every caller captures this function's stdout as the prefix length
+            *) print_warning "⚠ Unexpected netmask octet: $octet" >&2 ;;
         esac
     done
 

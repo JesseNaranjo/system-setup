@@ -112,8 +112,15 @@ main() {
     if [[ -z "$DISTRIBUTION" ]]; then
         if [[ -f /etc/os-release ]]; then
             # Extract distribution ID from os-release
-            DISTRIBUTION=$(grep "^ID=" /etc/os-release | cut -d= -f2 | tr -d '"')
-            print_info "Detected distribution: $DISTRIBUTION"
+            # `|| true` here and on the two release lookups: every os-release key is
+            # optional (os-release(5)), and grep exits 1 when the line is absent; the
+            # empty value reaches the warning below
+            DISTRIBUTION=$(grep "^ID=" /etc/os-release | cut -d= -f2 | tr -d '"') || true
+            if [[ -n "$DISTRIBUTION" ]]; then
+                print_info "Detected distribution: $DISTRIBUTION"
+            else
+                print_warning "⚠ Could not detect distribution — download template will prompt"
+            fi
         else
             print_warning "⚠ Could not detect distribution — download template will prompt"
         fi
@@ -123,9 +130,9 @@ main() {
     if [[ -z "$RELEASE" ]]; then
         if [[ -f /etc/os-release ]]; then
             # Extract version codename or version ID from os-release
-            RELEASE=$(grep "^VERSION_CODENAME=" /etc/os-release | cut -d= -f2 | tr -d '"')
+            RELEASE=$(grep "^VERSION_CODENAME=" /etc/os-release | cut -d= -f2 | tr -d '"') || true
             if [[ -z "$RELEASE" ]]; then
-                RELEASE=$(grep "^VERSION_ID=" /etc/os-release | cut -d= -f2 | tr -d '"')
+                RELEASE=$(grep "^VERSION_ID=" /etc/os-release | cut -d= -f2 | tr -d '"') || true
             fi
             if [[ -n "$RELEASE" ]]; then
                 print_info "Detected release: $RELEASE"

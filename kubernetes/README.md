@@ -55,7 +55,7 @@ Individual scripts and modules self-update when run directly via `check_for_upda
 2. Source `utils-k8s.sh` for shared functions
 3. Add `main_<module_name>()` entry point with `detect_environment` call
 4. Add `# shellcheck source=../utils-k8s.sh` directive
-5. Add execution guard: `if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then main_<name> "$@"; fi`
+5. Add the execution guard every module ends in — `if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then`, `check_for_updates "${BASH_SOURCE[0]}" "$@"`, `main_<name> "$@"`, `fi` on four lines — so a module run on its own self-updates first
 6. Source and call from `kubernetes-setup.sh` main()
 7. Add to `get_script_list()` in `kubernetes-setup.sh`
 8. Update this README
