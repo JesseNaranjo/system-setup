@@ -37,7 +37,7 @@ Personal system configuration repository with bash scripts for setting up Linux 
 **Operational**
 - [Git Worktrees](#git-worktrees)
 - [Running the Scripts](#running-the-scripts)
-- [LLM Optimization Guidelines](#llm-optimization-guidelines)
+- [Code Review Checklist](#code-review-checklist)
 
 ---
 
@@ -60,72 +60,13 @@ Apply the DRY principle when code duplication creates maintenance risk. Extract 
 
 #### When to Extract
 
-1. **Sensitive Logic** - Code that is delicate, complex, or where bugs would have serious consequences
-   ```bash
-   # Backup with ownership preservation - used by multiple modules
-   backup_file() {
-       local file="$1"
-       [[ ! -f "$file" ]] && return 0
+1. **Sensitive Logic** - Code that is delicate, complex, or where bugs would have serious consequences. Canonical example: `backup_file` in §File Modification.
 
-       local backup="${file}.backup.$(date +%Y%m%d_%H%M%S).bak"
-       cp -p "$file" "$backup"
+2. **Multi-Step Operations** - Sequences of 3+ statements that perform a cohesive action. Canonical example: `update_config_line` in §Core Configuration Functions (check, `backup_file`, `add_change_header`, comment-then-append), reached through `add_config_if_needed` in §Wrapper Functions.
 
-       # Preserve ownership (platform-specific)
-       if [[ "$OSTYPE" == "darwin"* ]]; then
-           local owner=$(stat -f "%u:%g" "$file")
-       else
-           local owner=$(stat -c "%u:%g" "$file")
-       fi
-       chown "$owner" "$backup" 2>/dev/null || true
-   }
-   ```
+3. **Business Rules** - Logic encoding domain rules that may change. Canonical example: `detect_container` in §Container Detection (Sets Global) — its rules grow as new container types emerge.
 
-2. **Multi-Step Operations** - Sequences of 3+ statements that perform a cohesive action
-   ```bash
-   # Idempotent config update - 3+ steps that belong together
-   add_config_if_needed() {
-       local file="$1" setting="$2" value="$3"
-
-       # Step 1: Check if already correct
-       config_exists "$file" "$setting" && \
-           [[ "$(get_config_value "$file" "$setting")" == "$value" ]] && return 0
-
-       # Step 2: Backup before modifying
-       backup_file "$file"
-
-       # Step 3: Add change header
-       add_change_header "$file" "config"
-
-       # Step 4: Apply change
-       echo "${setting} ${value}" >> "$file"
-   }
-   ```
-
-3. **Business Rules** - Logic encoding domain rules that may change
-   ```bash
-   # Container detection - rules may change as new container types emerge
-   detect_container() {
-       [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ 2>/dev/null && return 0
-       [[ -f /.dockerenv ]] && return 0
-       [[ -f /run/systemd/container ]] && return 0
-       grep -q lxc /proc/1/cgroup 2>/dev/null && return 0
-       return 1
-   }
-   ```
-
-4. **Configuration Patterns** - Repeated setup/configuration code
-   ```bash
-   # Color constants - extracted because used everywhere
-   readonly BLUE='\033[0;34m'
-   readonly GREEN='\033[0;32m'
-   readonly RED='\033[0;31m'
-   readonly NC='\033[0m'
-
-   # Output functions - extracted because pattern repeats
-   print_error()   { printf '%b[ ERROR   ]%b %s\n' "$RED" "$NC" "$1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
-   print_info()    { printf '%b[ INFO    ]%b %s\n' "$BLUE" "$NC" "$1"; }
-   print_success() { printf '%b[ SUCCESS ]%b %s\n' "$GREEN" "$NC" "$1"; }
-   ```
+4. **Configuration Patterns** - Repeated setup/configuration code. Canonical example: the colour constants in §Global Constants (Define Early) and the `print_*` bodies in §Standard Output Functions.
 
 #### When NOT to Extract
 
@@ -138,7 +79,7 @@ Apply the DRY principle when code duplication creates maintenance risk. Extract 
 | Scenario | Strategy |
 |----------|----------|
 | Same script | Private function (defined before use) |
-| Same directory/suite | Source shared `utils-sys.sh` |
+| Same directory/suite | Source the directory's `utils-*.sh` (§Script Architecture) |
 | Cross-repository | Standalone script with inline functions |
 | Configuration | Constants at script top with `readonly` |
 
@@ -297,7 +238,7 @@ readonly VAR="${VAR:-default_value}"
 
 # Required - validate early
 readonly REQUIRED_VAR="${REQUIRED_VAR:-}"
-[[ -z "$REQUIRED_VAR" ]] && print_error "REQUIRED_VAR is required" && exit 1
+[[ -z "$REQUIRED_VAR" ]] && print_error "✖ REQUIRED_VAR is required" && exit 1
 ```
 
 #### Script Naming
@@ -336,7 +277,7 @@ function_name() {
     local param2="${2:-default}"
 
     if [[ -z "$param1" ]]; then
-        print_error "param1 required"
+        print_error "✖ param1 required"
         return 1
     fi
 
@@ -371,8 +312,10 @@ else
     # Error
 fi
 
-# Capture output
-local result=$(function_name "arg")
+# Capture output — declare first: `local result=$(…)` returns local's status and
+# masks the command's (SC2155)
+local result
+result=$(function_name "arg")
 
 # Both
 if result=$(function_name "arg"); then
@@ -474,13 +417,13 @@ This repository uses several script architectures. Choose based on context:
 
 **Structure:**
 - Each script is fully self-contained
-- Duplicate essential functions inline (colors, `print_*`, `prompt_yes_no`)
-- Managed by `_download-*-scripts.sh` updaters in each directory
+- Duplicate essential functions inline (colors, `print_*`, and every other helper §Helper Library Duplication counts in the `github/` standalones)
+- Each replaces itself through an inlined `self_update` (§Self-Update Function); `github/` has no `_download-*-scripts.sh`
 
 **Key characteristics:**
 - No external dependencies (except system tools)
 - Include full color definitions and output functions
-- Include `prompt_yes_no` if user interaction needed
+- The self-update prompt is the Pattern B' bare `read` of §User Interaction; none of the three inlines `prompt_yes_no`
 - Can be copied/downloaded and run immediately
 
 ### 3. Modular Standalone Scripts (lxc/, llm/, utils/)
@@ -536,7 +479,6 @@ done
 | New utility script in lxc/, llm/, utils/ | Modular Standalone | Source utils-*.sh, self-update via check_for_updates |
 | Shared helper used by multiple modules | Add to utils-sys.sh | Centralized maintenance |
 | One-off automation script | Standalone | Simpler, no dependencies |
-| Simple system task (start/stop services) | Standalone | Source utils for shared functions, run independently |
 
 ### Helper Library Duplication (Intentional)
 
@@ -545,12 +487,12 @@ These helper functions are **deliberately duplicated**. The roster is exhaustive
 | Helper | Copies | Where |
 |--------|--------|-------|
 | `print_error`, `print_info`, `print_success`, `print_warning` | 8 | all 5 libraries + the 3 `github/gh_org_*.sh` standalones |
-| `prompt_yes_no` | 8 | same |
 | `download_script` | 8 | same |
 | `cleanup` (EXIT-trap temp reaper) | 8 | same |
 | `sweep_stale_temps` | 8 | same |
 | `show_diff_box` | 8 | same |
 | `_sanitize_ansi` | 8 | same — composed by `show_diff_box`, so it travels with it |
+| `prompt_yes_no` | 5 | the 5 libraries only (the `github/` standalones use the Pattern B' bare `read` of §User Interaction) |
 | `print_warning_box` | 5 | the 5 libraries only (the `github/` standalones do not use it) |
 | `check_for_updates` | 5 | the 5 libraries only |
 | `detect_os` | 3 | `system-setup/utils-sys.sh`, `utils/utils-misc.sh`, `kubernetes/utils-k8s.sh` |
@@ -727,7 +669,8 @@ Modules in `system-modules/` MUST follow this pattern:
 
 # Get the directory where this script is located
 if [[ -z "${SCRIPT_DIR:-}" ]]; then
-    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    readonly SCRIPT_DIR
 fi
 
 # Source utilities
@@ -755,11 +698,12 @@ main_configure_component() {
 
     print_info "Configuring component..."
     # Module logic here
-    print_success "Component configured"
+    print_success "✓ Component configured"
 }
 
 # Run main function if script is executed directly (for testing)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
     main_configure_component "$@"
 fi
 ```
@@ -772,7 +716,8 @@ The main script sources and orchestrates modules:
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 
 # Source utilities first
 source "${SCRIPT_DIR}/utils-sys.sh"
@@ -918,7 +863,7 @@ main_configure_example() {
     add_change_header "$config_file" "example"
     add_config_if_needed "example" "$config_file" "setting_name" "desired_value" "Example setting"
 
-    print_success "Example configured"
+    print_success "✓ Example configured"
 }
 ```
 
@@ -970,21 +915,23 @@ Add an entry to `system-setup/system-modules/README.md` with a description of wh
 ## Quick Reference for LLMs
 
 ### Minimal Script Template
+
+A new script defaults to Modular Standalone (§Decision Guide): it sources its directory's `utils-*.sh` for the colours, `print_*`, prompts and self-update. A `github/` standalone sources nothing and inlines every roster helper counted at 8 copies in §Helper Library Duplication instead — all of them, never a partial copy.
+
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly BLUE='\033[0;34m'
-readonly GREEN='\033[0;32m'
-readonly RED='\033[0;31m'
-readonly YELLOW='\033[1;33m'
-readonly NC='\033[0m'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 
-print_error()   { printf '%b[ ERROR   ]%b %s\n' "$RED" "$NC" "$1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
-print_info()    { printf '%b[ INFO    ]%b %s\n' "$BLUE" "$NC" "$1"; }
-print_success() { printf '%b[ SUCCESS ]%b %s\n' "$GREEN" "$NC" "$1"; }
+# shellcheck source=utils-DOMAIN.sh
+source "${SCRIPT_DIR}/utils-DOMAIN.sh"
 
 main() {
+    sweep_stale_temps '~*.tmp.??????'
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
+
     print_info "Starting..."
     # Logic here
     print_success "Complete"
@@ -1038,7 +985,7 @@ configure_component() {
     local config_file
     if [[ "$scope" == "system" ]]; then
         config_file="/etc/component.conf"
-        [[ ! -w "/etc" ]] && print_error "Requires root" && return 1
+        [[ ! -w "/etc" ]] && print_error "✖ Requires root" && return 1
     else
         config_file="$HOME/.componentrc"
     fi
@@ -1048,7 +995,7 @@ configure_component() {
     add_config_if_needed "component" "$config_file" "setting1" "value1" "Setting 1"
     add_config_if_needed "component" "$config_file" "setting2" "value2" "Setting 2"
 
-    print_success "Component configured"
+    print_success "✓ Component configured"
 }
 ```
 
@@ -1103,8 +1050,9 @@ print_session_summary() {
 ### Package Management
 ```bash
 install_packages() {
-    local os=$(detect_os)
-    verify_package_manager "$os" || return 1
+    detect_os
+    local os="$DETECTED_OS"
+    verify_package_manager || return 1
 
     local packages=("nano" "tmux" "htop")
     for pkg in "${packages[@]}"; do
@@ -1141,7 +1089,7 @@ configure_component() {
         config_file="/etc/component.conf"
         # Check write permissions
         if [[ ! -w "/etc" ]]; then
-            print_error "No write permission to /etc. Run as root or choose user scope."
+            print_error "✖ No write permission to /etc. Run as root or choose user scope."
             return 1
         fi
     else
@@ -1226,7 +1174,8 @@ update_config_line() {
 
     if config_exists "$file" "$setting_pattern"; then
         # Check if already set to desired value (escape for literal matching)
-        local escaped_full_line=$(escape_regex "$full_line")
+        local escaped_full_line
+        escaped_full_line=$(escape_regex "$full_line")
         if grep_file -qE "^[[:space:]]*${escaped_full_line}[[:space:]]*$" "$file"; then
             print_success "- $description already configured correctly"
             return 0
@@ -1234,9 +1183,13 @@ update_config_line() {
         backup_file "$file"
         add_change_header "$file" "$config_type"
 
-        local temp_file=$(mktemp)
-        local original_perms=$(get_file_permissions "$file")
-        local original_owner=$(get_file_owner "$file")
+        local temp_file
+        temp_file=$(mktemp)
+        TEMP_FILES+=("$temp_file")
+        local original_perms
+        original_perms=$(get_file_permissions "$file")
+        local original_owner
+        original_owner=$(get_file_owner "$file")
 
         # Comment old line, append new at end of file
         awk -v pattern="^[[:space:]]*${setting_pattern}" -v new_line="${full_line}" '
@@ -1247,12 +1200,30 @@ update_config_line() {
             }
             { print }
             END { print new_line }
-        ' "$file" > "$temp_file" && mv "$temp_file" "$file"
-        # mv keeps the temp's owner (the caller) and mode (0600): restore both
-        if [[ $EUID -eq 0 ]]; then
-            chown "$original_owner" "$file"
+        ' "$file" > "$temp_file" || { rm -f "$temp_file"; print_error "✖ Failed to process $file with awk"; return 1; }
+
+        # mv keeps the temp's owner (the caller) and mode (0600): restore both,
+        # through run_elevated when the file needs it (§Safe Edit Patterns)
+        if needs_elevation "$file"; then
+            if ! run_elevated mv "$temp_file" "$file"; then
+                rm -f "$temp_file"
+                print_error "✖ Failed to update $file"
+                return 1
+            fi
+            run_elevated chown "$original_owner" "$file"
+            run_elevated chmod "$original_perms" "$file"
+        else
+            if ! mv "$temp_file" "$file"; then
+                rm -f "$temp_file"
+                print_error "✖ Failed to update $file"
+                return 1
+            fi
+            # A non-root caller already owns the temp and cannot give the file away
+            if [[ $EUID -eq 0 ]]; then
+                chown "$original_owner" "$file"
+            fi
+            chmod "$original_perms" "$file"
         fi
-        chmod "$original_perms" "$file"
     else
         backup_file "$file"
         add_change_header "$file" "$config_type"
@@ -1280,13 +1251,15 @@ add_config_if_needed() {
     fi
 
     # Escape regex special characters in the setting for pattern matching
-    local escaped_setting=$(escape_regex "$setting")
+    local escaped_setting
+    escaped_setting=$(escape_regex "$setting")
 
     # Handle shell "set" prefix separately for proper matching
     local setting_pattern
     if [[ $setting =~ ^[[:space:]]*set[[:space:]]+ ]]; then
         local setting_key=${setting#set }
-        local escaped_key=$(escape_regex "$setting_key")
+        local escaped_key
+        escaped_key=$(escape_regex "$setting_key")
         setting_pattern="set[[:space:]]+${escaped_key}"
     else
         setting_pattern="${escaped_setting}"
@@ -1405,9 +1378,10 @@ create_config_file() {
 
     if [[ -f "$file" ]]; then
         # File exists - check permissions and warn if different
-        local actual_perms=$(get_file_permissions "$file")
+        local actual_perms
+        actual_perms=$(get_file_permissions "$file")
         if [[ "$actual_perms" != "$perms" ]]; then
-            print_warning "$file exists with permissions $actual_perms (expected $perms)"
+            print_warning "⚠ $file exists with permissions $actual_perms (expected $perms)"
         fi
         return 0
     fi
@@ -1573,7 +1547,7 @@ fi
 while true; do
     read -p "Enter value: " -r input </dev/tty
     [[ "$input" =~ ^valid$ ]] && break
-    print_error "Invalid input"
+    print_error "✖ Invalid input"
 done
 ```
 
@@ -1932,7 +1906,7 @@ run_elevated() {
         if [[ "$DETECTED_OS" == "macos" ]]; then
             sudo "$@"
         else
-            print_error "Insufficient privileges to run: $*"
+            print_error "✖ Insufficient privileges to run: $*"
             return 1
         fi
     fi
@@ -1953,7 +1927,8 @@ needs_elevation() {
     fi
 
     # Check if parent directory requires elevated permissions
-    local dir=$(dirname "$file")
+    local dir
+    dir=$(dirname "$file")
     if [[ ! -w "$dir" ]]; then
         return 0
     fi
@@ -1984,8 +1959,10 @@ populate_package_cache() {
     local installed_packages
     if [[ "$DETECTED_OS" == "macos" ]]; then
         # Check both formulae and casks on macOS
-        local installed_formulae=$(brew list --formula -1 2>/dev/null || true)
-        local installed_casks=$(brew list --cask -1 2>/dev/null || true)
+        local installed_formulae
+        installed_formulae=$(brew list --formula -1 2>/dev/null || true)
+        local installed_casks
+        installed_casks=$(brew list --cask -1 2>/dev/null || true)
         installed_packages=$(printf "%s\n%s" "$installed_formulae" "$installed_casks")
     else
         # Strip :arch suffix (e.g., curl:amd64 → curl) for reliable matching
@@ -2050,12 +2027,12 @@ is_package_installed() {
 verify_package_manager() {
     if [[ "$DETECTED_OS" == "macos" ]]; then
         if ! command -v brew &>/dev/null; then
-            print_error "Homebrew is not installed. Please install it from https://brew.sh"
+            print_error "✖ Homebrew is not installed. Please install it from https://brew.sh"
             return 1
         fi
     else
         if ! command -v apt &>/dev/null; then
-            print_error "apt package manager not found. This script requires apt (Debian/Ubuntu-based systems)"
+            print_error "✖ apt package manager not found. This script requires apt (Debian/Ubuntu-based systems)"
             return 1
         fi
     fi
@@ -2066,9 +2043,9 @@ verify_package_manager() {
 ```bash
 # Package manager
 if [[ "$os" == "macos" ]]; then
-    command -v brew &>/dev/null || { print_error "Homebrew required"; return 1; }
+    command -v brew &>/dev/null || { print_error "✖ Homebrew required"; return 1; }
 else
-    command -v apt &>/dev/null || { print_error "apt required"; return 1; }
+    command -v apt &>/dev/null || { print_error "✖ apt required"; return 1; }
 fi
 
 # stat command
@@ -2103,9 +2080,9 @@ set -euo pipefail  # Exit on error, undefined var, pipe failure
 ### Return Code Patterns
 ```bash
 function_name() {
-    [[ -z "$required" ]] && print_error "Missing param" && return 1
-    [[ ! -f "$file" ]] && print_warning "File not found, skipping" && return 0
-    risky_operation || { print_error "Failed"; return 1; }
+    [[ -z "$required" ]] && print_error "✖ Missing param" && return 1
+    [[ ! -f "$file" ]] && print_warning "⚠ File not found, skipping" && return 0
+    risky_operation || { print_error "✖ Failed"; return 1; }
     return 0
 }
 ```
@@ -2113,8 +2090,8 @@ function_name() {
 ### Graceful Degradation
 ```bash
 # Continue on non-critical failures
-configure_component_a "$os" || print_warning "Component A failed, continuing"
-configure_component_b "$os" || print_warning "Component B failed, continuing"
+configure_component_a "$os" || print_warning "⚠ Component A failed, continuing"
+configure_component_b "$os" || print_warning "⚠ Component B failed, continuing"
 ```
 
 ### Tool Detection
@@ -2125,7 +2102,7 @@ if command -v curl &>/dev/null; then
 elif command -v wget &>/dev/null; then
     DOWNLOAD_CMD="wget"
 else
-    print_warning "No download tool available"
+    print_warning "⚠ No download tool available"
     DOWNLOAD_CMD=""
 fi
 
@@ -2135,8 +2112,8 @@ fi
 
 ### Permission Checks
 ```bash
-[[ ! -w "/etc/config" ]] && print_error "No write permission" && return 1
-[[ $EUID -ne 0 ]] && [[ "$scope" == "system" ]] && print_error "Requires root" && return 1
+[[ ! -w "/etc/config" ]] && print_error "✖ No write permission" && return 1
+[[ $EUID -ne 0 ]] && [[ "$scope" == "system" ]] && print_error "✖ Requires root" && return 1
 ```
 
 ---
@@ -2162,7 +2139,8 @@ backup_file() {
     fi
 
     if [[ -f "$file" ]]; then
-        local backup="${file}.backup.$(date +%Y%m%d_%H%M%S).bak"
+        local backup
+        backup="${file}.backup.$(date +%Y%m%d_%H%M%S).bak"
 
         # Copy with preserved permissions, using elevation if needed
         if needs_elevation "$file"; then
@@ -2311,7 +2289,7 @@ check_disk_space() {
     fi
 
     if [[ "$available_mb" -lt "$total_needed" ]]; then
-        print_error "Insufficient disk space at $path: ${available_mb}MB available, ${total_needed}MB needed"
+        print_error "✖ Insufficient disk space on ${path} (${available_mb:-unknown} MB available, need ${required_mb} MB + ${buffer_mb} MB buffer)"
         return 1
     fi
 }
@@ -2348,8 +2326,8 @@ fi
 
 ### Privilege Checks
 ```bash
-[[ $EUID -eq 0 ]] && print_warning "Running as root"
-[[ "$scope" == "system" ]] && [[ $EUID -ne 0 ]] && print_error "Requires root" && exit 1
+[[ $EUID -eq 0 ]] && print_warning "⚠ Running as root"
+[[ "$scope" == "system" ]] && [[ $EUID -ne 0 ]] && print_error "✖ Requires root" && exit 1
 ```
 
 ### Safe Defaults in Prompts
@@ -2370,7 +2348,7 @@ while true; do
         done
         [[ "$valid" == true ]] && break
     fi
-    print_error "Invalid IP"
+    print_error "✖ Invalid IP"
 done
 ```
 
@@ -2683,7 +2661,12 @@ self_update() {
 
     show_diff_box "${LOCAL_SCRIPT}" "${TEMP_SCRIPT_FILE}" "${SCRIPT_FILE}"
 
-    if prompt_yes_no "→ Overwrite and restart with updated ${SCRIPT_FILE}?" "y"; then
+    # Pattern B' (§User Interaction): open-probe, then a single-keystroke read.
+    { : </dev/tty; } 2>/dev/null || { print_info "Non-interactive — skipping self-update"; rm -f "${TEMP_SCRIPT_FILE}"; return 0; }
+
+    read -p "→ Overwrite and restart with updated ${SCRIPT_FILE}? [Y/n] " -n 1 -r </dev/tty
+    if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+        echo ""
         # Pattern D with the mode change inside the chain: a read-only
         # $SCRIPT_DIR or a cross-FS attempt must not leave the local script
         # half-overwritten, and self_update is invoked in a `||` list, which
@@ -2773,7 +2756,8 @@ update_modules() {
         local LOCAL_SCRIPT="${SCRIPT_DIR}/${SCRIPT_FILE}"
 
         # Ensure the local directory exists (so the adjacent mktemp template below resolves)
-        local script_dir="$(dirname "$LOCAL_SCRIPT")"
+        local script_dir
+        script_dir="$(dirname "$LOCAL_SCRIPT")"
         mkdir -p "$script_dir"
 
         # Pattern E2 (path-aware): mktemp adjacent to LOCAL_SCRIPT (which may
@@ -3190,23 +3174,7 @@ sudo ./kubernetes-setup.sh  # Full orchestrated setup
 
 ---
 
-## LLM Optimization Guidelines
-
-### When Generating New Code
-1. **Start with structure**: Headers, globals, utility functions first
-2. **Use templates**: Adapt from Quick Reference section
-3. **Batch similar operations**: Group config additions, use loops
-4. **Minimize redundancy**: Extract repeated logic to functions
-5. **Test assumptions**: Check file existence, tool availability, permissions
-
-### When Modifying Existing Code
-1. **Read minimal context**: Use grep_search for function locations
-2. **Preserve patterns**: Match existing style exactly
-3. **Update in batches**: Use multi_replace when possible
-4. **Verify idempotency**: Ensure changes don't break re-runs
-5. **Test return codes**: Ensure success/failure paths work
-
-### Code Review Checklist
+## Code Review Checklist
 - [ ] Variables quoted: `"$var"`
 - [ ] Arrays used (not strings): `arr+=()`
 - [ ] Idempotency: Check before modify

@@ -103,13 +103,6 @@
 - **Why deferred:** No bash-side change reaches them, and self-update has not been requested for the two PowerShell scripts.
 - **Action on pickup:** If self-update is ever wanted for `utils/compare-directories.ps1` and `utils/robocopy-two-way.ps1`, it needs a PowerShell-native equivalent — a separate design, NOT a port of the bash `check_for_updates` pattern.
 
-### Decision-Guide contradiction in `AGENTS.md` (added 2026-07-17)
-
-- **Source:** 2026-07-17 `utils/` Modular Standalone documentation cascade.
-- **Problem:** `AGENTS.md`'s Decision Guide table labels the "Simple system task (start/stop services)" row **Standalone**, but its stated reason is "Source utils for shared functions, run independently" — sourcing shared utils is Modular Standalone behavior, not Standalone. The contradiction is pre-existing and was untouched by the `utils/` conversion.
-- **Why deferred:** Left as-is per the documentation cascade's plan scope.
-- **Action on pickup:** Either reclassify the row to Modular Standalone or reword the reason to drop "Source utils for shared functions."
-
 ### Graceful failure when `utils-misc.sh` is absent (added 2026-07-17)
 
 - **Source:** 2026-07-17 `utils/` Modular Standalone conversion.
