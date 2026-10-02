@@ -458,7 +458,7 @@ Self-updating script manager:
 
 Individual scripts self-update when run directly via `check_for_updates()`. This checks for updates to both `utils-lxc.sh` and the calling script, showing diffs and prompting before overwriting. Scripts that are sourced (not executed directly) skip the update check.
 
-`utils-lxc.sh` must be present in the same directory as the scripts; it is kept current via `check_for_updates()` (above), not by the `_download-lxc-scripts.sh` download manifest.
+`utils-lxc.sh` must be present in the same directory as the scripts; it is kept current via `check_for_updates()` (above), not by the `_download-lxc-scripts.sh` download manifest. A script run without it exits 69 (`EX_UNAVAILABLE`) before doing anything, naming the missing file and telling you to download it and `_download-lxc-scripts.sh` beside the script.
 
 `tests/` is development-only and is deliberately absent from `_download-lxc-scripts.sh`'s `get_script_list()` — the tests are not distributed to target hosts.
 
@@ -580,7 +580,7 @@ Scripts use standard sysexits.h codes:
 | 65 | EX_DATAERR | Data format error |
 | 66 | EX_NOINPUT | Input file not found |
 | 67 | EX_NOUSER | User does not exist |
-| 69 | EX_UNAVAILABLE | Required tool not available |
+| 69 | EX_UNAVAILABLE | Required tool not available, or `utils-lxc.sh` missing beside the script |
 | 74 | EX_IOERR | I/O error |
 | 75 | EX_TEMPFAIL | Temporary failure (user cancelled) |
 | 77 | EX_NOPERM | Refused: the container is protected |

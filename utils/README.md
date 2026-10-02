@@ -108,7 +108,7 @@ not write.
 
 `dig-all.sh`, `push-ghostty-terminfo.sh`, `reset-macOS-display-settings.sh`, `rsync-over-tunnel.sh`, `rsync-two-way.sh`, `services-check.sh`, and `unlock-keychain.sh` self-update when run directly via `check_for_updates()`. This checks for updates to both `utils-misc.sh` and the calling script, showing diffs and prompting before overwriting. Scripts that are sourced (not executed directly) skip the update check.
 
-`utils-misc.sh` must be present in the same directory as the scripts; it is kept current via `check_for_updates()` (above), not by the `_download-utils-scripts.sh` download manifest.
+`utils-misc.sh` must be present in the same directory as the scripts; it is kept current via `check_for_updates()` (above), not by the `_download-utils-scripts.sh` download manifest. A script run without it exits 69 (`EX_UNAVAILABLE`) before doing anything, naming the missing file and telling you to download it and `_download-utils-scripts.sh` beside the script.
 
 `monitor-battery.sh`, `disable-kvm-module.sh`, and the 2 `.ps1` scripts do NOT self-update (Lightweight/standalone, no shared utilities).
 

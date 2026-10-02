@@ -564,6 +564,76 @@ for dl in "${DOWNLOADERS[@]}"; do
     assert_not_contains "${res#*|}" 'CLEANUP'    "${dl}: no download tool → nothing runs"
 done
 
+echo "== lxc/, llm/, utils/: a missing library is named, not a raw source error =="
+# A script copied or curled on its own arrives without its directory's library,
+# and a bare `source` of a missing file dies with bash's raw "No such file or
+# directory". The existence check above each `source` exits 69 (EX_UNAVAILABLE)
+# instead, naming the library and the directory's updater. One script per suite
+# is copied ALONE into an empty sandbox and run. Then the library is copied in
+# and the script is SOURCED, not run: its execution guard keeps main() out, so
+# no check_for_updates fetch, `screen` launch or container operation is reached,
+# and the library's check_for_updates must be defined afterwards — the check
+# lets a complete directory through without a sound. TRACE=0 because a
+# `TRACE=1 ./tests/test-self-update.sh` run exports TRACE, and the utils/
+# scripts honour it with xtrace lines on stderr.
+readonly LIBRARY_GUARD_CASES=(   # "<script> <library> <updater>"
+    "lxc/protect-lxc.sh utils-lxc.sh _download-lxc-scripts.sh"
+    "llm/ollama-remote.sh utils-llm.sh _download-ollama-scripts.sh"
+    "utils/dig-all.sh utils-misc.sh _download-utils-scripts.sh"
+)
+for guard_case in "${LIBRARY_GUARD_CASES[@]}"; do
+    read -r script_rel guard_lib updater <<<"$guard_case"
+    script_base="${script_rel##*/}"
+    guard_dir=$(mktemp -d)
+    TEST_TEMP_DIRS+=("$guard_dir")
+    # The message prints the directory as the script's own `cd … && pwd`
+    # resolves it, which can differ from mktemp's spelling of the same path.
+    guard_dir_resolved=$(cd "$guard_dir" && pwd)
+    cp "${REPO_DIR}/${script_rel}" "${guard_dir}/"
+
+    rc=0
+    out=$(TRACE=0 bash "${guard_dir}/${script_base}" 2>"${guard_dir}/stderr") || rc=$?
+    err=$(<"${guard_dir}/stderr")
+    assert_eq '69' "$rc"                "${script_rel}: library missing → exit 69 (EX_UNAVAILABLE)"
+    assert_eq '' "$out"                 "${script_rel}: library missing → nothing on stdout"
+    assert_eq "${guard_lib} not found in ${guard_dir_resolved}: download it and ${updater} there, then run ./${updater}" "$err" \
+        "${script_rel}: library missing → stderr names the library, its directory and the updater, and nothing else"
+
+    cp "${REPO_DIR}/${script_rel%/*}/${guard_lib}" "${guard_dir}/"
+    rc=0
+    out=$(TRACE=0 bash -c 'source "$1"
+            declare -F check_for_updates >/dev/null && echo LIBRARY_LOADED' _ "${guard_dir}/${script_base}" 2>&1) || rc=$?
+    assert_eq '0' "$rc"                 "${script_rel}: library present → sources cleanly"
+    assert_eq 'LIBRARY_LOADED' "$out"   "${script_rel}: library present → the check is silent and the library loads"
+done
+
+# Static pin, every file — the "identical block in every script" rule as an
+# assertion, the role the check_for_updates digest above plays for the libraries:
+# each lxc/, llm/, utils/ script that sources its directory's library carries
+# the four-line check verbatim, directly above its `source` directive and line
+# (a check pasted below the `source` would be useless: the missing library dies
+# first), naming that library and that directory's updater, so a new script
+# cannot ship without it and no copy can drift. The updater name is read from
+# the directory, not repeated here.
+guard_offenders=""
+for f in "${REPO_DIR}"/lxc/*.sh "${REPO_DIR}"/llm/*.sh "${REPO_DIR}"/utils/*.sh; do
+    # shellcheck disable=SC2016  # ${SCRIPT_DIR} is literal source text being matched
+    guard_lib=$(sed -n 's|^source "${SCRIPT_DIR}/\(utils-[a-z]*\.sh\)"$|\1|p' "$f")
+    [[ -n "$guard_lib" ]] || continue
+    suite_updaters=("${f%/*}"/_download-*-scripts.sh)
+    updater="${suite_updaters[0]##*/}"
+    expected=$(printf '%s\n' \
+        "if [[ ! -f \"\${SCRIPT_DIR}/${guard_lib}\" ]]; then" \
+        "    printf '${guard_lib} not found in %s: download it and ${updater} there, then run ./${updater}\\n' \"\${SCRIPT_DIR}\" >&2" \
+        '    exit 69' \
+        'fi' \
+        "# shellcheck source=${guard_lib}" \
+        "source \"\${SCRIPT_DIR}/${guard_lib}\"")
+    actual=$(grep -xF -A5 "if [[ ! -f \"\${SCRIPT_DIR}/${guard_lib}\" ]]; then" "$f" || true)
+    [[ "$actual" == "$expected" ]] || guard_offenders+="${f#"${REPO_DIR}"/} "
+done
+assert_eq '' "$guard_offenders" 'every lxc/, llm/, utils/ script that sources its library carries the identical existence check'
+
 echo "== github/gh_org_*.sh: the same restart guard, string-tested and consumed =="
 # The github standalones inline their own self_update rather than sourcing a
 # library, so nothing above reaches them. They nonetheless use the SAME literal

@@ -96,13 +96,6 @@
 - **Why deferred:** No bash-side change reaches them, and self-update has not been requested for the two PowerShell scripts.
 - **Action on pickup:** If self-update is ever wanted for `utils/compare-directories.ps1` and `utils/robocopy-two-way.ps1`, it needs a PowerShell-native equivalent — a separate design, NOT a port of the bash `check_for_updates` pattern.
 
-### Graceful failure when `utils-misc.sh` is absent (added 2026-07-17)
-
-- **Source:** 2026-07-17 `utils/` Modular Standalone conversion.
-- **Problem:** Every converted `utils/` script does a bare `source "${SCRIPT_DIR}/utils-misc.sh"` under `set -e`. If the library is not co-located — e.g. a user curls a single script, the exact "no longer curl-able" trade-off the Modular Standalone pattern introduces, most likely to bite `utils/dig-all.sh` given its history as a popular single-file download — the script aborts with a raw bash "No such file or directory" error instead of a friendly message.
-- **Why deferred:** A one-line existence-check-and-message guard would be friendlier but DEVIATES from the bare-source parity `lxc/` and `llm/` already establish for `utils-lxc.sh` / `utils-llm.sh`. This is a cross-suite owner decision, so do NOT one-off it in `utils/`.
-- **Action on pickup:** Decide across `lxc/`, `llm/`, and `utils/` together (not just `utils/`) whether to add a guard, and if so, apply the same guard shape to all three per-directory libraries in one change.
-
 ### `setup-lxc.sh` has no `main()` or execution guard (added 2026-09-16)
 
 - **Source:** Plan Review of the container protect/unprotect work, 2026-09-16.

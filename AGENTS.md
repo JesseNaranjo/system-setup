@@ -437,7 +437,8 @@ This repository uses several script architectures. Choose based on context:
 - Self-update when run directly via `check_for_updates()`
 
 **Key characteristics:**
-- Require `utils-*.sh` in the same directory (downloaded by `_download-*-scripts.sh`)
+- Require `utils-*.sh` in the same directory. `_download-*-scripts.sh` never installs it: its `get_script_list()` excludes the library and it sources the library itself; `check_for_updates()` keeps an existing copy current.
+- Guard the library `source` with a four-line existence check directly above its `# shellcheck source=` directive, identical in every script except the library and updater names. It runs before any `print_*` exists, so it writes with a raw `printf` to stderr and exits 69 (`EX_UNAVAILABLE`); a bare `source` of a missing file dies with bash's raw "No such file or directory" instead. The exact four lines are in §Quick Reference for LLMs' Minimal Script Template and in §Complete Download Script Template (with `DOMAIN` replaced by the directory's library and updater); `tests/test-self-update.sh` pins them verbatim in every `lxc/`, `llm/`, and `utils/` script that sources its library.
 - Source guard pattern: only self-update when executed directly, not when sourced
 - Share output functions, prompts, and download infrastructure via utils
 
@@ -925,6 +926,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 
+if [[ ! -f "${SCRIPT_DIR}/utils-DOMAIN.sh" ]]; then
+    printf 'utils-DOMAIN.sh not found in %s: download it and _download-DOMAIN-scripts.sh there, then run ./_download-DOMAIN-scripts.sh\n' "${SCRIPT_DIR}" >&2
+    exit 69
+fi
 # shellcheck source=utils-DOMAIN.sh
 source "${SCRIPT_DIR}/utils-DOMAIN.sh"
 
@@ -2903,6 +2908,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+if [[ ! -f "${SCRIPT_DIR}/utils-DOMAIN.sh" ]]; then
+    printf 'utils-DOMAIN.sh not found in %s: download it and _download-DOMAIN-scripts.sh there, then run ./_download-DOMAIN-scripts.sh\n' "${SCRIPT_DIR}" >&2
+    exit 69
+fi
 # shellcheck source=utils-DOMAIN.sh
 source "${SCRIPT_DIR}/utils-DOMAIN.sh"
 

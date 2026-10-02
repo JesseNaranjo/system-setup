@@ -20,6 +20,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+if [[ ! -f "${SCRIPT_DIR}/utils-lxc.sh" ]]; then
+    printf 'utils-lxc.sh not found in %s: download it and _download-lxc-scripts.sh there, then run ./_download-lxc-scripts.sh\n' "${SCRIPT_DIR}" >&2
+    exit 69
+fi
 # shellcheck source=utils-lxc.sh
 source "${SCRIPT_DIR}/utils-lxc.sh"
 

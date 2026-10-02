@@ -7,6 +7,10 @@ if [[ -z "${SCRIPT_DIR:-}" ]]; then
     readonly SCRIPT_DIR
 fi
 
+if [[ ! -f "${SCRIPT_DIR}/utils-llm.sh" ]]; then
+    printf 'utils-llm.sh not found in %s: download it and _download-ollama-scripts.sh there, then run ./_download-ollama-scripts.sh\n' "${SCRIPT_DIR}" >&2
+    exit 69
+fi
 # shellcheck source=utils-llm.sh
 source "${SCRIPT_DIR}/utils-llm.sh"
 

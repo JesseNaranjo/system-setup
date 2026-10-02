@@ -26,6 +26,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 
+if [[ ! -f "${SCRIPT_DIR}/utils-misc.sh" ]]; then
+    printf 'utils-misc.sh not found in %s: download it and _download-utils-scripts.sh there, then run ./_download-utils-scripts.sh\n' "${SCRIPT_DIR}" >&2
+    exit 69
+fi
 # shellcheck source=utils-misc.sh
 source "${SCRIPT_DIR}/utils-misc.sh"
 

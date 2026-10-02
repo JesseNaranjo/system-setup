@@ -106,7 +106,7 @@ Self-updating script manager that keeps Ollama scripts current:
 
 ## Self-Update
 
-Ollama scripts use a `main()` function with source guard pattern. Individual scripts self-update when run directly via `check_for_updates()`, which checks for updates to both `utils-llm.sh` and the calling script, showing diffs and prompting before overwriting.
+Ollama scripts use a `main()` function with source guard pattern. Individual scripts self-update when run directly via `check_for_updates()`, which checks for updates to both `utils-llm.sh` and the calling script, showing diffs and prompting before overwriting. `utils-llm.sh` must be present in the same directory as the scripts; a script run without it exits 69 (`EX_UNAVAILABLE`) before doing anything, naming the missing file and telling you to download it and `_download-ollama-scripts.sh` beside the script.
 
 ## Screen Navigation
 
