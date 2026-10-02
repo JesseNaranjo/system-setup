@@ -685,11 +685,12 @@ echo "== execution guard: no distributed script ends in the && form =="
 # AGENTS.md §Important Implementation Notes #1. `[[ … ]] && main "$@"` is a false
 # list when its file is sourced, so the file returns 1 and a sourcing shell under
 # `set -e` exits; the if form returns 0, which is what lets the sections above
-# source a script bare. The pattern matches the tail (a closing test, &&, main or
-# main_<name>) however the operands are spelled; the three tests/ directories are
-# excluded because their comments spell the banned form.
+# source a script bare. The pattern is the guard's test followed by &&, whatever
+# comes after it (main, main_<name>, a brace group) and however the operands are
+# spelled; the three tests/ directories are excluded because they are
+# development-only and never distributed.
 guard_rc=0
-guard_offenders=$(git -C "$REPO_DIR" grep -lE '\]\][[:space:]]*&&[[:space:]]*main(_[a-z_]+)?([[:space:]]|$)' -- '*.sh' ':!tests/*' ':!*/tests/*') || guard_rc=$?
+guard_offenders=$(git -C "$REPO_DIR" grep -lE 'BASH_SOURCE.*\]\][[:space:]]*&&' -- '*.sh' ':!tests/*' ':!*/tests/*') || guard_rc=$?
 # git grep exits 1 when nothing matches (the passing case) and above 1 when it cannot run.
 if [[ "$guard_rc" -gt 1 ]]; then
     printf '  FAIL execution guard: git grep exited %d (not a git checkout?)\n' "$guard_rc"

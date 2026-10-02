@@ -87,11 +87,11 @@
 
   Two runs: an empty destination issue list gives copied 1, skipped 0 and one issue POST; a destination issue that matches the key gives copied 0, skipped 1, no issue POST and no comment POST.
 
-### `system-setup.sh` ends the whole run when the network migration is declined or rolled back (added 2026-10-01)
+### `system-setup.sh` ends the whole run when the network migration stops early (added 2026-10-01)
 
 - **Source:** 2026-10-01 Plan Review of the shellcheck cleanup of `system-setup/`.
 - **Problem:** `migrate_to_systemd_networkd` in `system-setup/system-modules/migrate-to-systemd-networkd.sh` returns 1 on five paths: `check_migration_preconditions` fails (a declined "Continue with migration anyway?" there included), `perform_migration` fails, the unsupported-configuration prompt is declined, `enable_systemd_networkd` fails, and `verify_network_connectivity` fails after `rollback_new_networking` has run. Its bare calls to `install_systemd_resolved` and `configure_resolv_conf` end it the same way when they return 1. `main_migrate_to_systemd_networkd` calls it bare and `system-setup.sh` calls that bare, so under `set -e` each of the seven ends the whole run: no later module runs and no session summary prints. `AGENTS.md` §Important Implementation Notes says to continue when a non-critical component fails.
-- **Why deferred:** Needs the owner's ruling on which of the two exits should stop the run: a declined prompt is a choice, while a failed connectivity test may be a reason to stop before the container static-IP module runs.
+- **Why deferred:** Needs the owner's ruling, exit by exit, on which of the seven should stop the run: a declined prompt is a choice, while a failed connectivity test may be a reason to stop before the container static-IP module runs.
 - **Action on pickup:** Decide stop or continue for each of the seven exits. Where the run continues, make that path `return 0` in `migrate_to_systemd_networkd` (after the rollback instructions, where it prints them), and guard the two bare calls the same way. Prefer that to calling the module from `system-setup.sh` as `main_migrate_to_systemd_networkd || print_warning …`: a function called in a `||` list runs with errexit suspended for its whole body, so a failing `backup_file` or `configure_resolv_conf` would no longer stop the migration midway. Where the run must stop, keep `return 1` and say why in a comment at the call site.
 
 ### `configure_shell_prompt_colors_system` prompts with a bare `read` (added 2026-10-01)

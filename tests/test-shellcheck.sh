@@ -68,13 +68,15 @@ for f in "${SCRIPTS[@]}"; do
     # A disable directive before a script's first command applies to the whole
     # file (shellcheck's scoping), which AGENTS.md §Linting forbids: silence a
     # finding on its own line instead.
+    # `|| true`: awk fails on a tracked file missing from the working tree;
+    # the shellcheck call below then reports that file and the loop goes on.
     file_wide=$(awk '
         NR == 1 && /^#!/ { next }
         /^[[:space:]]*$/ { next }
         /^[[:space:]]*#[[:space:]]*shellcheck[[:space:]].*disable=/ { print NR ": " $0; next }
         /^[[:space:]]*#/ { next }
         { exit }
-    ' "$f")
+    ' "$f") || true
     if [[ -n "$file_wide" ]]; then
         printf '  FAIL %s: file-wide shellcheck disable before the first command\n' "$f"
         printf '         %s\n' "${file_wide//$'\n'/$'\n'         }"
