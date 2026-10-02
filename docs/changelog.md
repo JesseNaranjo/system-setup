@@ -42,6 +42,7 @@ features as of that date; earlier history is not individually recorded.
 ### Removed
 
 - **`github/gh_org_copy-backup.sh`.** The 486-line snapshot of an older `gh_org_copy.sh` was never run, sourced, or listed by any updater, and had missed every cross-copy helper fix since it was taken; git history keeps it. `github/README.md` drops its Legacy row, and the executable-bit assertion in `tests/test-self-update.sh` now allowlists only the five sourced `utils-*.sh` libraries.
+- **Eight untriggered `docs/backlog.md` entries.** The `dig-all.sh` reverse-lookup and `SERVER#PORT` ideas, the `watch-lxc.sh` name filter, four `push-ghostty-terminfo.sh` enhancements, and the `.ps1` self-update scope note are gone; none had a trigger that would bring it back, and `utils/README.md` already states that the `.ps1` scripts do not self-update.
 
 ## [2026-09-21]
 

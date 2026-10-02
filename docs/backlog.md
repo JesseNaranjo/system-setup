@@ -5,61 +5,12 @@
 
 ## Open
 
-### Reverse-lookup convenience (`-x IP`) in `utils/dig-all.sh` (added 2026-04-18)
-
-- **Source:** 2026-04-18 `utils/dig-all.sh` standardization.
-- **Problem:** `utils/dig-all.sh` has no reverse-lookup mode — it does not accept an IP argument and run `dig -x IP` across its record-type loop.
-- **Why deferred:** The reverse-lookup use case is niche enough that users can invoke `dig -x` directly.
-- **Action on pickup:** Accept an IP argument and run `dig -x IP` across the same record-type loop the script already drives. The addition is small and self-contained.
-
-### Resolver port-suffix support (`SERVER#PORT`) in `utils/dig-all.sh` (added 2026-04-18)
-
-- **Source:** 2026-04-18 `utils/dig-all.sh` post-implementation review.
-- **Problem:** `dig` accepts `@1.1.1.1#5353` syntax to target a resolver on a non-standard port, but `validate_resolver`'s regex `^[A-Za-z0-9][A-Za-z0-9._:-]*$` rejects `#`, a genuine feature gap: `utils/dig-all.sh` cannot target such a resolver.
-- **Why deferred:** (a) Non-standard DNS ports are uncommon outside test labs, and (b) adding `#` to the allowlist requires confirming it does not weaken injection defenses — a separate analysis.
-- **Action on pickup:** Run the separate analysis first — confirm that admitting `#` into `validate_resolver`'s allowlist does not weaken its injection defenses. Only then extend the regex `^[A-Za-z0-9][A-Za-z0-9._:-]*$` to accept `#` so the `SERVER#PORT` form (`@1.1.1.1#5353`) passes validation.
-
 ### Atomic-rename for config-rewrite sites under elevation (added 2026-05-05)
 
 - **Source:** 2026-05-05 plan `Reviewed: Backport 10 self-update / temp-file / prompt-UX fixes` — deliberate scope decision.
 - **Problem:** `normalize_trailing_newlines()` in both `utils-sys.sh` and `utils-k8s.sh`, plus `update_config_line()` in both libraries, use bare `mktemp` (`/tmp` tmpfs) and then a cross-FS `mv` to `$file`, often `/etc/...` reached via `run_elevated`. A cross-FS `mv` is copy + unlink, not `rename(2)`, so a SIGKILL or power-loss mid-`mv` can leave a truncated config file.
-- **Why deferred:** Out of scope for the 2026-05-05 self-update backport. Pattern E3 (bookkeeping-only inline `mktemp` + `TEMP_FILES+=()`) was applied at those sites instead and preserved the current cross-FS behavior.
+- **Why deferred:** Blocked on a design decision the four sites share: both atomic options in **Action on pickup:** change how they reach `$file` through `run_elevated`, and no work has needed that calling convention to change. Until then Pattern E3 keeps the cross-FS `mv`. Pick it up when any of the four functions is next changed, or when a config file truncated mid-`mv` is reported.
 - **Action on pickup:** Four sites — `normalize_trailing_newlines()` and `update_config_line()` in each of `utils-sys.sh` and `utils-k8s.sh`; apply the same fix at all four. Atomic same-FS rename requires either (a) `mktemp` adjacent to `$file` AND running `mktemp` under the same elevation as the eventual `mv`, which complicates the function's calling convention, or (b) writing through a privileged helper that handles both the temp creation and the rename atomically.
-
-### `lxc/watch-lxc.sh` container-name filter (positional args) (added 2026-04-27)
-
-- **Source:** 2026-04-27 initial implementation of `lxc/watch-lxc.sh`.
-- **Problem:** `services-check.sh --watch` accepts service-name filters as positional args; `watch-lxc.sh` enforces a strict no-args check in `main()`, so users cannot narrow the display to a single LXC.
-- **Why deferred:** (a) the typical use case is "show everything" at a glance; (b) `lxc-ls --fancy <names...>` already accepts a name filter, so the implementation cost is low when actually requested.
-- **Action on pickup:** Replace the strict no-args check in `main()` with a positional-args collection pattern (see the positional-args loop in `lxc/stop-lxc.sh`), then forward the array into `render_container_table`'s `lxc-ls --fancy --fancy-format NAME,STATE,IPV4,IPV6,UNPRIVILEGED` call (as of 2026-09-16 that call lives in `render_container_table`, not `watch_loop`, and already carries `--fancy-format`; append `"${CONTAINERS[@]}"` after it).
-
-### `utils/push-ghostty-terminfo.sh` multi-host targeting (added 2026-07-14)
-
-- **Source:** 2026-07-14 deferral from `utils/push-ghostty-terminfo.sh` work.
-- **Problem:** `utils/push-ghostty-terminfo.sh` accepts exactly one host per run, so covering a fleet takes one invocation per host.
-- **Why deferred:** Keeping the first version focused won out; re-running per host is cheap.
-- **Action on pickup:** Accept `host...` positional args and loop probe → push → verify per host, mirroring the positional-args loop in `lxc/stop-lxc.sh`.
-
-### `utils/push-ghostty-terminfo.sh` `~/.ssh/config` host enumeration (`--all`) (added 2026-07-14)
-
-- **Source:** 2026-07-14 deferral from `utils/push-ghostty-terminfo.sh` work.
-- **Problem:** `utils/push-ghostty-terminfo.sh` has no `--all` flag that parses every `Host` block in `~/.ssh/config` and pushes to all of them.
-- **Why deferred:** ssh-config parsing has real edge cases (wildcards, `Match`, `Include`, `ProxyJump`-only aliases) needing their own design, and there is no existing parser in the repo to reuse.
-- **Action on pickup:** Design the ssh-config parser first — it must handle wildcards, `Match`, `Include`, and `ProxyJump`-only aliases, and nothing in the repo can be reused for it. Then add `--all` to enumerate every `Host` block in `~/.ssh/config` and push to each.
-
-### `utils/push-ghostty-terminfo.sh` macOS pre-Sonoma `infocmp` fallback (added 2026-07-14)
-
-- **Source:** 2026-07-14 deferral from `utils/push-ghostty-terminfo.sh` work.
-- **Problem:** macOS before Sonoma ships an `infocmp` that cannot emit `-x`, and `utils/push-ghostty-terminfo.sh` has no fallback for it. Ghostty recommends the Homebrew ncurses binary (`/opt/homebrew/opt/ncurses/bin/infocmp` or `/usr/local/opt/ncurses/bin/infocmp`). [confirmed: https://ghostty.org/docs/help/terminfo fetched 2026-07-14]
-- **Why deferred:** The script runs from the Ghostty host, and current macOS (Sonoma+) / Linux `infocmp` handle `-x`.
-- **Action on pickup:** After `detect_os`, if macOS and `infocmp -x xterm-ghostty` fails, retry with the Homebrew path (`/opt/homebrew/opt/ncurses/bin/infocmp` or `/usr/local/opt/ncurses/bin/infocmp`) if present.
-
-### `utils/push-ghostty-terminfo.sh` friendlier read-only-`/usr` (immutable OS) error (added 2026-07-14)
-
-- **Source:** 2026-07-14 deferral from `utils/push-ghostty-terminfo.sh` work.
-- **Problem:** On Bazzite/Silverblue etc., the system-wide `sudo tic -x -o /usr/share/terminfo` fails and `utils/push-ghostty-terminfo.sh` correctly exits 70 — but with a generic "install failed" message that does not tell the user the OS image is immutable.
-- **Why deferred:** Correctness is fine as-is.
-- **Action on pickup:** On the system-mode failure path, probe `ssh host 'test -w /usr/share/terminfo'` (or detect the write-error text) and, when the dir is read-only, redirect the user to `--user` or the OS's layered-image mechanism instead of the generic failure.
 
 ### `rsync-over-tunnel.sh`: the generated rsync module is unauthenticated, so any local user on the TARGET can write the destination as root while step 1 runs (added 2026-07-24)
 
@@ -88,13 +39,6 @@
 - **Problem:** The 2026-08-05 work made `utils/rsync-over-tunnel.sh` detect whether ACLs and xattrs are *available*; it does nothing about whether they are *meaningful* across the pair. macOS ACLs are NFSv4-style and do not map onto Linux POSIX ACLs, and the xattr namespaces differ (`com.apple.*` vs `user.*`/`security.*`/`system.*`), so a macOS↔Linux transfer with `-A -X` can silently write metadata the destination cannot interpret — or drop it.
 - **Why deferred:** A correct answer means either a per-direction allowlist (`--filter` on xattr names) or simply refusing `-A`/`-X` on cross-platform pairs, and choosing between those needs real-world testing on a mixed pair.
 - **Action on pickup:** Start by capturing what actually survives a round trip in each direction before designing the guard. No macOS→Linux or Linux→macOS run has happened yet — see the entry on the unverified cross-platform directions.
-
-### `.ps1` scripts are out of scope for self-update / Modular Standalone conversion (added 2026-07-17)
-
-- **Source:** 2026-07-17 `utils/` Modular Standalone conversion.
-- **Problem:** `utils/compare-directories.ps1` and `utils/robocopy-two-way.ps1` remain plain standalone PowerShell with no self-update. They cannot `source` the bash `utils-misc.sh` library, so the `check_for_updates` self-update pattern used by the other 6 converted `utils/` scripts does not apply to them.
-- **Why deferred:** No bash-side change reaches them, and self-update has not been requested for the two PowerShell scripts.
-- **Action on pickup:** If self-update is ever wanted for `utils/compare-directories.ps1` and `utils/robocopy-two-way.ps1`, it needs a PowerShell-native equivalent — a separate design, NOT a port of the bash `check_for_updates` pattern.
 
 ### `setup-lxc.sh` has no `main()` or execution guard (added 2026-09-16)
 
