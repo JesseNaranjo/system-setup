@@ -607,6 +607,27 @@ assert_contains "$_msg" "-oProxyCommand=touch" "ssh refusal names the offending 
 _msg=$(_extra_msg source-transfer --itemize-changes --rsync-path=/tmp/x) || true
 assert_contains "$_msg" "--rsync-path=/tmp/x"  "rsync refusal names the offending token"
 
+# The keyword match must not follow the caller's locale. Under a Turkish locale
+# bash's ${var,,} lowercases ASCII 'I' to dotless 'ı', so an all-caps
+# XAUTHLOCATION would miss the deny-list while ssh, which lowercases bytewise,
+# still honours it. The case runs where a Turkish UTF-8 locale is installed or
+# localedef can build one in the sandbox, and says so when neither holds.
+_tr_dir=$(mktemp -d)
+TEST_TEMP_DIRS+=("$_tr_dir")
+_tr_env=(LC_ALL=tr_TR.UTF-8)
+if localedef -i tr_TR -f UTF-8 "${_tr_dir}/tr_TR.UTF-8" >/dev/null 2>&1; then
+    _tr_env+=(LOCPATH="$_tr_dir")
+fi
+# shellcheck disable=SC2016  # the single-quoted scripts are the CHILD's source text
+if [[ "$(env "${_tr_env[@]}" bash -c 'v=I; printf "%s" "${v,,}"' 2>/dev/null)" == "ı" ]]; then
+    _tr_rc=0
+    env "${_tr_env[@]}" bash -c 'source "$1"; EXTRA=(-o XAUTHLOCATION=/tmp/x); validate_extra source-tunnel' \
+        _ "${TESTS_DIR}/../rsync-over-tunnel.sh" >/dev/null 2>&1 || _tr_rc=$?
+    assert_eq 64 "$_tr_rc" "ssh: an all-caps keyword is refused under a Turkish locale"
+else
+    printf '  skip ssh keyword under a Turkish locale: no tr_TR.UTF-8 locale here\n'
+fi
+
 # main() must call validate_extra before it dispatches. Run the real script as a
 # child: SELF_UPDATE_RESTARTED=1 takes check_for_updates' post-restart return,
 # which fetches nothing, and ssh is a shim that exits 99 — so 99 means the

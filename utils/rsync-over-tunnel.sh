@@ -770,6 +770,11 @@ validate_options() {
 # already refuses Include and Match on the command line; they stay listed so
 # this guard does not depend on it.
 _ssh_directive_denied() {
+    # C locale: ${directive,,} must lowercase bytewise, as ssh's tolower does.
+    # Under a Turkish locale bash maps ASCII 'I' to dotless 'ı', and an all-caps
+    # XAUTHLOCATION or PKCS11PROVIDER would then miss the list below. `local`
+    # restores the caller's locale on return.
+    local LC_ALL=C
     local directive keyword
     directive="${1//\"/}"
     directive="${directive#"${directive%%[![:space:]=]*}"}"
