@@ -411,7 +411,7 @@ assert_contains "$out" 'DOWNLOAD_RC=1' "wget exit 0, CRLF shebang → download_s
 assert_eq 'absent' "$([[ -e "${SANDBOX}/download.out" ]] && echo present || echo absent)" "wget exit 0, CRLF shebang → body removed"
 
 echo "== download_script: curl exit status (a body cut short after its 200 header) =="
-# curl writes %{http_code} once the header arrives, so a transfer that dies
+# curl knows %{http_code} once the header arrives, so a transfer that dies
 # mid-body still reports 200 (exit 18, or 28 on the --max-time timeout) and the
 # partial file, whose first line is a shebang, would pass the content gate.
 # download_script must test curl's exit before the status case.

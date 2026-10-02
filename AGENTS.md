@@ -174,9 +174,11 @@ and `cmd` fails in normal operation, keep the tolerance explicit (`|| true` with
 a comment, or `if ! x=$(cmd); then …; fi`) instead of a bare split.
 
 `tests/test-shellcheck.sh` is the gate: it lints every tracked `*.sh` and exits 1
-naming each file with a finding. `./test-all.sh` runs it with every other suite
-and is the pre-commit check (§Running the Scripts). No CI workflow runs it, by
-the owner's ruling (2026-09-27): do NOT add one.
+naming each file with a finding, and it fails on a `disable=` in `.shellcheckrc`
+and on a `# shellcheck disable=` placed before a script's first command, which
+shellcheck applies to the whole file. `./test-all.sh` runs it with every other
+suite and is the pre-commit check (§Running the Scripts). No CI workflow runs it,
+by the owner's ruling (2026-09-27): do NOT add one.
 
 #### Common Conditionals
 
@@ -438,7 +440,7 @@ This repository uses several script architectures. Choose based on context:
 
 **Key characteristics:**
 - Require `utils-*.sh` in the same directory. `_download-*-scripts.sh` never installs it: its `get_script_list()` excludes the library and it sources the library itself; `check_for_updates()` keeps an existing copy current.
-- Guard the library `source` with a four-line existence check directly above its `# shellcheck source=` directive, identical in every script except the library and updater names. It runs before any `print_*` exists, so it writes with a raw `printf` to stderr and exits 69 (`EX_UNAVAILABLE`); a bare `source` of a missing file dies with bash's raw "No such file or directory" instead. The exact four lines are in §Quick Reference for LLMs' Minimal Script Template and in §Complete Download Script Template (with `DOMAIN` replaced by the directory's library and updater); `tests/test-self-update.sh` pins them verbatim in every `lxc/`, `llm/`, and `utils/` script that sources its library.
+- Guard the library `source` with a four-line existence check directly above its `# shellcheck source=` directive, identical in every script except the library and updater names. It runs before any `print_*` exists, so it writes with a raw `printf` to stderr and exits 69 (`EX_UNAVAILABLE`); a bare `source` of a missing file dies with bash's raw "No such file or directory" instead. The exact four lines are in §Quick Reference for LLMs' Minimal Script Template and in §Complete Download Script Template (with `utils-DOMAIN.sh` and `_download-DOMAIN-scripts.sh` replaced by the directory's own pair, whose names do not always match: `utils-lxc.sh`/`_download-lxc-scripts.sh`, `utils-llm.sh`/`_download-ollama-scripts.sh`, `utils-misc.sh`/`_download-utils-scripts.sh`); `tests/test-self-update.sh` pins them verbatim in every `lxc/`, `llm/`, and `utils/` script that sources its library.
 - Source guard pattern: only self-update when executed directly, not when sourced
 - Share output functions, prompts, and download infrastructure via utils
 
@@ -479,7 +481,7 @@ done
 | New feature for system-setup | Modular | Add to existing module or create new one |
 | New utility script in lxc/, llm/, utils/ | Modular Standalone | Source utils-*.sh, self-update via check_for_updates |
 | Shared helper used by multiple modules | Add to utils-sys.sh | Centralized maintenance |
-| One-off automation script | Standalone | Simpler, no dependencies |
+| One-off automation script | Lightweight | No prompts, no shared utilities, no self-update |
 
 ### Helper Library Duplication (Intentional)
 
@@ -675,7 +677,7 @@ if [[ -z "${SCRIPT_DIR:-}" ]]; then
 fi
 
 # Source utilities
-# shellcheck source=utils-sys.sh
+# shellcheck source=../utils-sys.sh
 source "${SCRIPT_DIR}/utils-sys.sh"
 
 # ============================================================================
@@ -1022,6 +1024,8 @@ print_session_summary() {
         return
     fi
 
+    local file
+
     print_summary "─── Session ─────────────────────────────────────────────────────────────"
     echo ""
 
@@ -1034,7 +1038,7 @@ print_session_summary() {
     fi
 
     if [[ ${#BACKED_UP_FILES[@]} -gt 0 ]]; then
-        print_success "${GREEN}Files Updated:${NC}"
+        print_success "Files Updated:"
         for file in "${BACKED_UP_FILES[@]+"${BACKED_UP_FILES[@]}"}"; do
             echo "            - $file"
         done
@@ -1185,6 +1189,9 @@ update_config_line() {
             print_success "- $description already configured correctly"
             return 0
         fi
+        local current_value
+        current_value=$(grep_file -E "^[[:space:]]*${setting_pattern}" "$file" | head -n 1)
+        print_warning "⚠ $description has different value: '$current_value' in $file"
         backup_file "$file"
         add_change_header "$file" "$config_type"
 
@@ -1229,10 +1236,12 @@ update_config_line() {
             fi
             chmod "$original_perms" "$file"
         fi
+        print_success "✓ $description updated in $file"
     else
         backup_file "$file"
         add_change_header "$file" "$config_type"
         append_to_file "$file" "$full_line"
+        print_success "✓ $description added to $file"
     fi
 }
 ```
@@ -1407,6 +1416,8 @@ create_config_file() {
         fi
         chmod "$perms" "$file"
     fi
+
+    CREATED_CONFIG_FILES+=("$file")
 }
 ```
 
@@ -2293,10 +2304,11 @@ check_disk_space() {
         available_mb=$(df -m "$path" | tail -1 | awk '{print $4}')
     fi
 
-    if [[ "$available_mb" -lt "$total_needed" ]]; then
+    if [[ -z "$available_mb" || ! "$available_mb" =~ ^[0-9]+$ || "$available_mb" -lt "$total_needed" ]]; then
         print_error "✖ Insufficient disk space on ${path} (${available_mb:-unknown} MB available, need ${required_mb} MB + ${buffer_mb} MB buffer)"
         return 1
     fi
+    return 0
 }
 ```
 
@@ -2510,7 +2522,7 @@ detect_download_cmd() {
         DOWNLOAD_CMD=""
         # Display warning box if neither is available
         print_warning_box \
-            "⚠️   UPDATES NOT AVAILABLE  ⚠️" \
+            "UPDATES NOT AVAILABLE" \
             "" \
             "Neither 'curl' nor 'wget' is installed on this system." \
             "Self-updating functionality requires one of these tools." \
@@ -2545,14 +2557,15 @@ download_script() {
     echo "            ▶ ${REMOTE_BASE}/${script_file}..."
 
     if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-        # Drop -f from curl so 4xx/5xx responses still populate http_status (otherwise
-        # curl exits non-zero before %{http_code} is captured). --max-time 15 prevents
-        # a sinkholed network from hanging for 5+ minutes. Without -f, curl exits 0 on
-        # 4xx/5xx (the status arms report those), so a non-zero exit always means the
-        # transfer itself failed: no connection, a timeout, or a body cut short. Test
-        # the exit FIRST: %{http_code} is written once the header arrives, so a body
-        # truncated after a 200 header still reports 200 (exit 18, or 28 on a mid-body
-        # timeout), and the partial file could pass the shebang gate below.
+        # No -f: with it curl exits 22 on a 4xx/5xx, and the exit check below would
+        # report that as a failed transfer instead of letting the status arms name
+        # it. --max-time 15 prevents a sinkholed network from hanging for 5+
+        # minutes. Without -f, curl exits 0 on 4xx/5xx (the status arms report
+        # those), so a non-zero exit always means the transfer itself failed: no
+        # connection, a timeout, or a body cut short. Test the exit FIRST:
+        # %{http_code} is known once the header arrives, so a body truncated after
+        # a 200 header still reports 200 (exit 18, or 28 on a mid-body timeout),
+        # and the partial file could pass the shebang gate below.
         local curl_exit=0
         http_status=$(curl -H 'Cache-Control: no-cache, no-store' \
             --max-time 15 \
@@ -2649,7 +2662,7 @@ Only these forms are acceptable:
 
 - **`-fsSL` → `-sSL`** (drop the `-f`). With `-f`, curl exits 22 on 4xx/5xx, so a 404 could not be told from a transport failure, and the old `|| echo "000"` appended `000` to the `404` that `-w` had already printed (the visible `"404000"` strings). Without `-f`, curl writes the body (the GitHub error page) to `output_file`, exits 0, and `%{http_code}` is captured cleanly. The `case` arm for that status then reports the error and deletes the body — the strict shebang gate above is a second line of defence, not the primary one, because an HTML error page CAN begin with a line that looks like a shebang. The sister-repo audit traced an "HTTP 404000 error" message to this exact bug.
 - **`--max-time 15`** caps total transfer time. Without it, a sinkholed/black-hole network can hang for 5+ minutes (curl's default connect/read timeouts are very generous). 15 seconds is enough for a slow GitHub raw fetch and short enough that an interactive user notices and Ctrl+C's. Verified via [everything.curl.dev/usingcurl/timeouts.html](https://everything.curl.dev/usingcurl/timeouts.html).
-- **`local curl_exit=0; http_status=$(curl …) || curl_exit=$?`, tested BEFORE the status `case`.** Without `-f`, curl exits 0 on any HTTP status, so a non-zero exit always means the transfer itself failed — and `%{http_code}` is written once the header arrives, so a body cut short after a 200 (exit 18, or 28 when `--max-time` hits mid-body) still reports 200 and, if its first line is a shebang, would pass the content gate and be installed. The old `|| true` discarded that exit; the `000)` arm and the empty-status fallback go with it: curl's `-w` prints `000` on a failed transfer, which now reports its exit code, and a curl that exits 0 always prints a real status. Verified via [curl(1)](https://curl.se/docs/manpage.html) (`-f`: "Fail with error code 22 and with no response body output at all for HTTP transfers returning HTTP response codes at 400 or greater"; `http_code`: "The numerical response code that was found in the last retrieved HTTP(S) or FTP(s) transfer") and [libcurl error codes](https://curl.se/libcurl/c/libcurl-errors.html) (18 "A file transfer was shorter or larger than expected…", 28 "Operation timeout…"), fetched 2026-09-30. The private repository's `download_file` carries the same check (fixed there 2026-09-22).
+- **`local curl_exit=0; http_status=$(curl …) || curl_exit=$?`, tested BEFORE the status `case`.** Without `-f`, curl exits 0 on any HTTP status, so a non-zero exit always means the transfer itself failed — and `%{http_code}` is known once the header arrives, so a body cut short after a 200 (exit 18, or 28 when `--max-time` hits mid-body) still reports 200 and, if its first line is a shebang, would pass the content gate and be installed. The old `|| true` discarded that exit; the `000)` arm and the empty-status fallback go with it: curl's `-w` prints `000` on a failed transfer, which now reports its exit code, and a curl that exits 0 always prints a real status. Verified via [curl(1)](https://curl.se/docs/manpage.html) (`-f`: "Fail with error code 22 and with no response body output at all for HTTP transfers returning HTTP response codes at 400 or greater"; `http_code`: "The numerical response code that was found in the last retrieved HTTP(S) or FTP(s) transfer") and [libcurl error codes](https://curl.se/libcurl/c/libcurl-errors.html) (18 "A file transfer was shorter or larger than expected…", 28 "Operation timeout…"), fetched 2026-09-30. The private repository's `download_file` carries the same check (fixed there 2026-09-22).
 - **`case` statement** replaces the if/elif chain so each branch is one line and the failure-message wording is uniform.
 - **wget `--timeout=15`** mirrors the curl change. The old wget branch had no timeout at all.
 - **`local wget_exit=0; wget … || wget_exit=$?`** captures wget's exit code without aborting the function under `set -e`. The old form (`if wget …; then`) hid the exit code in the conditional and lost the error specificity.
@@ -3209,6 +3222,8 @@ sudo ./kubernetes-setup.sh  # Full orchestrated setup
 - [ ] Cross-platform: OS detection used
 - [ ] Prompts: Contextual defaults
 - [ ] Comments: Updated with code
+- [ ] Lint and tests: bare `shellcheck <file>` at 0 findings; `./test-all.sh` green
+- [ ] Execution guard: if-form, entry point called with `"$@"`
 
 ---
 

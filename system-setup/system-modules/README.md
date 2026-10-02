@@ -52,7 +52,7 @@ All modules follow the same structure:
 3. **Source utils-sys.sh**: Import shared functions and variables
 4. **Module functions**: Implementation specific to the module
 5. **Main entry point**: `main_<module_name>()` function
-6. **Execution guard**: Run main only if executed directly
+6. **Execution guard**: When executed directly (not sourced), run `check_for_updates`, then `main_<module_name>`
 
 ### Example Module Structure
 
@@ -65,6 +65,7 @@ if [[ -z "${SCRIPT_DIR:-}" ]]; then
     readonly SCRIPT_DIR
 fi
 
+# shellcheck source=../utils-sys.sh
 source "${SCRIPT_DIR}/utils-sys.sh"
 
 # Module-specific functions here...

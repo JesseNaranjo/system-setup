@@ -274,14 +274,15 @@ download_script() {
     echo "            ▶ ${REMOTE_BASE}/${script_file}..."
 
     if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
-        # Drop -f from curl so 4xx/5xx responses still populate http_status (otherwise
-        # curl exits non-zero before %{http_code} is captured). --max-time 15 prevents
-        # a sinkholed network from hanging for 5+ minutes. Without -f, curl exits 0 on
-        # 4xx/5xx (the status arms report those), so a non-zero exit always means the
-        # transfer itself failed: no connection, a timeout, or a body cut short. Test
-        # the exit FIRST: %{http_code} is written once the header arrives, so a body
-        # truncated after a 200 header still reports 200 (exit 18, or 28 on a mid-body
-        # timeout), and the partial file could pass the shebang gate below.
+        # No -f: with it curl exits 22 on a 4xx/5xx, and the exit check below would
+        # report that as a failed transfer instead of letting the status arms name
+        # it. --max-time 15 prevents a sinkholed network from hanging for 5+
+        # minutes. Without -f, curl exits 0 on 4xx/5xx (the status arms report
+        # those), so a non-zero exit always means the transfer itself failed: no
+        # connection, a timeout, or a body cut short. Test the exit FIRST:
+        # %{http_code} is known once the header arrives, so a body truncated after
+        # a 200 header still reports 200 (exit 18, or 28 on a mid-body timeout),
+        # and the partial file could pass the shebang gate below.
         local curl_exit=0
         http_status=$(curl -H 'Cache-Control: no-cache, no-store' \
             --max-time 15 \
@@ -609,8 +610,8 @@ main() {
     parse_arguments "$@"
 
     # Defense-in-depth: reap stale ~*.tmp.?????? temps from prior interrupted
-    # runs (SIGKILL, power-loss) before doing anything else. Catch-all glob
-    # covers all atomic-rename templates this script may produce.
+    # runs (SIGKILL, power-loss) before the update check creates new ones.
+    # Catch-all glob covers all atomic-rename templates this script may produce.
     sweep_stale_temps '~*.tmp.??????'
 
     # Check for updates if download tool available
