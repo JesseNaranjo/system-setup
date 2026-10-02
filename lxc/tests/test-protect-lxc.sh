@@ -215,12 +215,16 @@ echo "== stop-lxc.sh and restart-lxc.sh split lxc-ls output one name per line ==
 # Both call /usr/bin/lxc-ls by absolute path, which no PATH shim or function
 # stub can stand in for, so these pin the source text instead — the same shape
 # tests/test-self-update.sh uses for the github/ restart guard.
+# Whole-line matches: a "|| true" appended to the capture, or the capture moved
+# into a test, changes the line and fails the pin.
 # shellcheck disable=SC2016  # the single quotes are deliberate: these are the
 # literal source lines being searched for, not expansions.
 for script in stop-lxc.sh restart-lxc.sh; do
-    assert_eq 1 "$(grep -cF 'running_list=$(/usr/bin/lxc-ls -1 --running)' "${TESTS_DIR}/../${script}")" \
-        "${script}: captures lxc-ls -1 --running, so a failing lxc-ls still aborts"
-    assert_eq 1 "$(grep -cF 'mapfile -t RUNNING <<< "$running_list"' "${TESTS_DIR}/../${script}")" \
+    assert_eq 1 "$(grep -cxF '        running_list=$(/usr/bin/lxc-ls -1 --running)' "${TESTS_DIR}/../${script}")" \
+        "${script}: captures lxc-ls -1 --running bare, so a failing lxc-ls still aborts"
+    assert_eq 1 "$(grep -cxF '        if [[ -z "$running_list" ]]; then' "${TESTS_DIR}/../${script}")" \
+        "${script}: an empty capture is handled before mapfile can make an empty element"
+    assert_eq 1 "$(grep -cxF '        mapfile -t RUNNING <<< "$running_list"' "${TESTS_DIR}/../${script}")" \
         "${script}: splits the capture one line per element"
 done
 
@@ -261,7 +265,12 @@ for script in create-lxc.sh backup-lxc.sh; do
         res="$(_lxc_main "$script" "$name")"
         assert_eq 64 "${res%%|*}" "${script} ${name}: exits 64 (EX_USAGE)"
         assert_contains "${res#*|}" "✖ Invalid container name: ${name}" "${script} ${name}: names the rejected value"
-        assert_not_contains "${res#*|}" "REACHED" "${script} ${name}: refused before any lxc-* or sudo call"
+        # backup-lxc.sh would stop at its existence check (exit 66) before any stub
+        # even without the guard, and its lxc-info/sudo output feeds grep -q and the
+        # 7z stub, so a REACHED check cannot fail there: its exit 64 is the proof.
+        if [[ "$script" == create-lxc.sh ]]; then
+            assert_not_contains "${res#*|}" "REACHED" "${script} ${name}: refused before any lxc-* or sudo call"
+        fi
     done
 done
 # Explicit distribution/release/architecture skip create-lxc.sh's

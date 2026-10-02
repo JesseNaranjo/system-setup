@@ -32,7 +32,7 @@ and exits 69 on an older shell. Sourcing is safe because each script's
 UTF-8 locale; under `LC_ALL=C` they compare bytes and will report a mismatch on
 the multi-byte rows.
 
-Everything here is pure text processing or pure decision logic, except one child-process check in each suite (`ssh` shimmed, plus `rsync` in `test-rsync-two-way.sh`; `SELF_UPDATE_RESTARTED=1` so nothing is fetched), proving `main` refuses an option-like or denied argument before `ssh` can start. Daemon startup,
+Everything here is pure text processing or pure decision logic, except the child-process checks: each suite runs a sandboxed copy of its script once (`ssh` shimmed, plus `rsync` in `test-rsync-two-way.sh`; `SELF_UPDATE_RESTARTED=1` so nothing is fetched), proving `main` refuses an option-like or denied argument before `ssh` can start, and `test-rsync-over-tunnel.sh` also sources its script in a child bash for the Turkish-locale case. Daemon startup,
 chroot enforcement, and real transfers need two hosts and are still covered only
 by manual verification — see `docs/backlog.md` for exactly what that manual
 pass did and did not exercise.

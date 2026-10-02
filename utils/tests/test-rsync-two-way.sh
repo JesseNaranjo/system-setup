@@ -145,6 +145,10 @@ assert_eq 1 "$(rc validate_sync_args "$sandbox" '[a@b:c@-oProxyCommand=x]:/p')" 
     "dash-leading host hidden behind @ and : inside [ ] rejected"
 assert_eq 1 "$(rc validate_sync_args "$sandbox" 'user@[a@b:c@-oProxyCommand=x]:/p')" \
     "the same shape after user@ rejected"
+assert_eq 1 "$(rc validate_sync_args "$sandbox" 'a@b@[-oProxyCommand=x]:/p')" \
+    "[ after a second @ rejected"
+assert_eq 1 "$(rc validate_sync_args "$sandbox" '@[-oProxyCommand=x]:/p')" \
+    "[ after an empty user rejected"
 assert_eq 1 "$(rc validate_sync_args "$sandbox" '[::1]:/p')" \
     "a harmless bracketed host is refused too"
 assert_contains "$(_stderr validate_sync_args "$sandbox" '[::1]:/p')" \
@@ -170,7 +174,9 @@ assert_contains "$(_stderr validate_sync_args "$sandbox" 'no-colon-here')" \
     'Invalid remote specification format: no-colon-here' "missing colon keeps its message"
 
 echo "== main calls validate_sync_args before ssh or rsync runs =="
-# The one check that runs the real script as a child process. SELF_UPDATE_RESTARTED=1
+# The one check that runs the script as a child process — a copy in the sandbox
+# with its library beside it, because main() starts with sweep_stale_temps and
+# check_for_updates, which act on the script's own directory. SELF_UPDATE_RESTARTED=1
 # takes check_for_updates' post-restart return, which fetches nothing; ssh and
 # rsync are shims that record a marker file — so a marker means the refused spec
 # reached a network command, and exit 1 with no marker means main refused it first.
@@ -179,11 +185,14 @@ mkdir "$shim_dir"
 printf '#!/usr/bin/env bash\ntouch "%s/reached"\nexit 99\n' "$sandbox" > "${shim_dir}/ssh"
 cp "${shim_dir}/ssh" "${shim_dir}/rsync"
 chmod +x "${shim_dir}/ssh" "${shim_dir}/rsync"
+run_dir="${sandbox}/run"
+mkdir "$run_dir"
+cp "${TESTS_DIR}/../rsync-two-way.sh" "${TESTS_DIR}/../utils-misc.sh" "${run_dir}/"
 wire_rc=0
 # HOME points into the sandbox: the script logs to ~/.rsync-two-way.log, and a
 # wiring regression must not write to the developer's real log.
 HOME="$sandbox" PATH="${shim_dir}:${PATH}" SELF_UPDATE_RESTARTED=1 \
-    "${TESTS_DIR}/../rsync-two-way.sh" "$sandbox" '-oProxyCommand=x@host:/p' </dev/null >/dev/null 2>&1 || wire_rc=$?
+    "${run_dir}/rsync-two-way.sh" "$sandbox" '-oProxyCommand=x@host:/p' </dev/null >/dev/null 2>&1 || wire_rc=$?
 assert_eq 1 "$wire_rc" "main exits 1 on a refused spec"
 assert_eq 'absent' "$([[ -e "${sandbox}/reached" ]] && echo present || echo absent)" "neither ssh nor rsync ran"
 

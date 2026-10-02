@@ -4,8 +4,9 @@
 # Zero dependencies: no bats, no network, no root, no second host. Sources the
 # script under test (its `BASH_SOURCE == $0` guard keeps main() from running)
 # and asserts on the pure parsers, the validators and the generated daemon
-# config; one check runs the script as a child process, with ssh shimmed, to pin
-# main()'s wiring.
+# config; two checks use a child process: one runs a sandboxed copy of the
+# script, with ssh shimmed, to pin main()'s wiring, and one sources the script
+# under a Turkish locale.
 #
 # Usage: ./test-rsync-over-tunnel.sh
 set -euo pipefail
@@ -348,8 +349,8 @@ else
     assert_eq "invariant holds" "VIOLATED"        "chroot/munge pairing is never contradictory"
 fi
 
-# Every key build_daemon_config may emit: 16 with `use chroot = no`, 15 with
-# `yes`, which omits `munge symlinks`. Each was verified present in
+# Every key build_daemon_config may emit with `use chroot = no`; `yes` omits
+# `munge symlinks`. Each was verified present in
 # rsync_daemon_params[] in openrsync/daemon_cfg.c (apple-oss-distributions/rsync)
 # on 2026-08-06. openrsync rejects an unknown key as an unrecoverable error, so
 # a key missing from that table kills step 1 on every macOS target running
@@ -381,9 +382,9 @@ _daemon_conf_keys() {
 _expected_no=$(printf '%s\n' "${OPENRSYNC_VERIFIED_KEYS[@]}" | sort | tr '\n' ',')
 _expected_yes=$(printf '%s\n' "${OPENRSYNC_VERIFIED_KEYS[@]}" | grep -vx 'munge symlinks' | sort | tr '\n' ',')
 assert_eq "$_expected_no"  "$(_daemon_conf_keys "$conf_no"  | sort | tr '\n' ',')" \
-    "chroot=no emits exactly the 16 openrsync-verified keys"
+    "chroot=no emits exactly the openrsync-verified keys"
 assert_eq "$_expected_yes" "$(_daemon_conf_keys "$conf_yes" | sort | tr '\n' ',')" \
-    "chroot=yes emits exactly those keys minus munge symlinks (15)"
+    "chroot=yes emits exactly those keys minus munge symlinks"
 
 echo "== cmd_target_tunnel refuses to clobber existing files =="
 # The generated config and its derived .lock are DELETED by the EXIT trap, so
@@ -568,7 +569,7 @@ assert_eq 0 "$(_extra_rc source-tunnel -o ServerAliveInterval=15)"      "ssh: ha
 assert_eq 0 "$(_extra_rc source-tunnel -o 'IdentitiesOnly yes')"       "ssh: harmless -o 'keyword value' accepted"
 assert_eq 0 "$(_extra_rc source-tunnel -i /home/user/.ssh/id_ed25519)" "ssh: -i KEY accepted"
 # -l takes the rest of the token as a login name, so its text is not scanned for flags.
-assert_eq 0 "$(_extra_rc source-tunnel -loperator)"                     "ssh: -l's glued value is not scanned ('-loperator')"
+assert_eq 0 "$(_extra_rc source-tunnel -lFred)"                         "ssh: -l's glued value is not scanned ('-lFred' holds a refused letter)"
 assert_eq 0 "$(_extra_rc source-tunnel -D 1080)"                        "ssh: -D 1080 accepted"
 
 assert_eq 64 "$(_extra_rc source-transfer -e ssh)"                      "rsync: -e"
@@ -628,17 +629,22 @@ else
     printf '  skip ssh keyword under a Turkish locale: no tr_TR.UTF-8 locale here\n'
 fi
 
-# main() must call validate_extra before it dispatches. Run the real script as a
-# child: SELF_UPDATE_RESTARTED=1 takes check_for_updates' post-restart return,
-# which fetches nothing, and ssh is a shim that exits 99 — so 99 means the
-# refused option reached ssh and 64 means main refused it first.
+# main() must call validate_extra before it dispatches. Run a sandboxed copy of
+# the script as a child: SELF_UPDATE_RESTARTED=1 takes check_for_updates'
+# post-restart return, which fetches nothing, and ssh is a shim that exits 99 —
+# so 99 means the refused option reached ssh and 64 means main refused it first.
 _wire_dir=$(mktemp -d)
 TEST_TEMP_DIRS+=("$_wire_dir")
-printf '#!/usr/bin/env bash\nexit 99\n' > "${_wire_dir}/ssh"
-chmod +x "${_wire_dir}/ssh"
+mkdir "${_wire_dir}/bin"
+printf '#!/usr/bin/env bash\nexit 99\n' > "${_wire_dir}/bin/ssh"
+chmod +x "${_wire_dir}/bin/ssh"
+# A copy with its library beside it: main() starts with sweep_stale_temps and
+# check_for_updates, which act on the script's own directory — the sandbox,
+# never the checkout.
+cp "${TESTS_DIR}/../rsync-over-tunnel.sh" "${TESTS_DIR}/../utils-misc.sh" "${_wire_dir}/"
 _wire_rc=0
-_wire_out=$(PATH="${_wire_dir}:${PATH}" SELF_UPDATE_RESTARTED=1 \
-    bash "${TESTS_DIR}/../rsync-over-tunnel.sh" source-tunnel user@target -- -oProxyCommand=false \
+_wire_out=$(PATH="${_wire_dir}/bin:${PATH}" SELF_UPDATE_RESTARTED=1 \
+    bash "${_wire_dir}/rsync-over-tunnel.sh" source-tunnel user@target -- -oProxyCommand=false \
     </dev/null 2>&1) || _wire_rc=$?
 assert_eq 64 "$_wire_rc" "main refuses a denied token before ssh runs"
 assert_contains "$_wire_out" "refusing '-oProxyCommand=false'" "main's refusal comes from validate_extra, not another usage error"
@@ -647,13 +653,14 @@ echo "== download_script content gate =="
 # The downloaded file is about to be chmod +x'd, mv'd over a running script and
 # exec'd, so this gate is a security boundary. It lives in utils-misc.sh, which
 # the script under test sources, so it is in scope here. curl is shimmed: the
-# body is whatever $DL_BODY holds and the HTTP status whatever $DL_STATUS holds.
+# body is whatever $DL_BODY holds, the HTTP status whatever $DL_STATUS holds,
+# and curl's exit status whatever $DL_EXIT holds (default 0).
 _dl_dir=$(mktemp -d)
 TEST_TEMP_DIRS+=("$_dl_dir")
 mkdir -p "${_dl_dir}/bin"
 cat > "${_dl_dir}/bin/curl" <<'SHIM'
 #!/usr/bin/env bash
-# Mimic the real invocation: write the body to the -o path, print the status.
+# Mimic the real invocation: write the body to the -o path, print the status, exit $DL_EXIT.
 out=""
 while (($#)); do case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac; done
 printf '%s' "$DL_BODY" > "$out"

@@ -112,8 +112,9 @@ make_sandbox() {
 #!/usr/bin/env bash
 # Recording curl shim. Mimics `curl -H … --max-time 15 -o OUT -w '%{http_code}' -sSL URL`:
 # copies ${SHIM_DIR}/<basename of URL> to OUT and prints ${SHIM_STATUS:-200}.
-# Logs the URL. ${SHIM_CURL_EXIT} cuts a 200 transfer short (see below). A non-200 status writes nothing, which is what a real error
-# page response looks like to download_script's rejection branches.
+# Logs the URL. ${SHIM_CURL_EXIT} cuts a 200 transfer short (see below). A
+# non-200 status writes nothing, which is what a real error page response looks
+# like to download_script's rejection branches.
 # detect_download_cmd prefers curl, so this shim wins on every host; the
 # download_script section below forces DOWNLOAD_CMD=wget with a wget shim.
 out="" url=""
@@ -250,6 +251,10 @@ done
 assert_eq '1' "$(for lib_rel in "${LIBRARIES[@]}"; do
         awk '/^check_for_updates\(\) \{/{f=1} f{print} f&&/^\}/{exit}' "${REPO_DIR}/${lib_rel}" | cksum
     done | sort -u | wc -l | tr -d ' ')" 'check_for_updates: one digest across the five libraries'
+# Same guard for the digest above: an empty extraction must not pass as parity.
+assert_eq '' "$(for lib_rel in "${LIBRARIES[@]}"; do
+        grep -qx 'check_for_updates() {' "${REPO_DIR}/${lib_rel}" || printf '%s ' "$lib_rel"
+    done)" 'check_for_updates: defined in all five libraries'
 
 echo "== check_for_updates: edge paths (one library — the digest above pins the other four identical) =="
 readonly EDGE_LIB=system-setup/utils-sys.sh
@@ -391,6 +396,19 @@ out=$(_wget_download 0)
 assert_contains "$out" 'DOWNLOAD_RC=0'     "wget exit 0 → download_script returns 0"
 assert_not_contains "$out" '✖'             "wget exit 0 → no error printed"
 assert_eq 'same' "$(cmp -s "${SANDBOX}/download.out" "${SANDBOX}/caller.sh" && echo same || echo differs)" "wget exit 0 → the fetched file is kept"
+# The content gate after a clean wget exit: the shim serves SANDBOX/caller.sh.
+printf '<html>\n<code>#!/bin/sh</code>\n</html>\n' > "${SANDBOX}/caller.sh"
+rm -f "${SANDBOX}/download.out"
+out=$(_wget_download 0)
+assert_contains "$out" '✖ Invalid content (no shebang on line 1)' "wget exit 0, no shebang on line 1 → rejected"
+assert_contains "$out" 'DOWNLOAD_RC=1' "wget exit 0, no shebang → download_script returns 1"
+assert_eq 'absent' "$([[ -e "${SANDBOX}/download.out" ]] && echo present || echo absent)" "wget exit 0, no shebang → body removed"
+printf '#!/usr/bin/env bash\r\necho hi\n' > "${SANDBOX}/caller.sh"
+rm -f "${SANDBOX}/download.out"
+out=$(_wget_download 0)
+assert_contains "$out" '✖ Invalid content (CRLF line endings)' "wget exit 0, CRLF shebang → rejected"
+assert_contains "$out" 'DOWNLOAD_RC=1' "wget exit 0, CRLF shebang → download_script returns 1"
+assert_eq 'absent' "$([[ -e "${SANDBOX}/download.out" ]] && echo present || echo absent)" "wget exit 0, CRLF shebang → body removed"
 
 echo "== download_script: curl exit status (a body cut short after its 200 header) =="
 # curl writes %{http_code} once the header arrives, so a transfer that dies
@@ -426,6 +444,11 @@ done
 assert_eq '1' "$(for script_rel in "${LIBRARIES[@]}" "${GH_STANDALONES[@]}"; do
         awk '/^download_script\(\) \{/{f=1} f{print} f&&/^\}/{exit}' "${REPO_DIR}/${script_rel}" | cksum
     done | sort -u | wc -l | tr -d ' ')" 'download_script: one digest across the five libraries and the three github standalones'
+# A digest of nothing is still one digest: every copy must define the function
+# at column 0, or the parity above compares empty extractions.
+assert_eq '' "$(for script_rel in "${LIBRARIES[@]}" "${GH_STANDALONES[@]}"; do
+        grep -qx 'download_script() {' "${REPO_DIR}/${script_rel}" || printf '%s ' "$script_rel"
+    done)" 'download_script: defined in all five libraries and the three github standalones'
 
 echo "== kubernetes-setup.sh: flags parsed before the update check =="
 # Source the orchestrator (its BASH_SOURCE guard keeps main() from running) and
@@ -612,9 +635,11 @@ done
 # each lxc/, llm/, utils/ script that sources its directory's library carries
 # the four-line check verbatim, directly above its `source` directive and line
 # (a check pasted below the `source` would be useless: the missing library dies
-# first), naming that library and that directory's updater, so a new script
-# cannot ship without it and no copy can drift. The updater name is read from
-# the directory, not repeated here.
+# first), naming that library and that directory's updater, so no copy can
+# drift and a new script that sources its library in the templates' form
+# (`source "${SCRIPT_DIR}/utils-<dir>.sh"`) cannot ship without it; a source
+# line spelled any other way is not matched and goes unchecked. The updater
+# name is read from the directory, not repeated here.
 guard_offenders=""
 for f in "${REPO_DIR}"/lxc/*.sh "${REPO_DIR}"/llm/*.sh "${REPO_DIR}"/utils/*.sh; do
     # shellcheck disable=SC2016  # ${SCRIPT_DIR} is literal source text being matched
@@ -660,11 +685,19 @@ echo "== execution guard: no distributed script ends in the && form =="
 # AGENTS.md §Important Implementation Notes #1. `[[ … ]] && main "$@"` is a false
 # list when its file is sourced, so the file returns 1 and a sourcing shell under
 # `set -e` exits; the if form returns 0, which is what lets the sections above
-# source a script bare. The three tests/ directories are excluded because this
-# assertion spells the banned form itself.
-# shellcheck disable=SC2016  # single quotes are deliberate: literal source text, not an expansion
-guard_offenders=$(git -C "$REPO_DIR" grep -lF '"${0}" ]] &&' -- '*.sh' ':!tests/*' ':!*/tests/*' | tr '\n' ' ' || true)
-assert_eq '' "$guard_offenders" 'no distributed *.sh ends in the &&-form execution guard'
+# source a script bare. The pattern matches the tail (a closing test, &&, main or
+# main_<name>) however the operands are spelled; the three tests/ directories are
+# excluded because their comments spell the banned form.
+guard_rc=0
+guard_offenders=$(git -C "$REPO_DIR" grep -lE '\]\][[:space:]]*&&[[:space:]]*main(_[a-z_]+)?([[:space:]]|$)' -- '*.sh' ':!tests/*' ':!*/tests/*') || guard_rc=$?
+# git grep exits 1 when nothing matches (the passing case) and above 1 when it cannot run.
+if [[ "$guard_rc" -gt 1 ]]; then
+    printf '  FAIL execution guard: git grep exited %d (not a git checkout?)\n' "$guard_rc"
+    ((TESTS_RUN++)) || true
+    ((TESTS_FAILED++)) || true
+else
+    assert_eq '' "${guard_offenders//$'\n'/ }" 'no distributed *.sh ends in the &&-form execution guard'
+fi
 
 echo "== executable bits: launchers are 100755 in the index, sourced files 100644 =="
 # Every tracked *.sh is launched as a program — `./x.sh` by a user, or
