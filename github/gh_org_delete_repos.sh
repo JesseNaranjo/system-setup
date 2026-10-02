@@ -58,14 +58,8 @@ show_help() {
     exit 0
 }
 
-# Parse command line arguments
-ORG="${1:-}"
-if [[ -z "${ORG}" || "${ORG}" == "--help" || "${ORG}" == "-h" ]]; then
-    show_help
-fi
-shift || true
-
-# Default configuration
+# Default configuration (parse_arguments fills it from the command line)
+ORG=""
 DRY_RUN=1
 DELETE_ALL=0
 INCLUDE_ARCHIVED=0
@@ -85,54 +79,65 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 DOWNLOAD_CMD=""
 
-# Parse command line options and repository names
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --yes)
-            DRY_RUN=0
-            ;;
-        --all)
-            DELETE_ALL=1
-            ;;
-        --include-archived)
-            INCLUDE_ARCHIVED=1
-            ;;
-        --match)
-            MATCH_REPO_REGEX="${2:?Missing regex pattern for --match}"
-            shift
-            ;;
-        --exclude)
-            EXCLUDE_REPO_REGEX="${2:?Missing regex pattern for --exclude}"
-            shift
-            ;;
-        -h|--help)
-            show_help
-            ;;
-        --*)
-            print_error "✖ Unknown argument: $1"
-            echo ""
-            show_help
-            ;;
-        *)
-            # Non-option argument is a repository name
-            REPO_LIST+=("$1")
-            ;;
-    esac
-    shift
-done
+# Parse the organization, the options and the repository names into the globals
+# above, then validate them. A function, called first in main with main's own
+# "$@": the arguments stay intact for self_update's exec restart, and sourcing
+# the file parses nothing.
+parse_arguments() {
+    ORG="${1:-}"
+    if [[ -z "${ORG}" || "${ORG}" == "--help" || "${ORG}" == "-h" ]]; then
+        show_help
+    fi
+    shift || true
 
-# Validate arguments
-if [[ $DELETE_ALL -eq 0 && ${#REPO_LIST[@]} -eq 0 ]]; then
-    print_error "✖ Must specify either --all or provide repository names"
-    echo ""
-    show_help
-fi
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --yes)
+                DRY_RUN=0
+                ;;
+            --all)
+                DELETE_ALL=1
+                ;;
+            --include-archived)
+                INCLUDE_ARCHIVED=1
+                ;;
+            --match)
+                MATCH_REPO_REGEX="${2:?Missing regex pattern for --match}"
+                shift
+                ;;
+            --exclude)
+                EXCLUDE_REPO_REGEX="${2:?Missing regex pattern for --exclude}"
+                shift
+                ;;
+            -h|--help)
+                show_help
+                ;;
+            --*)
+                print_error "✖ Unknown argument: $1"
+                echo ""
+                show_help
+                ;;
+            *)
+                # Non-option argument is a repository name
+                REPO_LIST+=("$1")
+                ;;
+        esac
+        shift
+    done
 
-if [[ $DELETE_ALL -eq 1 && ${#REPO_LIST[@]} -gt 0 ]]; then
-    print_error "✖ Cannot use --all with specific repository names"
-    echo ""
-    show_help
-fi
+    # Validate arguments
+    if [[ $DELETE_ALL -eq 0 && ${#REPO_LIST[@]} -eq 0 ]]; then
+        print_error "✖ Must specify either --all or provide repository names"
+        echo ""
+        show_help
+    fi
+
+    if [[ $DELETE_ALL -eq 1 && ${#REPO_LIST[@]} -gt 0 ]]; then
+        print_error "✖ Cannot use --all with specific repository names"
+        echo ""
+        show_help
+    fi
+}
 
 # ============================================================================
 # Self-Update Functionality
@@ -511,6 +516,10 @@ should_process_repo() {
 
 # Main execution function
 main() {
+    # Parse first: --help or a rejected option must answer before the sweep
+    # below can stop for a confirmation.
+    parse_arguments "$@"
+
     sweep_stale_temps '~*.tmp.??????'
 
     # Check for updates if download tool available

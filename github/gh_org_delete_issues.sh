@@ -58,14 +58,8 @@ show_help() {
     exit 0
 }
 
-# Parse command line arguments
-ORG="${1:-}"
-if [[ -z "${ORG}" || "${ORG}" == "--help" || "${ORG}" == "-h" ]]; then
-    show_help
-fi
-shift || true
-
-# Default configuration
+# Default configuration (parse_arguments fills it from the command line)
+ORG=""
 DRY_RUN=1
 LOCK_ISSUES=0
 INCLUDE_ARCHIVED=0
@@ -76,6 +70,7 @@ EXCLUDE_REPO_REGEX=""
 
 # Global counters
 TOTAL_REPOS_PROCESSED=0
+TOTAL_REPOS_SKIPPED=0
 TOTAL_ISSUES_FOUND=0
 TOTAL_ISSUES_DELETED=0
 TOTAL_ISSUES_CLOSED=0
@@ -201,43 +196,53 @@ sweep_stale_temps() {
     print_success "✓ Cleaned up ${#stale_files[@]} stale temp file(s)"
 }
 
-# Parse command line options
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --yes)
-            DRY_RUN=0
-            ;;
-        --lock)
-            LOCK_ISSUES=1
-            ;;
-        --include-archived)
-            INCLUDE_ARCHIVED=1
-            ;;
-        --only-open)
-            ONLY_OPEN=1
-            ;;
-        --really-delete)
-            REALLY_DELETE=1
-            ;;
-        --match)
-            MATCH_REPO_REGEX="${2:?Missing regex pattern for --match}"
-            shift
-            ;;
-        --exclude)
-            EXCLUDE_REPO_REGEX="${2:?Missing regex pattern for --exclude}"
-            shift
-            ;;
-        -h|--help)
-            show_help
-            ;;
-        *)
-            print_error "✖ Unknown argument: $1"
-            echo ""
-            show_help
-            ;;
-    esac
-    shift
-done
+# Parse the organization and the options into the globals above. A function,
+# called first in main with main's own "$@": the arguments stay intact for
+# self_update's exec restart, and sourcing the file parses nothing.
+parse_arguments() {
+    ORG="${1:-}"
+    if [[ -z "${ORG}" || "${ORG}" == "--help" || "${ORG}" == "-h" ]]; then
+        show_help
+    fi
+    shift || true
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --yes)
+                DRY_RUN=0
+                ;;
+            --lock)
+                LOCK_ISSUES=1
+                ;;
+            --include-archived)
+                INCLUDE_ARCHIVED=1
+                ;;
+            --only-open)
+                ONLY_OPEN=1
+                ;;
+            --really-delete)
+                REALLY_DELETE=1
+                ;;
+            --match)
+                MATCH_REPO_REGEX="${2:?Missing regex pattern for --match}"
+                shift
+                ;;
+            --exclude)
+                EXCLUDE_REPO_REGEX="${2:?Missing regex pattern for --exclude}"
+                shift
+                ;;
+            -h|--help)
+                show_help
+                ;;
+            *)
+                print_error "✖ Unknown argument: $1"
+                echo ""
+                show_help
+                ;;
+        esac
+        shift
+    done
+}
 
 # ============================================================================
 # Self-Update Functionality
@@ -466,6 +471,7 @@ process_repository() {
     local issues
     if ! issues=$(gh issue list -R "$repo_name" --state "$state_arg" --limit 2000 --json number,title,state | jq -c '.[]'); then
         print_warning "⚠ Could not list issues; skipping"
+        ((TOTAL_REPOS_SKIPPED++)) || true
         return 0
     fi
 
@@ -598,6 +604,10 @@ lock_issue() {
 
 # Main execution function
 main() {
+    # Parse first: --help or a rejected option must answer before the sweep
+    # below can stop for a confirmation.
+    parse_arguments "$@"
+
     # Defense-in-depth: reap stale ~*.tmp.?????? temps from prior interrupted
     # runs (SIGKILL, power-loss) before doing anything else. Catch-all glob
     # covers all atomic-rename templates this script may produce.
@@ -675,6 +685,9 @@ main() {
     echo -e "${CYAN}Summary${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Repositories processed:    ${TOTAL_REPOS_PROCESSED}"
+    if [[ $TOTAL_REPOS_SKIPPED -gt 0 ]]; then
+        echo -e "${YELLOW}Repositories skipped:      ${TOTAL_REPOS_SKIPPED} (issues could not be listed)${NC}"
+    fi
     echo "Issues found:              ${TOTAL_ISSUES_FOUND}"
     if [[ $DRY_RUN -eq 0 ]]; then
         echo "Issues deleted:            ${TOTAL_ISSUES_DELETED}"
