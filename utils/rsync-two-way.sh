@@ -15,7 +15,8 @@
 # - Refuses a LOCAL_DIR, or a REMOTE_SPEC user or host, that begins with '-',
 #   and a REMOTE_SPEC host in [ ] (option-injection guard, exit 1)
 #
-# Exit codes: 0 OK | 1 usage error | 2 rsync error | 3 connectivity error
+# Exit codes: 0 OK | 1 usage error | 2 rsync error | 3 connectivity error |
+#             69 utils-misc.sh missing beside the script, or bash older than 5
 
 set -euo pipefail
 [[ "${TRACE-0}" == "1" ]] && set -o xtrace
@@ -86,6 +87,7 @@ ${YELLOW}Exit Codes:${NC}
   1  Usage error
   2  Rsync error
   3  Connectivity error
+  69 utils-misc.sh missing, or bash older than 5
 
 EOF
 }

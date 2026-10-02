@@ -366,7 +366,9 @@ ${CYAN}STEP 3 — on the SOURCE host, terminal 2: run the transfer${NC}
   -n, --dry-run       change nothing; pair with '-- --itemize-changes' to verify
       --delete        mirror deletions — OFF by default, think before using it
   --  RSYNC_ARGS...   extra rsync options, appended last; -e/--rsh, --rsync-path,
-                      -M/--remote-option, --daemon and --config are refused
+                      -M/--remote-option, --daemon and --config are refused, and
+                      so is any single-dash argument that contains e or M (glue
+                      a value to its long option instead: --filter='- tmp/')
   Runs: sudo rsync -aHS --numeric-ids -W --partial-dir=.rsync-migrate
         plus -A -X (ACLs/xattrs) when BOTH hosts support them — this host's rsync
         must be built with them and the target must speak protocol 30+ — and

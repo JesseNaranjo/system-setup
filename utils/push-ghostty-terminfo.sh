@@ -17,8 +17,9 @@
 #
 # Exit codes (sysexits.h, per AGENTS.md § standalone conventions):
 #   0 OK | 64 EX_USAGE (bad args) | 68 EX_NOHOST (cannot connect)
-#   | 69 EX_UNAVAILABLE (missing tool: local ssh/infocmp, remote tic/infocmp, or
-#     the local xterm-ghostty terminfo entry) | 70 EX_SOFTWARE (install/verify failed)
+#   | 69 EX_UNAVAILABLE (utils-misc.sh missing beside the script, bash older than 5,
+#     or a missing tool: local ssh/infocmp, remote tic/infocmp, or the local
+#     xterm-ghostty terminfo entry) | 70 EX_SOFTWARE (install/verify failed)
 
 set -euo pipefail
 [[ "${TRACE-0}" == "1" ]] && set -o xtrace
@@ -95,7 +96,7 @@ ${YELLOW}Auth:${NC} connections are multiplexed over one SSH ControlMaster, so y
   on a TTY; non-interactive runs (cron, ssh -T) require key-based auth. System-wide
   mode also prompts once for the remote sudo password (see Default above).
 
-${YELLOW}Exit codes:${NC} 0 OK | 64 usage | 68 no-host | 69 missing-tool | 70 install-failed
+${YELLOW}Exit codes:${NC} 0 OK | 64 usage | 68 no-host | 69 missing-tool/library | 70 install-failed
 EOF
 }
 

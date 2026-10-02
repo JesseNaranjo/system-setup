@@ -872,11 +872,13 @@ copy_prs_as_archival_issues() {
             --jq '.[] | {kind:"review_comment",author:.user.login,created_at,body:(.body//"") + "\n\n(File: \(.path), Line: \(.original_line // .line // 0))"}' >"${WORKDIR}/rc.json"
 
         # 3) Reviews. A review object carries submitted_at, never created_at, so
-        #    map it onto the key the merge below sorts and dates by. A PENDING
-        #    review is an unsubmitted draft only its author can see and has no
-        #    submitted_at: it is not part of the conversation and is not archived.
+        #    map it onto the key the merge below sorts and dates by. Two kinds are
+        #    left out: a PENDING review, an unsubmitted draft only its author can
+        #    see (it has no submitted_at), and a COMMENTED review with an empty
+        #    body, which would post a bare header: its inline comments arrive
+        #    through the review-comment stream above.
         gh_api --paginate "/repos/${SRC_ORG}/${name}/pulls/${PRNUM}/reviews?per_page=100" \
-            --jq '.[] | select(.state != "PENDING") | {kind:"review",author:.user.login,created_at:.submitted_at,body:("[Review state: " + .state + "]\n\n" + (.body//""))}' >"${WORKDIR}/rv.json"
+            --jq '.[] | select(.state != "PENDING" and (.state != "COMMENTED" or (.body // "") != "")) | {kind:"review",author:.user.login,created_at:.submitted_at,body:("[Review state: " + .state + "]\n\n" + (.body//""))}' >"${WORKDIR}/rv.json"
 
         # Merge and sort chronologically
         while read -r c; do
@@ -931,8 +933,12 @@ copy_discussions() {
     }'
 
     # Build dest category map (name -> id)
+    # -f, never -F, for every GraphQL variable in this function: gh's -F turns a
+    # value that is true, false, null or all digits into a non-string, and reads
+    # a file when the value starts with '@' — and a discussion title is whatever
+    # its author typed. Every variable here is a String or an ID.
     local dstCatsJSON
-    dstCatsJSON="$(gh_gql -f query="$q" -F so="$SRC_ORG" -F sr="$name" -F do="$DST_ORG" -F dr="$name" -F after="")" || {
+    dstCatsJSON="$(gh_gql -f query="$q" -f so="$SRC_ORG" -f sr="$name" -f do="$DST_ORG" -f dr="$name" -f after="")" || {
         print_warning "⚠ GraphQL fetch failed for ${name} (likely no Discussions)"
         return
     }
@@ -949,7 +955,7 @@ copy_discussions() {
     local hasNext="true"
     while [[ "$hasNext" == "true" ]]; do
         local page
-        page="$(gh_gql -f query="$q" -F so="$SRC_ORG" -F sr="$name" -F do="$DST_ORG" -F dr="$name" -F after="$cursor")" || break
+        page="$(gh_gql -f query="$q" -f so="$SRC_ORG" -f sr="$name" -f do="$DST_ORG" -f dr="$name" -f after="$cursor")" || break
         hasNext="$(echo "$page" | jq -r '.data.src.discussions.pageInfo.hasNextPage')"
         cursor="$(echo "$page"  | jq -r '.data.src.discussions.pageInfo.endCursor')"
 
@@ -975,7 +981,7 @@ copy_discussions() {
               }
             }'
             local created
-            created="$(gh_gql -f query="$m" -F rid="$dstRepoId" -F cid="$CATID" -F title="$DTITLE" -F body="$BODY")" || { print_warning "⚠ Failed to create discussion"; continue; }
+            created="$(gh_gql -f query="$m" -f rid="$dstRepoId" -f cid="$CATID" -f title="$DTITLE" -f body="$BODY")" || { print_warning "⚠ Failed to create discussion"; continue; }
             local newDid; newDid="$(echo "$created" | jq -r '.data.createDiscussion.discussion.id')"
             ((TOTAL_DISCUSSIONS_COPIED++)) || true
 
@@ -989,7 +995,7 @@ copy_discussions() {
                 local CBODY="**(Original comment by @${CAUTH} on ${CDAT})**${NL}${NL}${CBOD}"
                 # shellcheck disable=SC2016  # $id and $body are GraphQL variables that the API binds, not bash expansions
                 local cm='mutation($id:ID!,$body:String!){ addDiscussionComment(input:{discussionId:$id, body:$body}){ comment{ id } } }'
-                if gh_gql -f query="$cm" -F id="$newDid" -F body="$CBODY" >/dev/null 2>&1; then
+                if gh_gql -f query="$cm" -f id="$newDid" -f body="$CBODY" >/dev/null 2>&1; then
                     ((TOTAL_DISCUSSION_COMMENTS_COPIED++)) || true
                 fi
             done < <(echo "$d" | jq -c '.comments.nodes[]?')

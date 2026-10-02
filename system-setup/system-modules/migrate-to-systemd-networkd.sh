@@ -745,9 +745,10 @@ configure_resolv_conf() {
             local latest_backup
             # backup_file names each copy <file>.backup.<YYYYmmdd_HHMMSS>.bak, so the glob's
             # sorted order is creation order and its last match is the newest backup
+            # With no match the glob stays literal (no nullglob), so -f alone tells a backup from it
             local backups=("${RESOLV_CONF}.backup."*.bak)
             latest_backup="${backups[-1]}"
-            if [[ -n "$latest_backup" && -f "$latest_backup" ]]; then
+            if [[ -f "$latest_backup" ]]; then
                 cp -p "$latest_backup" "$RESOLV_CONF"
                 print_info "Restored $RESOLV_CONF from backup"
             fi
@@ -852,7 +853,9 @@ verify_network_connectivity() {
         if [[ "$configured_count" -gt 0 ]]; then
             print_success "✓ systemd-networkd has $configured_count configured interface(s)"
             # Show interface status for verification
-            echo "$networkctl_output" | while read -r _ name _ state; do
+            # networkctl prints IDX LINK TYPE OPERATIONAL SETUP: state is the
+            # fourth column, and the trailing _ takes SETUP
+            echo "$networkctl_output" | while read -r _ name _ state _; do
                 if [[ "$state" == "routable" || "$state" == "configured" ]]; then
                     print_info "  - $name: $state"
                 fi
@@ -907,9 +910,10 @@ rollback_new_networking() {
         local latest_backup
         # backup_file names each copy <file>.backup.<YYYYmmdd_HHMMSS>.bak, so the glob's
         # sorted order is creation order and its last match is the newest backup
+        # With no match the glob stays literal (no nullglob), so -f alone tells a backup from it
         local backups=("${RESOLV_CONF}.backup."*.bak)
         latest_backup="${backups[-1]}"
-        if [[ -n "$latest_backup" && -f "$latest_backup" ]]; then
+        if [[ -f "$latest_backup" ]]; then
             rm -f "$RESOLV_CONF"
             cp -p "$latest_backup" "$RESOLV_CONF"
             print_info "  Restored $RESOLV_CONF from backup"
