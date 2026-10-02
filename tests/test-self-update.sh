@@ -112,7 +112,7 @@ make_sandbox() {
 #!/usr/bin/env bash
 # Recording curl shim. Mimics `curl -H … --max-time 15 -o OUT -w '%{http_code}' -sSL URL`:
 # copies ${SHIM_DIR}/<basename of URL> to OUT and prints ${SHIM_STATUS:-200}.
-# Logs the URL. A non-200 status writes nothing, which is what a real error
+# Logs the URL. ${SHIM_CURL_EXIT} cuts a 200 transfer short (see below). A non-200 status writes nothing, which is what a real error
 # page response looks like to download_script's rejection branches.
 # detect_download_cmd prefers curl, so this shim wins on every host; the
 # download_script section below forces DOWNLOAD_CMD=wget with a wget shim.
@@ -127,6 +127,16 @@ while (($#)); do
 done
 printf '%s\n' "$url" >> "${SHIM_LOG}"
 status="${SHIM_STATUS:-200}"
+# ${SHIM_CURL_EXIT}: a transfer cut short after the header. Real curl has
+# already written -o's partial body and -w's status by then, and exits 18
+# (partial file) or 28 (--max-time hit mid-body) — so print the status, leave
+# a body whose first line is a shebang, and fail the way curl does.
+curl_exit="${SHIM_CURL_EXIT:-0}"
+if [[ "$curl_exit" != "0" ]]; then
+    printf '#!/usr/bin/env bash\n# partial\n' > "$out"
+    printf '%s' "$status"
+    exit "$curl_exit"
+fi
 if [[ "$status" == "200" ]]; then
     cp "${SHIM_DIR}/$(basename "$url")" "$out"
 fi
@@ -381,6 +391,34 @@ out=$(_wget_download 0)
 assert_contains "$out" 'DOWNLOAD_RC=0'     "wget exit 0 → download_script returns 0"
 assert_not_contains "$out" '✖'             "wget exit 0 → no error printed"
 assert_eq 'same' "$(cmp -s "${SANDBOX}/download.out" "${SANDBOX}/caller.sh" && echo same || echo differs)" "wget exit 0 → the fetched file is kept"
+
+echo "== download_script: curl exit status (a body cut short after its 200 header) =="
+# curl writes %{http_code} once the header arrives, so a transfer that dies
+# mid-body still reports 200 (exit 18, or 28 on the --max-time timeout) and the
+# partial file, whose first line is a shebang, would pass the content gate.
+# download_script must test curl's exit before the status case.
+_curl_download() {   # $1 = curl exit code the shim returns → output, "DOWNLOAD_RC=<n>" and "CHILD_RC=<n>" lines
+    local rc=0 out
+    # shellcheck disable=SC2016  # the single-quoted script is the CHILD's source text
+    out=$(env PATH="${SANDBOX}/bin:${PATH}" SHIM_DIR="$SANDBOX" SHIM_LOG="${SANDBOX}/shim.log" SHIM_CURL_EXIT="$1" \
+        bash -c 'source "$1/$2"
+            trap - EXIT
+            DOWNLOAD_CMD=curl
+            rc=0
+            download_script caller.sh "$1/download.out" || rc=$?
+            printf "DOWNLOAD_RC=%s\n" "$rc"' \
+        _ "$SANDBOX" "$EDGE_BASE" 2>&1) || rc=$?
+    printf '%s\nCHILD_RC=%s\n' "$out" "$rc"
+}
+make_sandbox "$EDGE_LIB"
+for code in 18 28; do
+    rm -f "${SANDBOX}/download.out"
+    out=$(_curl_download "$code")
+    assert_contains "$out" "✖ Download failed (curl exit ${code})" "curl exit ${code} after a 200 header → reported"
+    assert_contains "$out" 'DOWNLOAD_RC=1' "curl exit ${code} → download_script returns 1"
+    assert_contains "$out" 'CHILD_RC=0'    "curl exit ${code} → the caller keeps running"
+    assert_eq 'absent' "$([[ -e "${SANDBOX}/download.out" ]] && echo present || echo absent)" "curl exit ${code} → partial body removed"
+done
 
 # Parity: the eight bodies must hash identically (AGENTS.md §Helper Library
 # Duplication) — same extraction as the check_for_updates digest above, over the

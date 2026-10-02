@@ -2542,13 +2542,22 @@ download_script() {
     if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
         # Drop -f from curl so 4xx/5xx responses still populate http_status (otherwise
         # curl exits non-zero before %{http_code} is captured). --max-time 15 prevents
-        # a sinkholed network from hanging for 5+ minutes. Set "000" only when
-        # http_status is empty (transport failure), not unconditionally.
+        # a sinkholed network from hanging for 5+ minutes. Without -f, curl exits 0 on
+        # 4xx/5xx (the status arms report those), so a non-zero exit always means the
+        # transfer itself failed: no connection, a timeout, or a body cut short. Test
+        # the exit FIRST: %{http_code} is written once the header arrives, so a body
+        # truncated after a 200 header still reports 200 (exit 18, or 28 on a mid-body
+        # timeout), and the partial file could pass the shebang gate below.
+        local curl_exit=0
         http_status=$(curl -H 'Cache-Control: no-cache, no-store' \
             --max-time 15 \
             -o "${output_file}" -w "%{http_code}" -sSL \
-            "${REMOTE_BASE}/${script_file}" 2>/dev/null || true)
-        [[ -z "$http_status" ]] && http_status="000"
+            "${REMOTE_BASE}/${script_file}" 2>/dev/null) || curl_exit=$?
+        if [[ "$curl_exit" -ne 0 ]]; then
+            print_error "✖ Download failed (curl exit ${curl_exit})"
+            rm -f "${output_file}"
+            return 1
+        fi
         case "$http_status" in
             200)
                 # Validate that we got a script, not an error page.
@@ -2574,7 +2583,6 @@ download_script() {
                 return 0
                 ;;
             429) print_error "✖ Rate limited by GitHub (HTTP 429)"; rm -f "${output_file}"; return 1 ;;
-            000) print_error "✖ Download failed (network/timeout)"; rm -f "${output_file}"; return 1 ;;
             *)   print_error "✖ HTTP ${http_status} error"; rm -f "${output_file}"; return 1 ;;
         esac
     elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
@@ -2634,9 +2642,9 @@ Only these forms are acceptable:
 
 **Critical changes from the older template:**
 
-- **`-fsSL` → `-sSL`** (drop the `-f`). With `-f`, curl exits non-zero on 4xx/5xx BEFORE `%{http_code}` is written to the output, so the captured `http_status` is empty and the old `|| echo "000"` fallback turns every HTTP error into `"000"` (and on some platforms, the concatenation `404` + `000` produced visible `"404000"` strings in error messages). Without `-f`, curl writes the body (the GitHub error page) to `output_file`, exits 0, and `%{http_code}` is captured cleanly. The `case` arm for that status then reports the error and deletes the body — the strict shebang gate above is a second line of defence, not the primary one, because an HTML error page CAN begin with a line that looks like a shebang. The sister-repo audit traced an "HTTP 404000 error" message to this exact bug.
+- **`-fsSL` → `-sSL`** (drop the `-f`). With `-f`, curl exits 22 on 4xx/5xx, so a 404 could not be told from a transport failure, and the old `|| echo "000"` appended `000` to the `404` that `-w` had already printed (the visible `"404000"` strings). Without `-f`, curl writes the body (the GitHub error page) to `output_file`, exits 0, and `%{http_code}` is captured cleanly. The `case` arm for that status then reports the error and deletes the body — the strict shebang gate above is a second line of defence, not the primary one, because an HTML error page CAN begin with a line that looks like a shebang. The sister-repo audit traced an "HTTP 404000 error" message to this exact bug.
 - **`--max-time 15`** caps total transfer time. Without it, a sinkholed/black-hole network can hang for 5+ minutes (curl's default connect/read timeouts are very generous). 15 seconds is enough for a slow GitHub raw fetch and short enough that an interactive user notices and Ctrl+C's. Verified via [everything.curl.dev/usingcurl/timeouts.html](https://everything.curl.dev/usingcurl/timeouts.html).
-- **`[[ -z "$http_status" ]] && http_status="000"`** runs only when curl produced no status — true network failure, NOT HTTP error. The old `|| echo "000"` ran on any non-zero curl exit including HTTP-4xx-with-`-f`, conflating two different failures.
+- **`local curl_exit=0; http_status=$(curl …) || curl_exit=$?`, tested BEFORE the status `case`.** Without `-f`, curl exits 0 on any HTTP status, so a non-zero exit always means the transfer itself failed — and `%{http_code}` is written once the header arrives, so a body cut short after a 200 (exit 18, or 28 when `--max-time` hits mid-body) still reports 200 and, if its first line is a shebang, would pass the content gate and be installed. The old `|| true` discarded that exit; the `000)` arm and the empty-status fallback go with it: curl's `-w` prints `000` on a failed transfer, which now reports its exit code, and a curl that exits 0 always prints a real status. Verified via [curl(1)](https://curl.se/docs/manpage.html) (`-f`: "Fail with error code 22 and with no response body output at all for HTTP transfers returning HTTP response codes at 400 or greater"; `http_code`: "The numerical response code that was found in the last retrieved HTTP(S) or FTP(s) transfer") and [libcurl error codes](https://curl.se/libcurl/c/libcurl-errors.html) (18 "A file transfer was shorter or larger than expected…", 28 "Operation timeout…"), fetched 2026-09-30. The private repository's `download_file` carries the same check (fixed there 2026-09-22).
 - **`case` statement** replaces the if/elif chain so each branch is one line and the failure-message wording is uniform.
 - **wget `--timeout=15`** mirrors the curl change. The old wget branch had no timeout at all.
 - **`local wget_exit=0; wget … || wget_exit=$?`** captures wget's exit code without aborting the function under `set -e`. The old form (`if wget …; then`) hid the exit code in the conditional and lost the error specificity.

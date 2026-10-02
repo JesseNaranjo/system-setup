@@ -316,13 +316,22 @@ download_script() {
     if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
         # Drop -f from curl so 4xx/5xx responses still populate http_status (otherwise
         # curl exits non-zero before %{http_code} is captured). --max-time 15 prevents
-        # a sinkholed network from hanging for 5+ minutes. Set "000" only when
-        # http_status is empty (transport failure), not unconditionally.
+        # a sinkholed network from hanging for 5+ minutes. Without -f, curl exits 0 on
+        # 4xx/5xx (the status arms report those), so a non-zero exit always means the
+        # transfer itself failed: no connection, a timeout, or a body cut short. Test
+        # the exit FIRST: %{http_code} is written once the header arrives, so a body
+        # truncated after a 200 header still reports 200 (exit 18, or 28 on a mid-body
+        # timeout), and the partial file could pass the shebang gate below.
+        local curl_exit=0
         http_status=$(curl -H 'Cache-Control: no-cache, no-store' \
             --max-time 15 \
             -o "${output_file}" -w "%{http_code}" -sSL \
-            "${REMOTE_BASE}/${script_file}" 2>/dev/null || true)
-        [[ -z "$http_status" ]] && http_status="000"
+            "${REMOTE_BASE}/${script_file}" 2>/dev/null) || curl_exit=$?
+        if [[ "$curl_exit" -ne 0 ]]; then
+            print_error "✖ Download failed (curl exit ${curl_exit})"
+            rm -f "${output_file}"
+            return 1
+        fi
         case "$http_status" in
             200)
                 # Validate that we got a script, not an error page.
@@ -348,7 +357,6 @@ download_script() {
                 return 0
                 ;;
             429) print_error "✖ Rate limited by GitHub (HTTP 429)"; rm -f "${output_file}"; return 1 ;;
-            000) print_error "✖ Download failed (network/timeout)"; rm -f "${output_file}"; return 1 ;;
             *)   print_error "✖ HTTP ${http_status} error"; rm -f "${output_file}"; return 1 ;;
         esac
     elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then

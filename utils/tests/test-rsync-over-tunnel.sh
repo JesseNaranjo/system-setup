@@ -658,16 +658,17 @@ out=""
 while (($#)); do case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac; done
 printf '%s' "$DL_BODY" > "$out"
 printf '%s' "${DL_STATUS:-200}"
+exit "${DL_EXIT:-0}"
 SHIM
 chmod +x "${_dl_dir}/bin/curl"
 _saved_path3="$PATH"
 PATH="${_dl_dir}/bin:${_saved_path3}"
 DOWNLOAD_CMD=curl
 
-_gate() {   # $1 = body, $2 = http status -> "<rc>:<file exists?>"
+_gate() {   # $1 = body, $2 = http status, $3 = curl exit (default 0) -> "<rc>:<file exists?>"
     local target="${_dl_dir}/out.sh" rc=0
     rm -f "$target"
-    DL_BODY="$1" DL_STATUS="$2" download_script fake.sh "$target" >/dev/null 2>&1 || rc=$?
+    DL_BODY="$1" DL_STATUS="$2" DL_EXIT="${3:-0}" download_script fake.sh "$target" >/dev/null 2>&1 || rc=$?
     printf '%s:%s' "$rc" "$( [[ -e "$target" ]] && echo kept || echo removed )"
 }
 
@@ -678,7 +679,8 @@ assert_eq '1:removed' "$(_gate $'#!/usr/bin/env bash\r\necho hi\n' 200)" \
     "a CRLF-terminated shebang is rejected and deleted"
 assert_eq '1:removed' "$(_gate $'' 200)"                    "an empty body is rejected and deleted"
 assert_eq '1:removed' "$(_gate $'#!/bin/sh\n' 404)"         "HTTP 404 is rejected even with a valid shebang"
-assert_eq '1:removed' "$(_gate $'#!/bin/sh\n' 000)"         "a transport failure is rejected"
+assert_eq '1:removed' "$(_gate $'#!/bin/sh\n' 000 7)"       "a transport failure (curl exit 7) is rejected"
+assert_eq '1:removed' "$(_gate $'#!/bin/sh\n' 200 18)"      "a body cut short after its 200 header (curl exit 18) is rejected"
 assert_eq '1:removed' "$(_gate $'#!/bin/sh\n' 429)"         "rate limiting is rejected"
 
 PATH="$_saved_path3"

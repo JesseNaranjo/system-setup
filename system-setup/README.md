@@ -859,6 +859,7 @@ All operations are safe to run multiple times:
 **Validation:**
 - Checks that line 1 is a shebang (`#!`) and rejects CRLF line endings
 - Verifies HTTP 200 response
+- Rejects a download curl reports as failed (non-zero exit), even one cut short after its 200 header
 - Detects GitHub rate limiting (HTTP 429)
 
 **Large Warning Display:**
