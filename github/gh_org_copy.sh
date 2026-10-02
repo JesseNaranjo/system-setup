@@ -871,9 +871,12 @@ copy_prs_as_archival_issues() {
         gh_api --paginate "/repos/${SRC_ORG}/${name}/pulls/${PRNUM}/comments?per_page=100" \
             --jq '.[] | {kind:"review_comment",author:.user.login,created_at,body:(.body//"") + "\n\n(File: \(.path), Line: \(.original_line // .line // 0))"}' >"${WORKDIR}/rc.json"
 
-        # 3) Reviews
+        # 3) Reviews. A review object carries submitted_at, never created_at, so
+        #    map it onto the key the merge below sorts and dates by. A PENDING
+        #    review is an unsubmitted draft only its author can see and has no
+        #    submitted_at: it is not part of the conversation and is not archived.
         gh_api --paginate "/repos/${SRC_ORG}/${name}/pulls/${PRNUM}/reviews?per_page=100" \
-            --jq '.[] | {kind:"review",author:.user.login,created_at,body:("[Review state: " + .state + "]\n\n" + (.body//""))}' >"${WORKDIR}/rv.json"
+            --jq '.[] | select(.state != "PENDING") | {kind:"review",author:.user.login,created_at:.submitted_at,body:("[Review state: " + .state + "]\n\n" + (.body//""))}' >"${WORKDIR}/rv.json"
 
         # Merge and sort chronologically
         while read -r c; do
