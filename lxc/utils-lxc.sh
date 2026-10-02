@@ -20,11 +20,11 @@ readonly RED='\033[0;31m'
 readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m'
 
-print_backup()     { printf '%b[ BACKUP  ] %s%b\n' "$GRAY" "$1" "$NC"; }
-print_error()      { printf '%b[ ERROR   ]%b %s\n' "$RED" "$NC" "$1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
-print_info()       { printf '%b[ INFO    ]%b %s\n' "$BLUE" "$NC" "$1"; }
-print_success()    { printf '%b[ SUCCESS ]%b %s\n' "$GREEN" "$NC" "$1"; }
-print_warning()    { printf '%b[ WARNING ]%b %s\n' "$YELLOW" "$NC" "$1"; }
+print_backup()  { printf '%b[ BACKUP  ] %s%b\n' "$GRAY" "$1" "$NC"; }
+print_error()   { printf '%b[ ERROR   ]%b %s\n' "$RED" "$NC" "$1" >&2; if [[ -t 2 ]]; then printf '\a' >&2; sleep 2; fi; }
+print_info()    { printf '%b[ INFO    ]%b %s\n' "$BLUE" "$NC" "$1"; }
+print_success() { printf '%b[ SUCCESS ]%b %s\n' "$GREEN" "$NC" "$1"; }
+print_warning() { printf '%b[ WARNING ]%b %s\n' "$YELLOW" "$NC" "$1"; }
 
 # Display a formatted warning box
 # Usage: print_warning_box "line1" "line2" "line3" ...
@@ -425,6 +425,10 @@ download_script() {
     echo "            ▶ ${REMOTE_BASE}/${script_file}..."
 
     if [[ "$DOWNLOAD_CMD" == "curl" ]]; then
+        # Drop -f from curl so 4xx/5xx responses still populate http_status (otherwise
+        # curl exits non-zero before %{http_code} is captured). --max-time 15 prevents
+        # a sinkholed network from hanging for 5+ minutes. Set "000" only when
+        # http_status is empty (transport failure), not unconditionally.
         http_status=$(curl -H 'Cache-Control: no-cache, no-store' \
             --max-time 15 \
             -o "${output_file}" -w "%{http_code}" -sSL \
@@ -459,24 +463,25 @@ download_script() {
             *)   print_error "✖ HTTP ${http_status} error"; rm -f "${output_file}"; return 1 ;;
         esac
     elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
+        # wget(1) exit codes (per GNU wget docs): 0 ok, 1 generic, 2 parse,
+        # 3 file IO, 4 network, 5 SSL, 6 auth, 7 protocol, 8 server (HTTP 4xx/5xx).
+        # Map the common cases to messages that mirror the curl branch's HTTP
+        # status arms; bucket the rest as a generic failure with the exit code.
+        # -q plus 2>/dev/null discards the HTTP status line, so exit 8 cannot
+        # tell a 404 from a 429 or a 5xx the way the curl arms do.
         local wget_exit=0
         wget --no-cache --no-cookies \
             --timeout=15 \
             -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null \
             || wget_exit=$?
-        if [[ "$wget_exit" -ne 0 ]]; then
-            print_error "✖ Download failed (wget exit ${wget_exit})"
-            rm -f "${output_file}"
-            return 1
-        fi
-        # Validate that we got a script, not an error page.
-        # Stricter than the previous first-ten-lines shebang grep, which
-        # accepted a shebang on ANY of the first 10 lines - so an HTML 4xx
-        # page that merely quotes a shebang in a code snippet no longer
-        # passes. Also reject CRLF - `exec` would fail with `bash\r: not
-        # found`, after the file has already replaced the original on disk.
-        # `|| true` lets an empty file reach the explicit checks below rather
-        # than blowing up under set -e.
+        case "$wget_exit" in
+            0) ;;
+            4|5) print_error "✖ Network/SSL error (wget exit ${wget_exit})"; rm -f "${output_file}"; return 1 ;;
+            6)   print_error "✖ Authentication failed (wget exit 6)"; rm -f "${output_file}"; return 1 ;;
+            8)   print_error "✖ Server error (HTTP 4xx/5xx) — check the URL above"; rm -f "${output_file}"; return 1 ;;
+            *)   print_error "✖ Download failed (wget exit ${wget_exit})"; rm -f "${output_file}"; return 1 ;;
+        esac
+        # Same strict gate as the curl branch above; keep the two identical.
         local first_line
         IFS= read -r first_line < "${output_file}" || true
         if [[ "$first_line" != "#!"* ]]; then

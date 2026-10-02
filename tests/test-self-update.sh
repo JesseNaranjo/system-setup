@@ -3,9 +3,10 @@
 #
 # Zero dependencies: no network, no root, no test framework. Each library is
 # copied into a throwaway directory beside a fake caller script and sourced in a
-# child bash with a recording `curl` shim first on PATH, so nothing here touches
-# the repository or the network. The shim serves the sandbox's own files, so
-# "remote" equals "local" unless a case points it at the sandbox's remote/ copy.
+# child bash with a recording `curl` shim first on PATH (download_script's wget
+# cases add a `wget` shim beside it), so nothing here touches the repository or
+# the network. The curl shim serves the sandbox's own files, so "remote" equals
+# "local" unless a case points it at the sandbox's remote/ copy.
 #
 # Usage: ./tests/test-self-update.sh
 set -euo pipefail
@@ -76,6 +77,10 @@ readonly LIBRARIES=(
     utils/utils-misc.sh
 )
 
+# The three github/ standalones, which inline the roster helpers instead of
+# sourcing a library.
+readonly GH_STANDALONES=(github/gh_org_copy.sh github/gh_org_delete_issues.sh github/gh_org_delete_repos.sh)
+
 # Build a sandbox for one library and leave its path in SANDBOX. Not a `$()`
 # capture: the TEST_TEMP_DIRS+= must reach this shell, not a subshell.
 #   <sandbox>/<lib>            copy of the library under test (its _UTILS_DIR)
@@ -109,8 +114,8 @@ make_sandbox() {
 # copies ${SHIM_DIR}/<basename of URL> to OUT and prints ${SHIM_STATUS:-200}.
 # Logs the URL. A non-200 status writes nothing, which is what a real error
 # page response looks like to download_script's rejection branches.
-# curl only: detect_download_cmd prefers curl, so this shim wins on every host
-# and download_script's wget branch is never exercised here.
+# detect_download_cmd prefers curl, so this shim wins on every host; the
+# download_script section below forces DOWNLOAD_CMD=wget with a wget shim.
 out="" url=""
 while (($#)); do
     case "$1" in
@@ -312,6 +317,78 @@ else
     assert_eq '1' "$(wc -l < "${SANDBOX}/shim.log" | tr -d ' ')" "unwritable caller dir → only the library is fetched"
 fi
 
+echo "== download_script: wget exit codes (one library — the digest below pins the other seven identical) =="
+# detect_download_cmd prefers curl, so every case above runs the curl branch.
+# These force DOWNLOAD_CMD=wget after sourcing and put a `wget` shim first on
+# PATH that exits with ${WGET_SHIM_EXIT}. On failure the shim leaves a partial
+# body in the -O file, as real wget can: `-O file` truncates the file
+# immediately (wget(1), --output-document), so it exists whatever happens next.
+# Each failing case pins the exact message, the return status, and that the
+# body was removed. Exit 1 pins the fallthrough arm, exit 0 the success path.
+_wget_download() {   # $1 = exit code the shim returns → output, "DOWNLOAD_RC=<n>" and "CHILD_RC=<n>" lines
+    local rc=0 out
+    # shellcheck disable=SC2016  # the single-quoted script is the CHILD's source text
+    out=$(env PATH="${SANDBOX}/bin:${PATH}" SHIM_DIR="$SANDBOX" WGET_SHIM_EXIT="$1" \
+        bash -c 'source "$1/$2"
+            trap - EXIT
+            DOWNLOAD_CMD=wget
+            rc=0
+            download_script caller.sh "$1/download.out" || rc=$?
+            printf "DOWNLOAD_RC=%s\n" "$rc"' \
+        _ "$SANDBOX" "$EDGE_BASE" 2>&1) || rc=$?
+    printf '%s\nCHILD_RC=%s\n' "$out" "$rc"
+}
+make_sandbox "$EDGE_LIB"
+cat > "${SANDBOX}/bin/wget" <<'SHIM'
+#!/usr/bin/env bash
+# wget shim. Mimics `wget --no-cache --no-cookies --timeout=15 -O OUT -q URL`:
+# exit 0 copies ${SHIM_DIR}/<basename of URL> to OUT; any other
+# ${WGET_SHIM_EXIT} writes a partial body to OUT, then exits with that code.
+out="" url=""
+while (($#)); do
+    case "$1" in
+        -O) out="$2"; shift 2 ;;
+        http*) url="$1"; shift ;;
+        *) shift ;;
+    esac
+done
+code="${WGET_SHIM_EXIT:-0}"
+if [[ "$code" == "0" ]]; then
+    cp "${SHIM_DIR}/$(basename "$url")" "$out"
+else
+    printf '<html>partial\n' > "$out"
+fi
+exit "$code"
+SHIM
+chmod +x "${SANDBOX}/bin/wget"
+for case_spec in \
+        '4|✖ Network/SSL error (wget exit 4)' \
+        '5|✖ Network/SSL error (wget exit 5)' \
+        '6|✖ Authentication failed (wget exit 6)' \
+        '8|✖ Server error (HTTP 4xx/5xx) — check the URL above' \
+        '1|✖ Download failed (wget exit 1)'; do
+    code="${case_spec%%|*}"
+    message="${case_spec#*|}"
+    rm -f "${SANDBOX}/download.out"
+    out=$(_wget_download "$code")
+    assert_contains "$out" "$message"      "wget exit ${code} → \"${message}\""
+    assert_contains "$out" 'DOWNLOAD_RC=1' "wget exit ${code} → download_script returns 1"
+    assert_contains "$out" 'CHILD_RC=0'    "wget exit ${code} → the caller keeps running"
+    assert_eq 'absent' "$([[ -e "${SANDBOX}/download.out" ]] && echo present || echo absent)" "wget exit ${code} → partial body removed"
+done
+rm -f "${SANDBOX}/download.out"
+out=$(_wget_download 0)
+assert_contains "$out" 'DOWNLOAD_RC=0'     "wget exit 0 → download_script returns 0"
+assert_not_contains "$out" '✖'             "wget exit 0 → no error printed"
+assert_eq 'same' "$(cmp -s "${SANDBOX}/download.out" "${SANDBOX}/caller.sh" && echo same || echo differs)" "wget exit 0 → the fetched file is kept"
+
+# Parity: the eight bodies must hash identically (AGENTS.md §Helper Library
+# Duplication) — same extraction as the check_for_updates digest above, over the
+# five libraries and the three github/ standalones that inline their own copy.
+assert_eq '1' "$(for script_rel in "${LIBRARIES[@]}" "${GH_STANDALONES[@]}"; do
+        awk '/^download_script\(\) \{/{f=1} f{print} f&&/^\}/{exit}' "${REPO_DIR}/${script_rel}" | cksum
+    done | sort -u | wc -l | tr -d ' ')" 'download_script: one digest across the five libraries and the three github standalones'
+
 echo "== kubernetes-setup.sh: flags parsed before the update check =="
 # Source the orchestrator (its BASH_SOURCE guard keeps main() from running) and
 # stub every side effect with a marker so each flag's path is observable:
@@ -458,7 +535,6 @@ echo "== github/gh_org_*.sh: the same restart guard, string-tested and consumed 
 # matches the libraries', is compared as a STRING (an arithmetic `-eq` test
 # evaluates the environment value as an expression, so a `$(…)` smuggled into it
 # would run), is consumed after the update block, and no retired name survives.
-readonly GH_STANDALONES=(github/gh_org_copy.sh github/gh_org_delete_issues.sh github/gh_org_delete_repos.sh)
 for gh in "${GH_STANDALONES[@]}"; do
     assert_eq '1' "$(grep -c 'export SELF_UPDATE_RESTARTED=1' "${REPO_DIR}/${gh}" || true)"        "${gh}: exports the shared guard before the exec"
     # shellcheck disable=SC2016  # the single quotes are deliberate: this is the

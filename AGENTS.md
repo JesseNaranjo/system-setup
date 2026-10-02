@@ -515,7 +515,7 @@ are `github/gh_org_copy.sh`, `github/gh_org_delete_repos.sh`,
 - **Do NOT extract these helpers to a single shared library.** That would break the standalone invariant the `github/` scripts depend on and the suite-isolation invariant the per-directory `_download-*-scripts.sh` flows depend on.
 - When fixing a bug or adjusting behavior in one of these helpers, **update every copy in the same change**. `utils/utils-misc.sh` is the 5th per-directory parity copy for this audit. The pattern letters (A–J) used in the self-update backport plans exist precisely so cross-copy parity can be audited mechanically.
 - **Verify parity by hashing the function bodies across BOTH repositories**, not just within one. A check that hashes only the copies inside a single repo cannot detect a public-vs-private divergence, and one such divergence went unnoticed for exactly that reason. Extract each body from its `name() {` line through its closing `}` and compare digests; every copy must produce one digest, except where a **Known deliberate variant** above declares otherwise.
-- Drift between copies is managed by **careful code review**, not tooling — the sole exception is `check_for_updates`, whose five public copies are pinned to one digest by `tests/test-self-update.sh`. Every PR that touches one helper must justify why the others were or were not also touched.
+- Drift between copies is managed by **careful code review**, not tooling — except for `check_for_updates` (five public copies) and `download_script` (eight public copies), each pinned to one digest by `tests/test-self-update.sh`. Every PR that touches one helper must justify why the others were or were not also touched.
 
 When adding a NEW helper that is genuinely shared logic (not an existing canonical helper), prefer adding it to the per-suite utils file rather than promoting to a new shared library.
 
@@ -2578,16 +2578,24 @@ download_script() {
             *)   print_error "✖ HTTP ${http_status} error"; rm -f "${output_file}"; return 1 ;;
         esac
     elif [[ "$DOWNLOAD_CMD" == "wget" ]]; then
+        # wget(1) exit codes (per GNU wget docs): 0 ok, 1 generic, 2 parse,
+        # 3 file IO, 4 network, 5 SSL, 6 auth, 7 protocol, 8 server (HTTP 4xx/5xx).
+        # Map the common cases to messages that mirror the curl branch's HTTP
+        # status arms; bucket the rest as a generic failure with the exit code.
+        # -q plus 2>/dev/null discards the HTTP status line, so exit 8 cannot
+        # tell a 404 from a 429 or a 5xx the way the curl arms do.
         local wget_exit=0
         wget --no-cache --no-cookies \
             --timeout=15 \
             -O "${output_file}" -q "${REMOTE_BASE}/${script_file}" 2>/dev/null \
             || wget_exit=$?
-        if [[ "$wget_exit" -ne 0 ]]; then
-            print_error "✖ Download failed (wget exit ${wget_exit})"
-            rm -f "${output_file}"
-            return 1
-        fi
+        case "$wget_exit" in
+            0) ;;
+            4|5) print_error "✖ Network/SSL error (wget exit ${wget_exit})"; rm -f "${output_file}"; return 1 ;;
+            6)   print_error "✖ Authentication failed (wget exit 6)"; rm -f "${output_file}"; return 1 ;;
+            8)   print_error "✖ Server error (HTTP 4xx/5xx) — check the URL above"; rm -f "${output_file}"; return 1 ;;
+            *)   print_error "✖ Download failed (wget exit ${wget_exit})"; rm -f "${output_file}"; return 1 ;;
+        esac
         # Same strict gate as the curl branch above; keep the two identical.
         local first_line
         IFS= read -r first_line < "${output_file}" || true
@@ -2632,6 +2640,7 @@ Only these forms are acceptable:
 - **`case` statement** replaces the if/elif chain so each branch is one line and the failure-message wording is uniform.
 - **wget `--timeout=15`** mirrors the curl change. The old wget branch had no timeout at all.
 - **`local wget_exit=0; wget … || wget_exit=$?`** captures wget's exit code without aborting the function under `set -e`. The old form (`if wget …; then`) hid the exit code in the conditional and lost the error specificity.
+- **`case "$wget_exit"` names the failure.** Map wget(1)'s exit statuses — `4` network failure and `5` SSL verification failure share one arm, `6` is username/password authentication failure, `8` is "Server issued an error response" — and send every other non-zero code to the generic `Download failed (wget exit N)` arm. Keep `${wget_exit}` in the shared `4|5` message: it is the only thing that tells the two apart. `-q` plus `2>/dev/null` discards the status line, so `8` covers 404, 429 and 5xx alike; do NOT add a wget rate-limit arm to mirror the curl branch's `429`. Never name a token in these messages: public downloads send no credentials (the private repository's `download_file` shares this `case` shape but words `6` and `8` around the token it sends). Verified via [the GNU Wget manual §Exit Status](https://www.gnu.org/software/wget/manual/wget.html#Exit-Status) (fetched 2026-09-28).
 
 ### Self-Update Function
 

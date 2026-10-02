@@ -19,13 +19,6 @@
 - **Why deferred:** (a) Non-standard DNS ports are uncommon outside test labs, and (b) adding `#` to the allowlist requires confirming it does not weaken injection defenses — a separate analysis.
 - **Action on pickup:** Run the separate analysis first — confirm that admitting `#` into `validate_resolver`'s allowlist does not weaken its injection defenses. Only then extend the regex `^[A-Za-z0-9][A-Za-z0-9._:-]*$` to accept `#` so the `SERVER#PORT` form (`@1.1.1.1#5353`) passes validation.
 
-### `download_script` wget failures collapsed into one generic message (added 2026-05-05)
-
-- **Source:** 2026-05-05 self-update fixes backport (branch `backport-self-update-fixes`).
-- **Problem:** Most `download_script` wget branches in this repo use `wget -q ... 2>/dev/null` and treat any non-zero exit as a single generic failure; the 2026-05-05 backport captures `wget_exit` but renders it generically, so the user gets no more diagnosis than the old flat "Download failed (network/timeout)". `wget(1)` documented exit codes do distinguish: 4=network, 5=SSL, 6=auth, 8=server (HTTP 4xx/5xx), so a user with an expired credential on a wget-only host gets misdirected to look at their network. Affected sites: every helper library and standalone with a `download_script` body, now including `utils/utils-misc.sh` (library) and its caller `utils/_download-utils-scripts.sh`, added by the 2026-07-17 `utils/` Modular Standalone conversion.
-- **Why deferred:** The 2026-05-05 backport (branch `backport-self-update-fixes`, commits `8746154` through `a557927`) closed 10 of the gaps tracked in earlier revisions of the file and stopped at capturing `wget_exit`; the remaining `case` arms are mechanical and change error-message text only, so they fell outside its scope.
-- **Action on pickup:** Capture the exit code via `wget … || wget_exit=$?` then `case` on it: 4|5 → "Network/SSL error", 6 → "Authentication failed — check token", 8 → "Server error — check token and repo access", * → "Download failed (wget exit $wget_exit)". The `*` arm is what the generic render already produces, so the work is adding the 4|5, 6 and 8 arms. Apply to every `download_script` body in one change so the parity copies stay identical, `utils/utils-misc.sh` included; `utils/_download-utils-scripts.sh` is a caller of that body, not a body site itself.
-
 ### Atomic-rename for config-rewrite sites under elevation (added 2026-05-05)
 
 - **Source:** 2026-05-05 plan `Reviewed: Backport 10 self-update / temp-file / prompt-UX fixes` — deliberate scope decision.
