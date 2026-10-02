@@ -34,15 +34,16 @@ if [[ ! -f .shellcheckrc ]]; then
     printf '  FAIL .shellcheckrc is missing from the repository root\n'
     exit 1
 fi
-# AGENTS.md §Linting allows only a per-line disable with its reason beside it.
+# AGENTS.md §Linting allows only a per-line disable with its reason beside it,
+# and a repo-wide `shell=` would lint a future #!/bin/sh script as bash.
 # Not anchored at the line start: shellcheck reads several key=value pairs from
-# one rc line (`external-sources=true disable=SC2155`), and a quoted value can
-# have the next key glued to it (`external-sources="true"disable=SC2155`). A `#`
-# that starts a word begins a comment, but a `#` inside a value does not
-# (`source-path=/a#b disable=SC2155` is honoured), so the prefix may hold a `#`
-# only after a non-space character.
-if rc_disables=$(grep -nE '^([^#[:space:]]#*|[[:space:]])*(^|[[:space:]"])disable[[:space:]]*=' .shellcheckrc); then
-    printf '  FAIL .shellcheckrc carries a repo-wide disable:\n%s\n' "$rc_disables"
+# one rc line (`external-sources=true disable=SC2155`), and a value quoted with
+# " or ' can have the next key glued to it
+# (`external-sources="true"disable=SC2155`). A `#` that starts a word begins a
+# comment, but a `#` inside a value does not (`source-path=/a#b disable=SC2155`
+# is honoured), so the prefix may hold a `#` only after a non-space character.
+if rc_overrides=$(grep -nE "^([^#[:space:]]#*|[[:space:]])*(^|[[:space:]\"'])(disable|shell)[[:space:]]*=" .shellcheckrc); then
+    printf '  FAIL .shellcheckrc carries a repo-wide disable= or shell=:\n%s\n' "$rc_overrides"
     exit 1
 fi
 # The rc search stops at the first file found walking up from a script, so a

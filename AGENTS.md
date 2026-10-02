@@ -168,17 +168,18 @@ Run a bare `shellcheck <file>` on every `*.sh` you touch — no `-x`, no `-P`.
 directory and a sourced library's symbols never surface as SC1091/SC2154 false
 positives. Where a finding is genuinely wrong, silence it with a narrow
 `# shellcheck disable=SCxxxx` on the line plus a comment saying why — never a
-file-wide disable, and never a `disable=` in `.shellcheckrc`. Splitting a
-`local x=$(cmd)` for SC2155 unmasks `cmd`'s exit status: where errexit is live
-and `cmd` fails in normal operation, keep the tolerance explicit (`|| true` with
-a comment, or `if ! x=$(cmd); then …; fi`) instead of a bare split.
+file-wide disable, and never a `disable=` or `shell=` in `.shellcheckrc`.
+Splitting a `local x=$(cmd)` for SC2155 unmasks `cmd`'s exit status: where
+errexit is live and `cmd` fails in normal operation, keep the tolerance explicit
+(`|| true` with a comment, or `if ! x=$(cmd); then …; fi`) instead of a bare
+split.
 
 `tests/test-shellcheck.sh` is the gate: it lints every tracked `*.sh` and exits 1
-naming each file with a finding, and it fails on a `disable=` in `.shellcheckrc`
-and on a `# shellcheck disable=` placed before a script's first command, which
-shellcheck applies to the whole file. `./test-all.sh` runs it with every other
-suite and is the pre-commit check (§Running the Scripts). No CI workflow runs it,
-by the owner's ruling (2026-09-27): do NOT add one.
+naming each file with a finding, and it fails on a `disable=` or `shell=` in
+`.shellcheckrc` and on a `# shellcheck disable=` placed before a script's first
+command, which shellcheck applies to the whole file. `./test-all.sh` runs it with
+every other suite and is the pre-commit check (§Running the Scripts). No CI
+workflow runs it, by the owner's ruling (2026-09-27): do NOT add one.
 
 #### Common Conditionals
 
