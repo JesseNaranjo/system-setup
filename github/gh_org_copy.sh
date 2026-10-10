@@ -30,7 +30,8 @@
 #   DST_ORG            - Destination organization name (required)
 #   WORKDIR            - Working directory for temporary clones (default: a new
 #                        mktemp -d directory under $TMPDIR, else /tmp; a directory
-#                        you name must be your own, or the script exits 77)
+#                        you name must be your own, and a symlink is refused;
+#                        either refusal exits 77)
 #   THROTTLE           - Time (in seconds) to sleep between API calls (default: 1.5)
 #   LABEL_ARCHIVED_PR  - Label name for archived PRs (default: archived-pr)
 #
@@ -504,15 +505,17 @@ verify_auth() {
 
 # Create the working directory, or vet the one the caller named, then freeze
 # WORKDIR. The default is a fresh `mktemp -d` (mode 700). A caller's directory
-# must be the caller's own: on a shared host another local user could create a
-# predictable path first and plant or symlink the JSON files written there.
+# must be the caller's own and not a symlink: on a shared host another local
+# user could create a predictable path first and plant or symlink the JSON files
+# written there, and -O follows a symlink, so their link to a directory of yours
+# would pass the ownership test alone.
 prepare_workdir() {
     if [[ -z "$WORKDIR" ]]; then
         WORKDIR=$(mktemp -d "${TMPDIR:-/tmp}/org-copy-XXXXXX")
     else
         mkdir -p "$WORKDIR"
-        if [[ ! -O "$WORKDIR" ]]; then
-            print_error "✖ WORKDIR is not owned by you: $WORKDIR"
+        if [[ -L "$WORKDIR" || ! -O "$WORKDIR" ]]; then
+            print_error "✖ WORKDIR is a symlink or not owned by you: $WORKDIR"
             exit 77  # EX_NOPERM
         fi
     fi
@@ -872,7 +875,7 @@ copy_prs_as_archival_issues() {
         STATE=$(_j '.state')
         CREATED=$(_j '.created_at')
         MRGD=$(_j '.merged_at // ""')
-        USER=$(_j '.user.login')
+        USER=$(_j '.user.login // "unknown"')
         BASE=$(_j '.base.ref')
         HEAD=$(_j '.head.ref')
 

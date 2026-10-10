@@ -651,7 +651,6 @@ main() {
         exit 1
     fi
 
-    local num_repos=0
     local state_arg
     state_arg=$([[ $ONLY_OPEN -eq 1 ]] && echo "open" || echo "all")
 
@@ -674,8 +673,6 @@ main() {
         if [[ -n "$EXCLUDE_REPO_REGEX" ]] && [[ "$repo_name" =~ $EXCLUDE_REPO_REGEX ]]; then
             continue
         fi
-
-        ((num_repos++)) || true
 
         process_repository "$repo_name" "$visibility" "$state_arg"
     done <<< "$repos"

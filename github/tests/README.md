@@ -6,7 +6,7 @@ Unit tests for the three `github/gh_org_*.sh` standalones.
 
 | File | Covers |
 |------|--------|
-| `test-gh-org.sh` | `gh_org_copy.sh`: `dest_milestone_number_by_title`, and through it `copy_labels_and_milestones`' existence check, finds a milestone whose title holds double quotes on the destination's second page, so it is not created again, while a missing one is created once; `create_issue_in_dest` puts that milestone's destination number on the copied issue, and prints nothing on stdout (the "skipped" signal its callers test for) both for a failed issue POST, which it reports on stderr with the response and follows with no PATCH, and for an existing issue, whose skip message goes to stderr; `copy_prs_as_archival_issues` attributes a deleted account's issue comment, review comment and review to `@unknown`; `prepare_workdir` creates a new directory under `TMPDIR` when `WORKDIR` is unset, accepts (and creates) a `WORKDIR` you own, and exits 77 on one you do not (skipped as root). `gh_org_delete_issues.sh`: a failed close is counted, gh's own error reaches the user, and the run goes on to the next repository and prints `Issues failed: 1`; a repository whose issues cannot be listed counts as skipped, not processed. Both delete scripts: an unknown option exits 64, as do `gh_org_delete_repos.sh`'s "neither `--all` nor a repository" and "`--all` with a repository" errors, and `--help` exits 0 |
+| `test-gh-org.sh` | `gh_org_copy.sh`: `dest_milestone_number_by_title`, and through it `copy_labels_and_milestones`' existence check, finds a milestone whose title holds double quotes on the destination's second page, so it is not created again, while a missing one is created once; `create_issue_in_dest` puts that milestone's destination number on the copied issue, and prints nothing on stdout (the "skipped" signal its callers test for) both for a failed issue POST, which it reports on stderr with the response and follows with no PATCH, and for an existing issue, whose skip message goes to stderr; `copy_prs_as_archival_issues` attributes a deleted account's PR, issue comment, review comment and review to `@unknown`; `prepare_workdir` creates a new directory under `TMPDIR` when `WORKDIR` is unset, accepts (and creates) a `WORKDIR` you own, and exits 77 on a symlink, even one to a directory you own, and on a directory you do not own (that case is skipped as root). `gh_org_delete_issues.sh`: a failed close is counted, gh's own error reaches the user, and the run goes on to the next repository and prints `Issues failed: 1`; a repository whose issues cannot be listed counts as skipped, not processed. Both delete scripts: an unknown option exits 64, as do `gh_org_delete_repos.sh`'s "neither `--all` nor a repository" and "`--all` with a repository" errors, and `--help` exits 0 |
 
 ## Running
 
@@ -22,9 +22,12 @@ installed: each case runs a child bash that sources one script with
 running — and replaces `gh` or `gh_api` with a function that dispatches on its
 arguments to canned output. The cases that call `main()` also stub
 `sweep_stale_temps`, which would otherwise act on `github/` itself. The
-usage-error cases run the two delete scripts as child processes instead,
-because `show_help` prints the script's own header from `$0`; argument parsing
-comes first in their `main()`, so nothing else runs.
+usage-error cases run sandbox copies of the two delete scripts as child
+processes instead, because `show_help` prints the script's own header from
+`$0`, with a failing `gh` first on `PATH`. Argument parsing comes first in their
+`main()`, so nothing else runs; should a bad argument ever get past it, the
+stale-temp sweep acts on the sandbox and the first `gh` call fails without
+reaching the real one.
 
 `_gh_serve` serves a canned body the way `gh api` does: the second page only to
 a `--paginate` call, and through the call's own `--jq` filter when it has one.
