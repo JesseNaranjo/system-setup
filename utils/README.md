@@ -10,7 +10,7 @@ Cross-platform utility scripts for system maintenance, file synchronization, and
 |--------|----------|---------|
 | `utils-misc.sh` | Linux/macOS | Shared utilities library (colors, prompts, self-update) required by the scripts below; also asserts the **bash 5+** baseline for the whole directory |
 | `_download-utils-scripts.sh` | Linux/macOS | Self-updating script manager for this directory |
-| `rsync-two-way.sh` | Linux/macOS | Two-way file synchronization using rsync |
+| `rsync-two-way.sh` | Linux/macOS | Two-way file synchronization using rsync (newer copy wins; deletions are not propagated). Refuses, with exit 1, a `LOCAL_DIR`, user or host that begins with `-` (pass `./<dir>` for such a local directory), any host in `[ ]` (so every IPv6 literal), and an `rsync://` spec |
 | `rsync-over-tunnel.sh` | Linux/macOS | One-way directory-tree transfer to another host over an SSH tunnel via a throwaway loopback rsync daemon |
 | `monitor-battery.sh` | Linux | Monitors battery percentage at regular intervals |
 | `dig-all.sh` | Linux/macOS | Queries all common DNS record types for one or more domains, with optional resolver override |
@@ -54,7 +54,7 @@ is *deleted on exit*, together with the `.lock` file derived from it. Pointing `
 
 **Arguments after `--` are screened.** `source-tunnel` passes them to `ssh` and `source-transfer`
 to a root-privileged `rsync`, so any that would make either run a program, load a library, or read
-another config file is refused with exit 64 before anything runs: ssh's `-F`, `-I`, `-J`, and `-o`
+another config file is refused with exit 64 before ssh or rsync runs: ssh's `-F`, `-I`, `-J`, and `-o`
 keywords such as `ProxyCommand`, `ProxyJump`, and `LocalCommand` (in any case or quoting ssh
 accepts), and rsync's `-e`/`--rsh`, `--rsync-path`, `-M`/`--remote-option`, `--daemon`, and
 `--config`, including any abbreviation. In `source-transfer`, any argument that begins with a single

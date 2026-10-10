@@ -8,12 +8,14 @@
 # This script:
 # - Performs two-way synchronization between local and remote directories
 # - Preserves file attributes, permissions, and timestamps
-# - Mirrors deletions between both locations
+# - Never deletes: a file that exists on one side only is copied to the other;
+#   `--update` keeps the newer copy of a file that exists on both
 # - Provides detailed progress reporting and logging
-# - Creates automatic backups of overwritten/deleted files (optional)
+# - Creates automatic backups of overwritten files (optional)
 # - Validates connectivity before sync operations
 # - Refuses a LOCAL_DIR, or a REMOTE_SPEC user or host, that begins with '-',
-#   and a REMOTE_SPEC host in [ ] (option-injection guard, exit 1)
+#   a REMOTE_SPEC host in [ ] (option-injection guard), and an rsync://
+#   spec (only [user@]host:/path is supported), each with exit 1
 #
 # Exit codes: 0 OK | 1 usage error | 2 rsync error | 3 connectivity error |
 #             69 utils-misc.sh missing beside the script, or bash older than 5
@@ -76,8 +78,11 @@ ${YELLOW}Options:${NC}
 
 ${YELLOW}Features:${NC}
   • Two-way synchronization with automatic conflict resolution
+  • Never deletes: one-side-only files are copied across; the newer copy wins
+  • Refuses (exit 1) a LOCAL_DIR, user or host that begins with '-' (pass ./NAME
+    for such a local directory), any host in [ ] (so every IPv6 literal), and rsync://
   • Preserves permissions, timestamps, and hard links
-  • Optional backup of overwritten/deleted files
+  • Optional backup of overwritten files
   • Detailed progress reporting with itemized changes
   • Automatic connectivity validation
   • Comprehensive logging to ${LOG_FILE}
@@ -130,6 +135,14 @@ validate_sync_args() {
     # an '@', before any ':' or '/'.
     if [[ "$remote_spec" =~ ^([^:/]*@)?\[ ]]; then
         print_error "✖ Refusing a remote host in [ ] (option-injection guard): $remote_spec"
+        return 1
+    fi
+
+    # An rsync:// URL addresses an rsync daemon, not an ssh destination, and the
+    # format check below would read its scheme as the host, so the real host
+    # after '//' would never be checked.
+    if [[ "$remote_spec" == rsync://* ]]; then
+        print_error "✖ Refusing an rsync:// daemon spec: only [user@]host:/path is supported"
         return 1
     fi
 
@@ -204,7 +217,6 @@ main() {
       --verbose           # -v: verbose output
       --human-readable    # -h: human-readable numbers
       --hard-links        # preserve hard links
-      --delete            # mirror deletions
       --update            # do NOT overwrite newer files on receiver
       --partial           # keep temp files if transfer interrupted
       --inplace           # update destination files in-place

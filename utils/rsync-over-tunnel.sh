@@ -878,12 +878,12 @@ validate_extra() {
 }
 
 main() {
-    sweep_stale_temps '~*.tmp.??????'
-    check_for_updates "${BASH_SOURCE[0]}" "$@"
-
     # Help / no-args fast-path BEFORE any network/self-update work.
     if [[ $# -eq 0 ]]; then show_usage; exit 0; fi
     case "$1" in -h|--help|help) show_usage; exit 0 ;; esac
+
+    sweep_stale_temps '~*.tmp.??????'
+    check_for_updates "${BASH_SOURCE[0]}" "$@"
 
     local mode="$1"; shift
 

@@ -279,11 +279,18 @@ echo "== cmd_source_tunnel option-injection guard =="
 # local command (cf. CVE-2023-51385 / CVE-2025-61984). The guard refuses the
 # shape rather than relying on ssh's end-of-options handling. The identical guard in
 # resolve_transfer_path was already covered; this one was not.
+# cmd_source_tunnel runs `need ssh` first, so ssh is a shim that exits 99: on a
+# host with no ssh client the guards' own 64 is still what is asserted, and 99
+# would mean a guard let the target through to ssh.
+printf '#!/usr/bin/env bash\nexit 99\n' > "${_shim_dir}/ssh"
+chmod +x "${_shim_dir}/ssh"
+PATH="${_shim_dir}:${_saved_path}"
 REMOTE=''
 assert_eq 64 "$(rc cmd_source_tunnel)" "missing ssh target -> EX_USAGE"
 REMOTE='-oProxyCommand=touch /tmp/pwned'
 assert_eq 64 "$(rc cmd_source_tunnel)" "option-like ssh target rejected"
 REMOTE=''
+PATH="$_saved_path"
 
 echo "== build_daemon_config =="
 # NOTE: do NOT assign SCRIPT_NAME or SCRIPT_DIR here — both are `readonly` in
@@ -629,16 +636,21 @@ else
     printf '  skip ssh keyword under a Turkish locale: no tr_TR.UTF-8 locale here\n'
 fi
 
-# main() must call validate_extra before it dispatches. Run a sandboxed copy of
-# the script as a child: SELF_UPDATE_RESTARTED=1 takes check_for_updates'
-# post-restart return, which fetches nothing, and ssh is a shim that exits 99 —
-# so 99 means the refused option reached ssh and 64 means main refused it first.
+# main() must call validate_extra before it dispatches, in both steps that take
+# arguments after `--`. Run a sandboxed copy of the script as a child:
+# SELF_UPDATE_RESTARTED=1 takes check_for_updates' post-restart return, which
+# fetches nothing, and ssh, rsync and sudo are shims that exit 99 — so 99 (or
+# require_rsync's 69 when the rsync shim fails its --version) means the refused
+# option got past main, and 64 with validate_extra's message means main refused
+# it first.
 _wire_dir=$(mktemp -d)
 TEST_TEMP_DIRS+=("$_wire_dir")
 mkdir "${_wire_dir}/bin"
 printf '#!/usr/bin/env bash\nexit 99\n' > "${_wire_dir}/bin/ssh"
-chmod +x "${_wire_dir}/bin/ssh"
-# A copy with its library beside it: main() starts with sweep_stale_temps and
+cp "${_wire_dir}/bin/ssh" "${_wire_dir}/bin/rsync"
+cp "${_wire_dir}/bin/ssh" "${_wire_dir}/bin/sudo"
+chmod +x "${_wire_dir}/bin/ssh" "${_wire_dir}/bin/rsync" "${_wire_dir}/bin/sudo"
+# A copy with its library beside it: main() runs sweep_stale_temps and
 # check_for_updates, which act on the script's own directory — the sandbox,
 # never the checkout.
 cp "${TESTS_DIR}/../rsync-over-tunnel.sh" "${TESTS_DIR}/../utils-misc.sh" "${_wire_dir}/"
@@ -648,6 +660,14 @@ _wire_out=$(PATH="${_wire_dir}/bin:${PATH}" SELF_UPDATE_RESTARTED=1 \
     </dev/null 2>&1) || _wire_rc=$?
 assert_eq 64 "$_wire_rc" "main refuses a denied token before ssh runs"
 assert_contains "$_wire_out" "refusing '-oProxyCommand=false'" "main's refusal comes from validate_extra, not another usage error"
+# source-transfer feeds a ROOT rsync. --path names a real directory, so a skipped
+# validate_extra would carry the run on to require_rsync and the shims.
+_wire_rc=0
+_wire_out=$(PATH="${_wire_dir}/bin:${PATH}" SELF_UPDATE_RESTARTED=1 \
+    bash "${_wire_dir}/rsync-over-tunnel.sh" source-transfer --path "$_wire_dir" -- --rsh=CMD \
+    </dev/null 2>&1) || _wire_rc=$?
+assert_eq 64 "$_wire_rc" "main refuses a denied rsync option before rsync or sudo runs"
+assert_contains "$_wire_out" "refusing '--rsh=CMD'" "source-transfer's refusal comes from validate_extra"
 
 echo "== download_script content gate =="
 # The downloaded file is about to be chmod +x'd, mv'd over a running script and
