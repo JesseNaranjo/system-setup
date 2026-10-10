@@ -276,8 +276,7 @@ join_as_worker() {
     fi
 
     print_info "Joining cluster as worker node..."
-    # Word-splitting is intentional here - kubeadm join arguments are simple tokens
-    # shellcheck disable=SC2086
+    # shellcheck disable=SC2086  # split on purpose: the pasted 'kubeadm join' line's arguments are simple tokens
     $join_cmd || { print_error "✖ Failed to join cluster"; return 1; }
     print_success "✓ Successfully joined the cluster"
 }

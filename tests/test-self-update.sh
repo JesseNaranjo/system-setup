@@ -103,9 +103,9 @@ make_sandbox() {
     # which expand them when the library execs them; expanding them here would
     # bake this shell's values into the file. ARGS pins the `exec … "$@"`
     # forwarding: without it, dropping "$@" from the exec passes every test.
-    # shellcheck disable=SC2016
+    # shellcheck disable=SC2016  # the fake caller's source text, expanded when it runs
     printf '#!/usr/bin/env bash\necho "RESTARTED_WITH=${SELF_UPDATE_RESTARTED:-unset} ARGS=$*"\n' > "${SANDBOX}/caller.sh"
-    # shellcheck disable=SC2016
+    # shellcheck disable=SC2016  # the fake caller's source text, expanded when it runs
     printf '#!/usr/bin/env bash\necho "RESTARTED_WITH=${SELF_UPDATE_RESTARTED:-unset} ARGS=$*"\necho REMOTE_COPY\n' > "${SANDBOX}/remote/caller.sh"
     chmod +x "${SANDBOX}/caller.sh" "${SANDBOX}/remote/caller.sh"
     cat > "${SANDBOX}/bin/curl" <<'SHIM'
@@ -169,7 +169,7 @@ invoke_check() {
     # when this short-lived child exits, so the "no leftovers" assertions below
     # would pass even with Layer 1's per-branch `rm -f` deleted. Disarming it
     # leaves the sandbox's own `rm -rf` (this file's EXIT trap) as the net.
-    # shellcheck disable=SC2016
+    # shellcheck disable=SC2016  # the single-quoted script is the CHILD's source text
     out=$(env "${guard_env[@]+"${guard_env[@]}"}" \
         PATH="${SANDBOX}/bin:${PATH}" SHIM_LOG="${SANDBOX}/shim.log" \
         SHIM_DIR="$shim_dir" SHIM_STATUS="$SHIM_STATUS" \
@@ -685,12 +685,13 @@ echo "== execution guard: no distributed script ends in the && form =="
 # AGENTS.md §Important Implementation Notes #1. `[[ … ]] && main "$@"` is a false
 # list when its file is sourced, so the file returns 1 and a sourcing shell under
 # `set -e` exits; the if form returns 0, which is what lets the sections above
-# source a script bare. The pattern is the guard's test followed by &&, whatever
-# comes after it (main, main_<name>, a brace group) and however the operands are
-# spelled; the tests/ directories are excluded because they are
-# development-only and never distributed.
+# source a script bare. The pattern is BASH_SOURCE followed on its line by a
+# closing `]` and then &&, so it matches the `[[ … ]] &&` and `[ … ] &&` forms
+# whatever comes after them (main, main_<name>, a brace group). The tests/
+# directories are excluded because they are development-only and never
+# distributed.
 guard_rc=0
-guard_offenders=$(git -C "$REPO_DIR" grep -lE 'BASH_SOURCE.*\]\][[:space:]]*&&' -- '*.sh' ':!tests/*' ':!*/tests/*') || guard_rc=$?
+guard_offenders=$(git -C "$REPO_DIR" grep -lE 'BASH_SOURCE.*\][[:space:]]*&&' -- '*.sh' ':!tests/*' ':!*/tests/*') || guard_rc=$?
 # git grep exits 1 when nothing matches (the passing case) and above 1 when it cannot run.
 if [[ "$guard_rc" -gt 1 ]]; then
     printf '  FAIL execution guard: git grep exited %d (not a git checkout?)\n' "$guard_rc"

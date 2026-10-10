@@ -8,8 +8,9 @@ external-sources=true
 # against the checked script's own directory rather than the working directory.
 source-path=SCRIPTDIR
 #
-# No `disable=` here: silence a genuinely wrong finding on its own line, with a
-# reason beside it (AGENTS.md §Linting). tests/test-shellcheck.sh rejects one.
-# No `shell=` either: every tracked *.sh carries a bash shebang, and a
-# repo-wide `shell=bash` would lint a future #!/bin/sh script as bash. The gate
-# rejects it too.
+# These two keys, one per line with an unquoted value, and comments are all
+# this file holds: tests/test-shellcheck.sh fails on any other line, which
+# would apply to every script. Silence a genuinely wrong finding on its own
+# line, with a reason beside it (AGENTS.md §Linting). Every tracked *.sh
+# carries a bash shebang, which is how shellcheck knows the dialect; a
+# repo-wide shell key would lint a future #!/bin/sh script as bash.

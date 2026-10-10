@@ -167,18 +167,22 @@ Run a bare `shellcheck <file>` on every `*.sh` you touch — no `-x`, no `-P`.
 `source-path=SCRIPTDIR`, so `source` is followed relative to the script's own
 directory and a sourced library's symbols never surface as SC1091/SC2154 false
 positives. Where a finding is genuinely wrong, silence it with a narrow
-`# shellcheck disable=SCxxxx` on the line plus a comment saying why — never a
-file-wide disable, and never a `disable=` or `shell=` in `.shellcheckrc`.
+`# shellcheck disable=SCxxxx` on the line plus a comment saying why after the
+directive (`# shellcheck disable=SC2016  # …`). A `# shellcheck` directive
+before a script's first command applies to the whole file, so it holds only the
+`source`, `source-path`, `external-sources` and `enable` keys. `.shellcheckrc`
+holds only comments, `external-sources=true` and `source-path=<path>`, one per
+line.
 Splitting a `local x=$(cmd)` for SC2155 unmasks `cmd`'s exit status: where
 errexit is live and `cmd` fails in normal operation, keep the tolerance explicit
 (`|| true` with a comment, or `if ! x=$(cmd); then …; fi`) instead of a bare
 split.
 
 `tests/test-shellcheck.sh` is the gate: it lints every tracked `*.sh` and exits 1
-naming each file with a finding, and it fails on a `disable=` or `shell=` in
-`.shellcheckrc` and on a `# shellcheck disable=` placed before a script's first
-command, which shellcheck applies to the whole file. `./test-all.sh` runs it with
-every other suite and is the pre-commit check (§Running the Scripts). No CI
+naming each file with a finding, and it fails on any other `.shellcheckrc` line,
+on a file-wide directive with any other key, and when its own `grep` or `awk`
+check cannot run. `./test-all.sh` runs it with every other suite and is the
+pre-commit check (§Running the Scripts). No CI
 workflow runs it, by the owner's ruling (2026-09-27): do NOT add one.
 
 #### Common Conditionals
@@ -441,7 +445,7 @@ This repository uses several script architectures. Choose based on context:
 
 **Key characteristics:**
 - Require `utils-*.sh` in the same directory. `_download-*-scripts.sh` never installs it: its `get_script_list()` excludes the library and it sources the library itself; `check_for_updates()` keeps an existing copy current.
-- Guard the library `source` with a four-line existence check directly above its `# shellcheck source=` directive, identical in every script except the library and updater names. It runs before any `print_*` exists, so it writes with a raw `printf` to stderr and exits 69 (`EX_UNAVAILABLE`); a bare `source` of a missing file dies with bash's raw "No such file or directory" instead. The exact four lines are in §Quick Reference for LLMs' Minimal Script Template and in §Complete Download Script Template (with `utils-DOMAIN.sh` and `_download-DOMAIN-scripts.sh` replaced by the directory's own pair, whose names do not always match: `utils-lxc.sh`/`_download-lxc-scripts.sh`, `utils-llm.sh`/`_download-ollama-scripts.sh`, `utils-misc.sh`/`_download-utils-scripts.sh`); `tests/test-self-update.sh` pins them verbatim in every `lxc/`, `llm/`, and `utils/` script that sources its library.
+- Guard the library `source` with a four-line existence check directly above its `# shellcheck source=` directive, identical in every script except the library and updater names. It runs before any `print_*` exists, so it writes with a raw `printf` to stderr and exits 69 (`EX_UNAVAILABLE`); a bare `source` of a missing file dies with bash's raw "No such file or directory" instead. The exact four lines are in §Quick Reference for LLMs' Minimal Script Template and in §Complete Download Script Template (with `utils-DOMAIN.sh` and `_download-DOMAIN-scripts.sh` replaced by the directory's own pair, whose names do not always match: `utils-lxc.sh`/`_download-lxc-scripts.sh`, `utils-llm.sh`/`_download-ollama-scripts.sh`, `utils-misc.sh`/`_download-utils-scripts.sh`); `tests/test-self-update.sh` pins them verbatim in every `lxc/`, `llm/`, and `utils/` script that sources its library and whose `source` line has the template's spelling (`source "${SCRIPT_DIR}/utils-<dir>.sh"`); a differently spelled `source` is not seen by the pin.
 - Source guard pattern: only self-update when executed directly, not when sourced
 - Share output functions, prompts, and download infrastructure via utils
 
@@ -450,7 +454,7 @@ This repository uses several script architectures. Choose based on context:
 **When to use:** Simple automation tasks that don't need user interaction, complex output, or shared utilities.
 
 **Structure:**
-- Minimal or no error handling (`set -euo pipefail` optional)
+- Minimal error handling — `set -euo pipefail` at the top like every script
 - Basic `echo` output only
 - No external dependencies (no sourcing of utils-*.sh)
 
@@ -467,10 +471,12 @@ source `utils-misc.sh` and self-update via `check_for_updates`. Only trivial one
 **Example:**
 ```bash
 #!/usr/bin/env bash
+set -euo pipefail
 
 while (true); do
     date +' %k:%M'
-    upower -i /org/freedesktop/UPower/devices/battery_BAT1 | grep 'percentage'
+    # No percentage line (no battery, or upower missing) prints nothing and keeps looping.
+    upower -i /org/freedesktop/UPower/devices/battery_BAT1 | grep 'percentage' || true
     sleep 60s
 done
 ```

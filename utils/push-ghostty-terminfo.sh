@@ -144,9 +144,7 @@ entry_present() {
     if [[ "$user_mode" == true ]]; then
         ssh "${SSH_OPTS[@]}" "$host" 'infocmp -A "$HOME/.terminfo" -x '"${TERM_NAME}"' >/dev/null 2>&1'
     else
-        # SYSTEM_TERMINFO_DIR/TERM_NAME are local readonly constants, intentionally
-        # expanded client-side into the remote command string.
-        # shellcheck disable=SC2029
+        # shellcheck disable=SC2029  # SYSTEM_TERMINFO_DIR and TERM_NAME are local readonly constants, expanded client-side on purpose
         ssh "${SSH_OPTS[@]}" "$host" "infocmp -A ${SYSTEM_TERMINFO_DIR} -x ${TERM_NAME} >/dev/null 2>&1"
     fi
 }
@@ -170,9 +168,7 @@ install_entry() {
     remote_uid="$(ssh "${SSH_OPTS[@]}" "$host" 'id -u' 2>/dev/null || echo)"
     if [[ "$remote_uid" == "0" ]]; then
         print_info "Installing ${TERM_NAME} system-wide on ${host} (remote user is root)..."
-        # SYSTEM_TERMINFO_DIR is a local readonly constant, intentionally expanded
-        # client-side into the remote command string.
-        # shellcheck disable=SC2029
+        # shellcheck disable=SC2029  # SYSTEM_TERMINFO_DIR is a local readonly constant, expanded client-side on purpose
         if ! printf '%s\n' "$ti" | ssh "${SSH_OPTS[@]}" "$host" "tic -x -o ${SYSTEM_TERMINFO_DIR} -"; then
             print_error "✖ System-wide terminfo install failed on ${host}"
             exit 70
