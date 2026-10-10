@@ -987,10 +987,18 @@ print_rollback_instructions() {
     echo "               systemctl start networking.service"
     echo ""
 
+    # The same restore restore_resolv_conf runs, from what configure_resolv_conf
+    # recorded
     if [[ "$RESOLV_CONF_SYMLINKED" == true ]]; then
         echo "            5. Restore resolv.conf:"
-        echo "               rm '$RESOLV_CONF'"
-        echo "               (Restore from backup or recreate manually)"
+        if [[ -n "$RESOLV_CONF_LINK_TARGET" ]]; then
+            echo "               ln -sfn '$RESOLV_CONF_LINK_TARGET' '$RESOLV_CONF'"
+        elif [[ -n "$RESOLV_CONF_BACKUP_PATH" ]]; then
+            echo "               rm -f '$RESOLV_CONF'"
+            echo "               cp -p '$RESOLV_CONF_BACKUP_PATH' '$RESOLV_CONF'"
+        else
+            echo "               (nothing to restore: there was no $RESOLV_CONF before the migration)"
+        fi
         echo ""
     fi
 

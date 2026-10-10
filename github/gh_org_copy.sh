@@ -556,7 +556,9 @@ verify_auth() {
 # must be the caller's own and not a symlink: on a shared host another local
 # user could create a predictable path first and plant or symlink the JSON files
 # written there, and -O follows a symlink, so their link to a directory of yours
-# would pass the ownership test alone.
+# would pass the ownership test alone. A link earlier in the path passes both
+# tests and could be repointed mid-run, so the vetted directory is frozen as
+# its physical path.
 prepare_workdir() {
     if [[ -z "$WORKDIR" ]]; then
         WORKDIR=$(mktemp -d "${TMPDIR:-/tmp}/org-copy-XXXXXX")
@@ -566,6 +568,7 @@ prepare_workdir() {
             print_error "✖ WORKDIR is a symlink or not owned by you: $WORKDIR"
             exit 77  # EX_NOPERM
         fi
+        WORKDIR=$(cd -P -- "$WORKDIR" && pwd)
     fi
     readonly WORKDIR
 }

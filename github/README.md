@@ -73,7 +73,7 @@ SRC_ORG="OldOrg" DST_ORG="NewOrg" ./gh_org_copy.sh
 |----------|-------------|---------|
 | `SRC_ORG` | Source organization name | Required |
 | `DST_ORG` | Destination organization name | Required |
-| `WORKDIR` | Working directory for clones; a directory you name must be your own, and a symlink is refused (either refusal exits 77) | A new `mktemp -d` directory under `$TMPDIR` (else `/tmp`) |
+| `WORKDIR` | Working directory for clones; a directory you name must be your own, and a symlink is refused (either refusal exits 77); the script uses its physical path, so a link earlier in the path is resolved once | A new `mktemp -d` directory under `$TMPDIR` (else `/tmp`) |
 | `THROTTLE` | Seconds between API calls | `1.5` |
 | `LABEL_ARCHIVED_PR` | Label for archived PRs | `archived-pr` |
 

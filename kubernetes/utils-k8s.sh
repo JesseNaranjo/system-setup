@@ -312,7 +312,7 @@ detect_os() {
 
 # Detect if running inside a container (LXC, Docker, or other)
 # Sets the global RUNNING_IN_CONTAINER variable
-# shellcheck disable=SC2034  # RUNNING_IN_CONTAINER is read by kubernetes-setup.sh, start-k8s.sh and the kubernetes-modules/ scripts
+# shellcheck disable=SC2034  # RUNNING_IN_CONTAINER is read by kubernetes-setup.sh, start-k8s.sh, configure-kernel-modules.sh, configure-networking.sh, configure-swap.sh and initialize-cluster.sh
 detect_container() {
     # Check for LXC container via environment variable
     if [[ -f /proc/1/environ ]] && grep -qa container=lxc /proc/1/environ 2>/dev/null; then

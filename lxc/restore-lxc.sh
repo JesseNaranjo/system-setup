@@ -109,6 +109,16 @@ main() {
         exit 64  # EX_USAGE
     fi
 
+    # A usage error, so it answers before the tool check below. The name feeds
+    # sudo rm -rf, sudo mv and two sudo sed -i expressions that interpolate it
+    # into the replacement text, where an unescaped & expands to the whole
+    # matched line. Without an override the name comes from the archive and is
+    # checked once it has been read.
+    if [[ -n "$CONTAINER_NAME" ]] && ! lxc_valid_name "$CONTAINER_NAME"; then
+        print_error "✖ Invalid container name: ${CONTAINER_NAME}"
+        exit 64  # EX_USAGE
+    fi
+
     # Verify backup file exists
     if [[ ! -f "$BACKUP_FILE" ]]; then
         print_error "✖ Backup file not found: ${BACKUP_FILE}"
@@ -153,7 +163,7 @@ main() {
 
     # Validated where it is first known: on the rename path this name reaches
     # sudo mv "${TEMP_DIR}/${ORIGINAL_NAME}" and the pattern side of a sed
-    # expression, neither of which the CONTAINER_NAME check below covers. It is
+    # expression, and with no override it becomes CONTAINER_NAME below. It is
     # archive content rather than something the user typed, hence EX_DATAERR.
     if ! lxc_valid_name "$ORIGINAL_NAME"; then
         print_error "✖ Invalid container name in ${BACKUP_FILE}: ${ORIGINAL_NAME}"
@@ -162,19 +172,9 @@ main() {
 
     print_info "Original container name: ${ORIGINAL_NAME}"
 
-    # Use original name if no override specified
+    # Use original name if no override specified; both are validated above
     if [[ -z "$CONTAINER_NAME" ]]; then
         CONTAINER_NAME="$ORIGINAL_NAME"
-    fi
-
-    # The positional override gets the same treatment ORIGINAL_NAME already had
-    # above; checked after the fallback so both sources pass through a guard
-    # either way. The name below feeds sudo rm -rf, sudo mv and two sudo sed -i
-    # expressions that interpolate it into the replacement text, where an
-    # unescaped & expands to the whole matched line.
-    if ! lxc_valid_name "$CONTAINER_NAME"; then
-        print_error "✖ Invalid container name: ${CONTAINER_NAME}"
-        exit 64  # EX_USAGE
     fi
 
     local CONTAINER_PATH="${LXC_PATH}/${CONTAINER_NAME}"

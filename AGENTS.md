@@ -2677,7 +2677,7 @@ Only these forms are acceptable:
 - **`--max-time 15`** caps total transfer time. Without it, a sinkholed/black-hole network can hang for 5+ minutes (curl's default connect/read timeouts are very generous). 15 seconds is enough for a slow GitHub raw fetch and short enough that an interactive user notices and Ctrl+C's. Verified via [everything.curl.dev/usingcurl/timeouts.html](https://everything.curl.dev/usingcurl/timeouts.html).
 - **`local curl_exit=0; http_status=$(curl …) || curl_exit=$?`, tested BEFORE the status `case`.** Without `-f`, curl exits 0 on any HTTP status, so a non-zero exit always means the transfer itself failed — and `%{http_code}` is known once the header arrives, so a body cut short after a 200 (exit 18, or 28 when `--max-time` hits mid-body) still reports 200 and, if its first line is a shebang, would pass the content gate and be installed. The `case` therefore has no `000)` arm and the capture no empty-status fallback: curl's `-w` prints `000` on a failed transfer, which the exit check has already reported by its exit code, and a curl that exits 0 always prints a real status. Verified via [curl(1)](https://curl.se/docs/manpage.html) (`-f`: "Fail with error code 22 and with no response body output at all for HTTP transfers returning HTTP response codes at 400 or greater"; `http_code`: "The numerical response code that was found in the last retrieved HTTP(S) or FTP(s) transfer") and [libcurl error codes](https://curl.se/libcurl/c/libcurl-errors.html) (18 "A file transfer was shorter or larger than expected…", 28 "Operation timeout…"), fetched 2026-09-30. The private repository's `download_file` carries the same check.
 - **A `case` on the status**, so each branch is one line and the failure-message wording is uniform.
-- **wget `--timeout=15`** is the wget branch's counterpart of curl's `--max-time 15`.
+- **wget `--timeout=15`** bounds each DNS, connect and idle-read wait; unlike curl `--max-time` it does not cap the whole transfer (see the `download_script` retry entry in `docs/backlog.md`).
 - **`local wget_exit=0; wget … || wget_exit=$?`** captures wget's exit code without aborting the function under `set -e`, so the `case` below can name the failure.
 - **`case "$wget_exit"` names the failure.** Map wget(1)'s exit statuses — `4` network failure and `5` SSL verification failure share one arm, `6` is username/password authentication failure, `8` is "Server issued an error response" — and send every other non-zero code to the generic `Download failed (wget exit N)` arm. Keep `${wget_exit}` in the shared `4|5` message: it is the only thing that tells the two apart. `-q` plus `2>/dev/null` discards the status line, so `8` covers 404, 429 and 5xx alike; do NOT add a wget rate-limit arm to mirror the curl branch's `429`. Never name a token in these messages: public downloads send no credentials (the private repository's `download_file` shares this `case` shape but words `6` and `8` around the token it sends). Verified via [the GNU Wget manual §Exit Status](https://www.gnu.org/software/wget/manual/wget.html#Exit-Status) (fetched 2026-09-28).
 
@@ -2999,7 +2999,7 @@ Each significant folder contains a `README.md` that documents its contents, patt
 | `lxc/README.md` | LXC container management scripts | ✅ |
 | `system-setup/README.md` | Main system setup suite | ✅ |
 | `system-setup/system-modules/README.md` | Module scripts documentation | ✅ |
-| `raspberry-pi/README.md` | Raspberry Pi OS image build notes (`build.md`) and a vmdb2 image spec (YAML) | ❌ |
+| `raspberry-pi/README.md` | Debian image build notes for Raspberry Pi (`build.md`) and a vmdb2 image spec (YAML) | ❌ |
 | `utils/README.md` | Cross-platform utilities | ✅ |
 | `utils/tests/README.md` | Unit tests for the pure functions in `utils/` | ✅ |
 | `lxc/tests/README.md` | Unit tests for the `lxc/` suite: container-protection helpers and launcher behaviour | ✅ |
@@ -3057,7 +3057,7 @@ All READMEs MUST follow this section order (omit sections that don't apply):
 
 ### Template: Script Directory
 
-Use for: `lxc/`, `llm/`, `utils/` - directories containing standalone scripts.
+Use for: `lxc/`, `llm/`, `utils/` - directories containing Modular Standalone scripts (§3).
 
 ```markdown
 # Directory Name

@@ -228,11 +228,14 @@ configure_container_ssh() {
 
     local container_ssh_dir="${container_home}/.ssh"
     local authorized_keys="${container_ssh_dir}/authorized_keys"
-    if [[ -L "$container_ssh_dir" || -L "$authorized_keys" ]]; then
-        print_warning "⚠ Refusing a symlinked .ssh or authorized_keys in container $container: $container_ssh_dir - skipping"
-        ((CONTAINERS_SKIPPED++)) || true
-        return 1
-    fi
+    local link
+    for link in "$container_ssh_dir" "$authorized_keys"; do
+        if [[ -L "$link" ]]; then
+            print_warning "⚠ Refusing a symlinked .ssh or authorized_keys in container $container: $link - skipping"
+            ((CONTAINERS_SKIPPED++)) || true
+            return 1
+        fi
+    done
 
     # Create .ssh directory in container
     if [[ ! -d "$container_ssh_dir" ]]; then

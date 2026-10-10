@@ -278,6 +278,35 @@ assert_eq 1 "${res%%|*}" "a failing lxc-ls: stop-lxc.sh exits 1"
 assert_not_contains "${res#*|}" "No running containers found" "a failing lxc-ls: not read as none running"
 assert_not_contains "${res#*|}" "REACHED lxc-stop" "a failing lxc-ls: no lxc-stop is reached"
 
+echo "== restart-lxc.sh restarts each name lxc-ls lists, and aborts when lxc-ls fails =="
+# restart-lxc.sh runs "${SCRIPT_DIR}/stop-lxc.sh" and "${SCRIPT_DIR}/start-lxc.sh".
+# SCRIPT_DIR set on the _lxc_main call reaches the child bash, so the script
+# loads the real library through RESTART_DIR's symlink and runs the echo stubs
+# beside it instead of its real siblings.
+RESTART_DIR="${SANDBOX}/restart-dir"
+mkdir -p "$RESTART_DIR"
+ln -s "${TESTS_DIR}/../utils-lxc.sh" "${RESTART_DIR}/utils-lxc.sh"
+for sibling in stop-lxc.sh start-lxc.sh; do
+    printf '#!/usr/bin/env bash\necho "REACHED %s $*"\n' "$sibling" > "${RESTART_DIR}/${sibling}"
+    chmod +x "${RESTART_DIR}/${sibling}"
+done
+res="$(SCRIPT_DIR="$RESTART_DIR" EXTRA_STUBS='sleep() { :; }
+            /usr/bin/lxc-ls() { [[ "$*" == "-1 --running" ]] || return 2; printf "a1\ndev-box\n"; }' _lxc_main restart-lxc.sh)"
+assert_eq 0 "${res%%|*}" "two running: restart-lxc.sh completes"
+assert_contains "${res#*|}" "Restarting 2 container(s)" "two running: one element per listed name"
+assert_contains "${res#*|}" "REACHED stop-lxc.sh a1 dev-box" "two running: stop-lxc.sh gets both names"
+assert_contains "${res#*|}" "REACHED start-lxc.sh a1 dev-box" "two running: start-lxc.sh gets both names"
+res="$(SCRIPT_DIR="$RESTART_DIR" EXTRA_STUBS='sleep() { :; }
+            /usr/bin/lxc-ls() { :; }' _lxc_main restart-lxc.sh)"
+assert_eq 0 "${res%%|*}" "none running: restart-lxc.sh exits 0"
+assert_contains "${res#*|}" "No running containers found" "none running: reported as such"
+assert_not_contains "${res#*|}" "REACHED stop-lxc.sh" "none running: stop-lxc.sh is not run"
+res="$(SCRIPT_DIR="$RESTART_DIR" EXTRA_STUBS='sleep() { :; }
+            /usr/bin/lxc-ls() { return 1; }' _lxc_main restart-lxc.sh)"
+assert_eq 1 "${res%%|*}" "a failing lxc-ls: restart-lxc.sh exits 1"
+assert_not_contains "${res#*|}" "No running containers found" "a failing lxc-ls: not read as none running"
+assert_not_contains "${res#*|}" "REACHED" "a failing lxc-ls: neither sibling is run"
+
 echo "== create-lxc.sh and backup-lxc.sh refuse an unsafe container name =="
 for script in create-lxc.sh backup-lxc.sh; do
     for name in "../etc" "a/b" ".hidden"; do
@@ -354,6 +383,8 @@ res="$(_lxc_main restore-lxc.sh "${SANDBOX}/restored-box_20260101_000000.tar.7z"
 assert_eq 64 "${res%%|*}" "override a/b: exits 64 (EX_USAGE)"
 assert_contains "${res#*|}" "✖ Invalid container name: a/b" "override a/b: names the rejected value"
 assert_not_contains "${res#*|}" "REACHED sudo" "override a/b: refused before any sudo call"
+res="$(EXTRA_STUBS="$NO_7Z" _lxc_main restore-lxc.sh "${SANDBOX}/restored-box_20260101_000000.tar.7z" 'a/b')"
+assert_eq 64 "${res%%|*}" "override a/b without 7z: exits 64, not 69"
 
 # ------------------------------------------------ config-lxc-ssh.sh --
 
@@ -400,6 +431,7 @@ ln -s "${OUTSIDE}/authorized_keys" "${ROOTFS}/home/tester/.ssh/authorized_keys"
 res="$(_ssh_configure keylink)"
 assert_eq 1 "${res%%|*}" "a symlinked authorized_keys: refused"
 assert_contains "${res#*|}" "Refusing a symlinked .ssh or authorized_keys" "a symlinked authorized_keys: says why"
+assert_contains "${res#*|}" ": ${ROOTFS}/home/tester/.ssh/authorized_keys - skipping" "a symlinked authorized_keys: names that link"
 cmp -s "${OUTSIDE}/authorized_keys.before" "${OUTSIDE}/authorized_keys"
 assert_eq 0 "$?" "a symlinked authorized_keys: the link target is untouched"
 
@@ -416,6 +448,7 @@ ln -s "${OUTSIDE}/ssh-target" "${ROOTFS}/home/tester/.ssh"
 res="$(_ssh_configure sshlink)"
 assert_eq 1 "${res%%|*}" "a symlinked .ssh: refused"
 assert_contains "${res#*|}" "Refusing a symlinked .ssh or authorized_keys" "a symlinked .ssh: says why"
+assert_contains "${res#*|}" ": ${ROOTFS}/home/tester/.ssh - skipping" "a symlinked .ssh: names that link"
 assert_eq "" "$(find "${OUTSIDE}/ssh-target" -mindepth 1)" "a symlinked .ssh: nothing is written at the link target"
 
 printf '\n%d run, %d failed\n' "$TESTS_RUN" "$TESTS_FAILED"

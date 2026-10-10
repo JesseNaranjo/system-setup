@@ -24,7 +24,9 @@ readonly DELETE_REPOS="${TESTS_DIR}/../gh_org_delete_repos.sh"
 TESTS_RUN=0
 TESTS_FAILED=0
 
-SANDBOX=$(mktemp -d)
+# Physical path: prepare_workdir freezes a caller's WORKDIR with cd -P, and a
+# TMPDIR can run through a link (macOS: /var -> /private/var).
+SANDBOX=$(cd -P -- "$(mktemp -d)" && pwd)
 readonly SANDBOX
 trap 'rm -rf "$SANDBOX"' EXIT
 
@@ -208,6 +210,14 @@ link_err=$(WORKDIR="${SANDBOX}/link" SELF_UPDATE_RESTARTED=1 SRC_ORG=s DST_ORG=d
     bash -c 'source "$1"; prepare_workdir' _ "$COPY" </dev/null 2>&1 >/dev/null) || link_rc=$?
 assert_eq 77 "$link_rc" "a symlinked WORKDIR exits 77, even to a directory you own"
 assert_contains "$link_err" "WORKDIR is a symlink or not owned by you: ${SANDBOX}/link" "the symlink refusal names the link"
+# A link earlier in the path passes mkdir -p and both tests, and could be
+# repointed mid-run; the frozen WORKDIR is the physical path instead.
+mkdir -p "${SANDBOX}/mine/real"
+ln -s "${SANDBOX}/mine/real" "${SANDBOX}/inter"
+inter_rc=0
+inter=$(WORKDIR="${SANDBOX}/inter/sub" SELF_UPDATE_RESTARTED=1 SRC_ORG=s DST_ORG=d \
+    bash -c 'source "$1"; prepare_workdir >/dev/null; printf "%s" "$WORKDIR"' _ "$COPY" </dev/null 2>/dev/null) || inter_rc=$?
+assert_eq "0|${SANDBOX}/mine/real/sub" "${inter_rc}|${inter}" "a WORKDIR under a symlinked parent is frozen as its physical path"
 if [[ "$EUID" -ne 0 ]]; then
     # / is root-owned on every platform, and mkdir -p on it is a no-op.
     foreign_rc=0
