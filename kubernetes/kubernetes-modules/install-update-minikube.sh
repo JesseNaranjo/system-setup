@@ -100,20 +100,21 @@ main_install_update_minikube() {
 
     detect_package_manager || { print_error "✖ Failed to detect package manager"; return 1; }
 
-    local arch pkg_ext pkg_url install_cmd
+    local arch pkg_ext pkg_url
+    local install_cmd=()
 
     case "$DETECTED_PKG_MANAGER" in
         apt)
             arch=$(get_deb_arch)
             pkg_ext="deb"
             pkg_url="${MINIKUBE_BASE_URL}/minikube_latest_${arch}.deb"
-            install_cmd="apt install"
+            install_cmd=(apt install)
             ;;
         dnf | zypper)
             arch=$(get_rpm_arch)
             pkg_ext="rpm"
             pkg_url="${MINIKUBE_BASE_URL}/minikube-latest.${arch}.rpm"
-            install_cmd="${DETECTED_PKG_MANAGER} install -y"
+            install_cmd=("$DETECTED_PKG_MANAGER" install -y)
             ;;
         *)
             print_error "✖ Unsupported package manager: ${DETECTED_PKG_MANAGER} (only apt, dnf, and zypper are supported)"
@@ -138,7 +139,7 @@ main_install_update_minikube() {
     fi
 
     print_info "Installing minikube..."
-    if $install_cmd "${pkg_path}"; then
+    if "${install_cmd[@]}" "${pkg_path}"; then
         rm -f "${pkg_path}"
         print_success "✓ Minikube installed/updated successfully"
     else

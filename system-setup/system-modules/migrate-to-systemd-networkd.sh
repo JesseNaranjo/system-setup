@@ -69,6 +69,10 @@ readonly -a UNSUPPORTED_KEYWORDS=(
 declare -a CREATED_NETWORK_FILES=()
 declare -a CREATED_NETDEV_FILES=()
 RESOLV_CONF_SYMLINKED=false
+# How configure_resolv_conf found /etc/resolv.conf, for restore_resolv_conf:
+# a symlink's own target, and the backup this run made
+RESOLV_CONF_LINK_TARGET=""
+RESOLV_CONF_BACKUP_PATH=""
 INTERFACES_BACKUP_PATH=""
 
 # Track unsupported configurations found
@@ -155,11 +159,15 @@ check_migration_preconditions() {
 # Get list of configured interfaces (excluding loopback)
 # Outputs interface names, one per line
 get_interface_list() {
+    # `|| true` on both: grep -v exits 1 when it selects nothing, and either
+    # list is empty in normal operation (lo is the only auto interface when the
+    # NIC is allow-hotplug; a host with only auto stanzas has no allow-hotplug one)
+
     # Get auto interfaces
-    ifquery -l 2>/dev/null | grep -v "^lo$" | sort -u
+    ifquery -l 2>/dev/null | grep -v "^lo$" | sort -u || true
 
     # Also get allow-hotplug interfaces
-    ifquery -l --allow=hotplug 2>/dev/null | grep -v "^lo$" | sort -u
+    ifquery -l --allow=hotplug 2>/dev/null | grep -v "^lo$" | sort -u || true
 }
 
 # Parse interface configuration using ifquery
@@ -421,17 +429,27 @@ generate_network_file() {
     # Handle static addresses for inet6
     if [[ "$method_inet6" == "static" && -n "$config_inet6" ]]; then
         local address6=""
+        local netmask6=""
         local gateway6=""
 
         if echo "$config_inet6" | grep -qi "^address"; then
             address6=$(echo "$config_inet6" | grep -i "^address" | head -1 | cut -d: -f2- | xargs)
         fi
 
+        if echo "$config_inet6" | grep -qi "^netmask"; then
+            netmask6=$(echo "$config_inet6" | grep -i "^netmask" | head -1 | cut -d: -f2- | xargs)
+        fi
+
         if echo "$config_inet6" | grep -qi "^gateway"; then
             gateway6=$(echo "$config_inet6" | grep -i "^gateway" | head -1 | cut -d: -f2- | xargs)
         fi
 
+        # An inet6 netmask is already a prefix length (interfaces(5): "number of
+        # bits, eg 64"), so it needs no netmask_to_cidr conversion
         if [[ -n "$address6" ]]; then
+            if [[ "$address6" != *"/"* && -n "$netmask6" ]]; then
+                address6="${address6}/${netmask6}"
+            fi
             content+="Address=$address6"$'\n'
         fi
 
@@ -710,6 +728,23 @@ install_systemd_resolved() {
     return 0
 }
 
+# Put /etc/resolv.conf back the way configure_resolv_conf found it. A symlink
+# is recreated with its own target: backup_file's cp -p copies what the link
+# points to, and restoring that copy would freeze a managed link into a static
+# file. Anything else comes back from the backup this run made, never from an
+# older one; with neither recorded there was nothing to restore.
+restore_resolv_conf() {
+    if [[ -n "$RESOLV_CONF_LINK_TARGET" ]]; then
+        ln -sfn "$RESOLV_CONF_LINK_TARGET" "$RESOLV_CONF"
+        print_info "  Restored $RESOLV_CONF -> $RESOLV_CONF_LINK_TARGET"
+    elif [[ -n "$RESOLV_CONF_BACKUP_PATH" ]]; then
+        # rm first: cp onto the stub symlink would write through it
+        rm -f "$RESOLV_CONF"
+        cp -p "$RESOLV_CONF_BACKUP_PATH" "$RESOLV_CONF"
+        print_info "  Restored $RESOLV_CONF from $RESOLV_CONF_BACKUP_PATH"
+    fi
+}
+
 # Configure resolv.conf symlink
 configure_resolv_conf() {
     echo ""
@@ -736,22 +771,23 @@ configure_resolv_conf() {
             return 0
         fi
 
+        if [[ -L "$RESOLV_CONF" ]]; then
+            RESOLV_CONF_LINK_TARGET=$(readlink "$RESOLV_CONF")
+        fi
         backup_file "$RESOLV_CONF"
+        # Find the backup path from the global array (none for a dangling link)
+        local backup
+        for backup in "${CREATED_BACKUP_FILES[@]+"${CREATED_BACKUP_FILES[@]}"}"; do
+            if [[ "$backup" == "${RESOLV_CONF}"* ]]; then
+                RESOLV_CONF_BACKUP_PATH="$backup"
+                break
+            fi
+        done
         rm -f "$RESOLV_CONF"
 
         if ! ln -s "$RESOLVED_STUB" "$RESOLV_CONF"; then
             print_error "✖ Failed to create symlink: $RESOLV_CONF -> $RESOLVED_STUB"
-            # Restore from backup
-            local latest_backup
-            # backup_file names each copy <file>.backup.<YYYYmmdd_HHMMSS>.bak, so the glob's
-            # sorted order is creation order and its last match is the newest backup
-            # With no match the glob stays literal (no nullglob), so -f alone tells a backup from it
-            local backups=("${RESOLV_CONF}.backup."*.bak)
-            latest_backup="${backups[-1]}"
-            if [[ -f "$latest_backup" ]]; then
-                cp -p "$latest_backup" "$RESOLV_CONF"
-                print_info "Restored $RESOLV_CONF from backup"
-            fi
+            restore_resolv_conf
             return 1
         fi
 
@@ -824,8 +860,8 @@ enable_systemd_networkd() {
     return 0
 }
 
-# Verify systemd-networkd has configured interfaces
-# Returns: 0 if interfaces are configured, 1 otherwise
+# Verify systemd-networkd has brought an interface to the routable state
+# Returns: 0 if at least one interface is routable, 1 otherwise
 verify_network_connectivity() {
     local max_attempts=5
     local wait_seconds=2
@@ -845,18 +881,17 @@ verify_network_connectivity() {
             return 1
         fi
 
-        # Check for interfaces in routable/configured state via networkctl
-        local networkctl_output configured_count
+        # Count routable interfaces via networkctl, which prints IDX LINK TYPE
+        # OPERATIONAL SETUP: routable is an OPERATIONAL state, the fourth column
+        local networkctl_output routable_count
         networkctl_output=$(networkctl --no-pager --no-legend 2>/dev/null)
-        configured_count=$(echo "$networkctl_output" | awk '$4 == "routable" || $4 == "configured" {count++} END {print count+0}')
+        routable_count=$(echo "$networkctl_output" | awk '$4 == "routable" {count++} END {print count+0}')
 
-        if [[ "$configured_count" -gt 0 ]]; then
-            print_success "✓ systemd-networkd has $configured_count configured interface(s)"
-            # Show interface status for verification
-            # networkctl prints IDX LINK TYPE OPERATIONAL SETUP: state is the
-            # fourth column, and the trailing _ takes SETUP
+        if [[ "$routable_count" -gt 0 ]]; then
+            print_success "✓ systemd-networkd has $routable_count routable interface(s)"
+            # Show interface status for verification; the trailing _ takes SETUP
             echo "$networkctl_output" | while read -r _ name _ state _; do
-                if [[ "$state" == "routable" || "$state" == "configured" ]]; then
+                if [[ "$state" == "routable" ]]; then
                     print_info "  - $name: $state"
                 fi
             done
@@ -864,11 +899,11 @@ verify_network_connectivity() {
         fi
 
         if [[ $i -lt $max_attempts ]]; then
-            print_info "Waiting for interfaces to be configured... ($i/$max_attempts)"
+            print_info "Waiting for an interface to become routable... ($i/$max_attempts)"
         fi
     done
 
-    print_error "✖ systemd-networkd verification failed - no interfaces in configured/routable state"
+    print_error "✖ systemd-networkd verification failed - no interface in routable state"
     return 1
 }
 
@@ -905,19 +940,9 @@ rollback_new_networking() {
         print_info "  Removed $deleted_count config file(s)"
     fi
 
-    # Restore resolv.conf from backup if we symlinked it
+    # Restore resolv.conf if we symlinked it
     if [[ "$RESOLV_CONF_SYMLINKED" == true ]]; then
-        local latest_backup
-        # backup_file names each copy <file>.backup.<YYYYmmdd_HHMMSS>.bak, so the glob's
-        # sorted order is creation order and its last match is the newest backup
-        # With no match the glob stays literal (no nullglob), so -f alone tells a backup from it
-        local backups=("${RESOLV_CONF}.backup."*.bak)
-        latest_backup="${backups[-1]}"
-        if [[ -f "$latest_backup" ]]; then
-            rm -f "$RESOLV_CONF"
-            cp -p "$latest_backup" "$RESOLV_CONF"
-            print_info "  Restored $RESOLV_CONF from backup"
-        fi
+        restore_resolv_conf
     fi
 
     print_success "✓ Rolled back to old networking"

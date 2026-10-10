@@ -281,8 +281,9 @@ $bash_prompt"
         # Create a temporary file with the new PS1 content
         local temp_ps1
         temp_ps1=$(mktemp)
+        TEMP_FILES+=("$temp_ps1")
         add_change_header "$temp_ps1" "shell"
-        echo "$custom_ps1_pattern" > "$temp_ps1"
+        echo "$custom_ps1_pattern" >> "$temp_ps1"
 
         # Insert the new content after the commented line
         run_elevated sed -i.bak "${ps1_line_num}r ${temp_ps1}" "$shell_config" && run_elevated rm -f "${shell_config}.bak"

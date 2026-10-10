@@ -858,9 +858,10 @@ All operations are safe to run multiple times:
 
 **Validation:**
 - Checks that line 1 is a shebang (`#!`) and rejects CRLF line endings
-- Verifies HTTP 200 response
+- Verifies HTTP 200 response (curl)
 - Rejects a download curl reports as failed (non-zero exit), even one cut short after its 200 header
-- Detects GitHub rate limiting (HTTP 429)
+- Detects GitHub rate limiting (HTTP 429) (curl)
+- With wget, a server error is reported from the exit code (8), which cannot tell a 404 from a 429 or a 5xx
 
 **Large Warning Display:**
 If neither curl nor wget is installed, displays prominent warning box explaining updates are unavailable and continues with local scripts.
