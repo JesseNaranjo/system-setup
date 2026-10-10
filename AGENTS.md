@@ -43,7 +43,7 @@ Personal system configuration repository with bash scripts for setting up Linux 
 
 ## Design Principles
 
-These principles guide all code changes. You know the general definitions — below are the project-specific applications only.
+These principles guide all code changes.
 
 - **Idempotency**: Check state before changes, skip if already correct. Project pattern: `config_exists` + `get_config_value` before any modification.
 - **Safety**: Backup files before modification, comment old configs (NEVER delete). `set -euo pipefail` at every script top.
@@ -487,6 +487,7 @@ done
 |----------|-------------|--------|
 | New feature for system-setup | Modular | Add to existing module or create new one |
 | New utility script in lxc/, llm/, utils/ | Modular Standalone | Source utils-*.sh, self-update via check_for_updates |
+| Interactive or self-updating script that must work when downloaded alone | Standalone | `github/`: inlines every roster helper, updates itself |
 | Shared helper used by multiple modules | Add to utils-sys.sh | Centralized maintenance |
 | One-off automation script | Lightweight | No prompts, no shared utilities, no self-update |
 
@@ -1213,13 +1214,19 @@ update_config_line() {
 
         # Comment old line, append new at end of file
         awk -v pattern="^[[:space:]]*${setting_pattern}" -v new_line="${full_line}" '
+            BEGIN { found=0 }
             $0 ~ pattern {
                 "date +%Y-%m-%d" | getline datestr;
                 print "# " $0 " # Replaced by system-setup.sh on " datestr;
+                found=1;
                 next;
             }
             { print }
-            END { print new_line }
+            END {
+                if (found) {
+                    print new_line;
+                }
+            }
         ' "$file" > "$temp_file" || { rm -f "$temp_file"; print_error "✖ Failed to process $file with awk"; return 1; }
 
         # mv keeps the temp's owner (the caller) and mode (0600): restore both,
@@ -2664,14 +2671,14 @@ Only these forms are acceptable:
   status is swallowed by the `|| true` and nothing checks it, so it validates
   nothing.
 
-**Critical changes from the older template:**
+**Why the body is shaped this way:**
 
-- **`-fsSL` → `-sSL`** (drop the `-f`). With `-f`, curl exits 22 on 4xx/5xx, so a 404 could not be told from a transport failure, and the old `|| echo "000"` appended `000` to the `404` that `-w` had already printed (the visible `"404000"` strings). Without `-f`, curl writes the body (the GitHub error page) to `output_file`, exits 0, and `%{http_code}` is captured cleanly. The `case` arm for that status then reports the error and deletes the body — the strict shebang gate above is a second line of defence, not the primary one, because an HTML error page CAN begin with a line that looks like a shebang. The sister-repo audit traced an "HTTP 404000 error" message to this exact bug.
+- **`-sSL`, never `-fsSL`.** With `-f`, curl exits 22 on 4xx/5xx, so a 404 cannot be told from a transport failure, and a `|| echo "000"` fallback appends `000` to the `404` that `-w` has already printed (`"404000"`). Without `-f`, curl writes the body (the GitHub error page) to `output_file`, exits 0, and `%{http_code}` is captured cleanly. The `case` arm for that status then reports the error and deletes the body — the strict shebang gate above is a second line of defence, not the primary one, because an HTML error page CAN begin with a line that looks like a shebang.
 - **`--max-time 15`** caps total transfer time. Without it, a sinkholed/black-hole network can hang for 5+ minutes (curl's default connect/read timeouts are very generous). 15 seconds is enough for a slow GitHub raw fetch and short enough that an interactive user notices and Ctrl+C's. Verified via [everything.curl.dev/usingcurl/timeouts.html](https://everything.curl.dev/usingcurl/timeouts.html).
-- **`local curl_exit=0; http_status=$(curl …) || curl_exit=$?`, tested BEFORE the status `case`.** Without `-f`, curl exits 0 on any HTTP status, so a non-zero exit always means the transfer itself failed — and `%{http_code}` is known once the header arrives, so a body cut short after a 200 (exit 18, or 28 when `--max-time` hits mid-body) still reports 200 and, if its first line is a shebang, would pass the content gate and be installed. The old `|| true` discarded that exit; the `000)` arm and the empty-status fallback go with it: curl's `-w` prints `000` on a failed transfer, which now reports its exit code, and a curl that exits 0 always prints a real status. Verified via [curl(1)](https://curl.se/docs/manpage.html) (`-f`: "Fail with error code 22 and with no response body output at all for HTTP transfers returning HTTP response codes at 400 or greater"; `http_code`: "The numerical response code that was found in the last retrieved HTTP(S) or FTP(s) transfer") and [libcurl error codes](https://curl.se/libcurl/c/libcurl-errors.html) (18 "A file transfer was shorter or larger than expected…", 28 "Operation timeout…"), fetched 2026-09-30. The private repository's `download_file` carries the same check (fixed there 2026-09-22).
-- **`case` statement** replaces the if/elif chain so each branch is one line and the failure-message wording is uniform.
-- **wget `--timeout=15`** mirrors the curl change. The old wget branch had no timeout at all.
-- **`local wget_exit=0; wget … || wget_exit=$?`** captures wget's exit code without aborting the function under `set -e`. The old form (`if wget …; then`) hid the exit code in the conditional and lost the error specificity.
+- **`local curl_exit=0; http_status=$(curl …) || curl_exit=$?`, tested BEFORE the status `case`.** Without `-f`, curl exits 0 on any HTTP status, so a non-zero exit always means the transfer itself failed — and `%{http_code}` is known once the header arrives, so a body cut short after a 200 (exit 18, or 28 when `--max-time` hits mid-body) still reports 200 and, if its first line is a shebang, would pass the content gate and be installed. The `case` therefore has no `000)` arm and the capture no empty-status fallback: curl's `-w` prints `000` on a failed transfer, which the exit check has already reported by its exit code, and a curl that exits 0 always prints a real status. Verified via [curl(1)](https://curl.se/docs/manpage.html) (`-f`: "Fail with error code 22 and with no response body output at all for HTTP transfers returning HTTP response codes at 400 or greater"; `http_code`: "The numerical response code that was found in the last retrieved HTTP(S) or FTP(s) transfer") and [libcurl error codes](https://curl.se/libcurl/c/libcurl-errors.html) (18 "A file transfer was shorter or larger than expected…", 28 "Operation timeout…"), fetched 2026-09-30. The private repository's `download_file` carries the same check.
+- **A `case` on the status**, so each branch is one line and the failure-message wording is uniform.
+- **wget `--timeout=15`** is the wget branch's counterpart of curl's `--max-time 15`.
+- **`local wget_exit=0; wget … || wget_exit=$?`** captures wget's exit code without aborting the function under `set -e`, so the `case` below can name the failure.
 - **`case "$wget_exit"` names the failure.** Map wget(1)'s exit statuses — `4` network failure and `5` SSL verification failure share one arm, `6` is username/password authentication failure, `8` is "Server issued an error response" — and send every other non-zero code to the generic `Download failed (wget exit N)` arm. Keep `${wget_exit}` in the shared `4|5` message: it is the only thing that tells the two apart. `-q` plus `2>/dev/null` discards the status line, so `8` covers 404, 429 and 5xx alike; do NOT add a wget rate-limit arm to mirror the curl branch's `429`. Never name a token in these messages: public downloads send no credentials (the private repository's `download_file` shares this `case` shape but words `6` and `8` around the token it sends). Verified via [the GNU Wget manual §Exit Status](https://www.gnu.org/software/wget/manual/wget.html#Exit-Status) (fetched 2026-09-28).
 
 ### Self-Update Function
@@ -2690,6 +2697,7 @@ self_update() {
 
     if ! download_script "${SCRIPT_FILE}" "${TEMP_SCRIPT_FILE}"; then
         rm -f "$TEMP_SCRIPT_FILE"
+        echo ""
         return 1
     fi
 
@@ -2991,8 +2999,7 @@ Each significant folder contains a `README.md` that documents its contents, patt
 | `lxc/README.md` | LXC container management scripts | ✅ |
 | `system-setup/README.md` | Main system setup suite | ✅ |
 | `system-setup/system-modules/README.md` | Module scripts documentation | ✅ |
-| `git/README.md` | Git-related scripts | ❌ |
-| `raspberry-pi/README.md` | Raspberry Pi setup scripts | ❌ |
+| `raspberry-pi/README.md` | Raspberry Pi OS image build notes (`build.md`) and a vmdb2 image spec (YAML) | ❌ |
 | `utils/README.md` | Cross-platform utilities | ✅ |
 | `utils/tests/README.md` | Unit tests for the pure functions in `utils/` | ✅ |
 | `lxc/tests/README.md` | Unit tests for the `lxc/` suite: container-protection helpers and launcher behaviour | ✅ |
@@ -3050,7 +3057,7 @@ All READMEs MUST follow this section order (omit sections that don't apply):
 
 ### Template: Script Directory
 
-Use for: `lxc/`, `github/`, `llm/`, `utils/` - directories containing standalone scripts.
+Use for: `lxc/`, `llm/`, `utils/` - directories containing standalone scripts.
 
 ```markdown
 # Directory Name
