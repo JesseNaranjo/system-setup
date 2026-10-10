@@ -1225,6 +1225,9 @@ detect_download_cmd() {
     fi
 }
 
+# Download a script file from the remote repository
+# Args: $1 = script filename (relative path from REMOTE_BASE), $2 = output file path
+# Returns: 0 on success, 1 on failure
 download_script() {
     local script_file="$1"
     local output_file="$2"
@@ -1256,11 +1259,10 @@ download_script() {
         case "$http_status" in
             200)
                 # Validate that we got a script, not an error page.
-                # Stricter than the previous first-ten-lines shebang grep, which
-                # accepted a shebang on ANY of the first 10 lines - so an HTML 4xx
-                # page that merely quotes a shebang in a code snippet no longer
-                # passes. Also reject CRLF - `exec` would fail with `bash\r: not
-                # found`, after the file has already replaced the original on disk.
+                # Only line 1 may carry the shebang: an HTML error page that
+                # quotes one further down is not a script. Also reject CRLF - `exec`
+                # would fail with `bash\r: not found`, after the file has already
+                # replaced the original on disk.
                 # `|| true` lets an empty file reach the explicit checks below rather
                 # than blowing up under set -e.
                 local first_line

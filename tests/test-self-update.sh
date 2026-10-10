@@ -438,17 +438,20 @@ for code in 18 28; do
     assert_eq 'absent' "$([[ -e "${SANDBOX}/download.out" ]] && echo present || echo absent)" "curl exit ${code} → partial body removed"
 done
 
-# Parity: the eight bodies must hash identically (AGENTS.md §Helper Library
-# Duplication) — same extraction as the check_for_updates digest above, over the
-# five libraries and the three github/ standalones that inline their own copy.
-assert_eq '1' "$(for script_rel in "${LIBRARIES[@]}" "${GH_STANDALONES[@]}"; do
-        awk '/^download_script\(\) \{/{f=1} f{print} f&&/^\}/{exit}' "${REPO_DIR}/${script_rel}" | cksum
-    done | sort -u | wc -l | tr -d ' ')" 'download_script: one digest across the five libraries and the three github standalones'
-# A digest of nothing is still one digest: every copy must define the function
-# at column 0, or the parity above compares empty extractions.
-assert_eq '' "$(for script_rel in "${LIBRARIES[@]}" "${GH_STANDALONES[@]}"; do
-        grep -qx 'download_script() {' "${REPO_DIR}/${script_rel}" || printf '%s ' "$script_rel"
-    done)" 'download_script: defined in all five libraries and the three github standalones'
+# Parity: the eight bodies of each helper below must hash identically (AGENTS.md
+# §Helper Library Duplication) — same extraction as the check_for_updates digest
+# above, over the five libraries and the three github/ standalones that inline
+# their own copies.
+for helper in detect_download_cmd download_script print_warning_box; do
+    assert_eq '1' "$(for script_rel in "${LIBRARIES[@]}" "${GH_STANDALONES[@]}"; do
+            awk -v open="${helper}() {" '$0 == open {f=1} f{print} f&&/^\}/{exit}' "${REPO_DIR}/${script_rel}" | cksum
+        done | sort -u | wc -l | tr -d ' ')" "${helper}: one digest across the five libraries and the three github standalones"
+    # A digest of nothing is still one digest: every copy must define the
+    # function at column 0, or the parity above compares empty extractions.
+    assert_eq '' "$(for script_rel in "${LIBRARIES[@]}" "${GH_STANDALONES[@]}"; do
+            grep -qx "${helper}() {" "${REPO_DIR}/${script_rel}" || printf '%s ' "$script_rel"
+        done)" "${helper}: defined in all five libraries and the three github standalones"
+done
 
 echo "== kubernetes-setup.sh: flags parsed before the update check =="
 # Source the orchestrator (its BASH_SOURCE guard keeps main() from running) and

@@ -498,12 +498,13 @@ These helper functions are **deliberately duplicated**. The roster is exhaustive
 |--------|--------|-------|
 | `print_error`, `print_info`, `print_success`, `print_warning` | 8 | all 5 libraries + the 3 `github/gh_org_*.sh` standalones |
 | `download_script` | 8 | same |
+| `detect_download_cmd` | 8 | same |
 | `cleanup` (EXIT-trap temp reaper) | 8 | same |
 | `sweep_stale_temps` | 8 | same |
 | `show_diff_box` | 8 | same |
 | `_sanitize_ansi` | 8 | same — composed by `show_diff_box`, so it travels with it |
+| `print_warning_box` | 8 | same |
 | `prompt_yes_no` | 5 | the 5 libraries only (the `github/` standalones use the Pattern B' bare `read` of §User Interaction) |
-| `print_warning_box` | 5 | the 5 libraries only (the `github/` standalones do not use it) |
 | `check_for_updates` | 5 | the 5 libraries only |
 | `detect_os` | 3 | `system-setup/utils-sys.sh`, `utils/utils-misc.sh`, `kubernetes/utils-k8s.sh` |
 
@@ -525,7 +526,7 @@ are `github/gh_org_copy.sh`, `github/gh_org_delete_repos.sh`,
 - **Do NOT extract these helpers to a single shared library.** That would break the standalone invariant the `github/` scripts depend on and the suite-isolation invariant the per-directory `_download-*-scripts.sh` flows depend on.
 - When fixing a bug or adjusting behavior in one of these helpers, **update every copy in the same change**. `utils/utils-misc.sh` is the 5th per-directory parity copy for this audit. The pattern letters (A–J) used in the self-update backport plans exist precisely so cross-copy parity can be audited mechanically.
 - **Verify parity by hashing the function bodies across BOTH repositories**, not just within one. A check that hashes only the copies inside a single repo cannot detect a public-vs-private divergence, and one such divergence went unnoticed for exactly that reason. Extract each body from its `name() {` line through its closing `}` and compare digests; every copy must produce one digest, except where a **Known deliberate variant** above declares otherwise.
-- Drift between copies is managed by **careful code review**, not tooling — except for `check_for_updates` (five public copies) and `download_script` (eight public copies), each pinned to one digest by `tests/test-self-update.sh`. Every PR that touches one helper must justify why the others were or were not also touched.
+- Drift between copies is managed by **careful code review**, not tooling — except for `check_for_updates` (five public copies) and `detect_download_cmd`, `download_script` and `print_warning_box` (eight public copies each), each pinned to one digest by `tests/test-self-update.sh`. Every PR that touches one helper must justify why the others were or were not also touched.
 
 When adding a NEW helper that is genuinely shared logic (not an existing canonical helper), prefer adding it to the per-suite utils file rather than promoting to a new shared library.
 
@@ -2527,7 +2528,6 @@ detect_download_cmd() {
         return 0
     else
         DOWNLOAD_CMD=""
-        # Display warning box if neither is available
         print_warning_box \
             "UPDATES NOT AVAILABLE" \
             "" \
@@ -2553,7 +2553,7 @@ detect_download_cmd() {
 
 ```bash
 # Download a script file from the remote repository
-# Args: $1 = script filename (relative path), $2 = output file path
+# Args: $1 = script filename (relative path from REMOTE_BASE), $2 = output file path
 # Returns: 0 on success, 1 on failure
 download_script() {
     local script_file="$1"
@@ -2586,11 +2586,10 @@ download_script() {
         case "$http_status" in
             200)
                 # Validate that we got a script, not an error page.
-                # Stricter than the previous first-ten-lines shebang grep, which
-                # accepted a shebang on ANY of the first 10 lines - so an HTML 4xx
-                # page that merely quotes a shebang in a code snippet no longer
-                # passes. Also reject CRLF - `exec` would fail with `bash\r: not
-                # found`, after the file has already replaced the original on disk.
+                # Only line 1 may carry the shebang: an HTML error page that
+                # quotes one further down is not a script. Also reject CRLF - `exec`
+                # would fail with `bash\r: not found`, after the file has already
+                # replaced the original on disk.
                 # `|| true` lets an empty file reach the explicit checks below rather
                 # than blowing up under set -e.
                 local first_line

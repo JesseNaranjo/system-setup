@@ -52,6 +52,39 @@ print_warning() { printf '%b[ WARNING ]%b %s\n' "$YELLOW" "$NC" "$1"; }
 
 print_dry_run() { printf '%b[ DRY-RUN ]%b %s\n' "$CYAN" "$NC" "$1"; }
 
+# Print a warning box with multiple lines of content
+# Usage: print_warning_box "line1" "line2" "line3" ...
+# Each line will be padded to fit within the box
+print_warning_box() {
+    local box_width=77
+    local content_width=$((box_width - 8))   # 8 = the indent inside the left border
+
+    echo ""
+    echo -e "            ${YELLOW}╔$(printf '═%.0s' $(seq 1 $box_width))╗${NC}"
+    echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
+
+    # Pad on CHARACTER count, not printf's "%-Ns", which pads by BYTES. Box
+    # content carries multi-byte glyphs (•, —, ✓), so byte padding rendered
+    # those rows narrower than the border — measured at 89 columns against a
+    # 91-column border. ${#line} counts characters and ${line:0:N} cuts on
+    # character boundaries in a UTF-8 locale, so an over-long line is truncated
+    # without splitting a glyph into invalid UTF-8; the slice is a no-op on a
+    # line that already fits. Under a non-UTF-8 locale both fall back to bytes,
+    # which is the previous behaviour and no worse.
+    # %b for the colour constants (they are literal '\033…' in most copies),
+    # %s for the caller's text so a backslash escape in it stays literal.
+    local line pad
+    for line in "$@"; do
+        line="${line:0:content_width}"
+        pad=$((content_width - ${#line}))
+        printf '            %b║        %s%*s║%b\n' "$YELLOW" "$line" "$pad" '' "$NC"
+    done
+
+    echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
+    echo -e "            ${YELLOW}╚$(printf '═%.0s' $(seq 1 $box_width))╝${NC}"
+    echo ""
+}
+
 # Display help message and exit with $1: 0 for --help, 64 (EX_USAGE) for a usage error
 show_help() {
     sed -n '3,36p' "$0" | sed 's/^# //' | sed 's/^#//'
@@ -265,13 +298,29 @@ detect_download_cmd() {
         return 0
     else
         DOWNLOAD_CMD=""
-        print_warning "⚠ Neither 'curl' nor 'wget' found - self-update disabled"
-        print_info "Install curl or wget to enable automatic updates"
+        print_warning_box \
+            "UPDATES NOT AVAILABLE" \
+            "" \
+            "Neither 'curl' nor 'wget' is installed on this system." \
+            "Self-updating functionality requires one of these tools." \
+            "" \
+            "To enable self-updating, please install one of the following:" \
+            "  • curl  (recommended)" \
+            "  • wget" \
+            "" \
+            "Installation commands:" \
+            "  macOS:    brew install curl" \
+            "  Debian:   apt install curl" \
+            "  RHEL:     yum install curl" \
+            "" \
+            "Continuing with local version of the scripts..."
         return 1
     fi
 }
 
-# Download script from remote repository
+# Download a script file from the remote repository
+# Args: $1 = script filename (relative path from REMOTE_BASE), $2 = output file path
+# Returns: 0 on success, 1 on failure
 download_script() {
     local script_file="$1"
     local output_file="$2"
@@ -303,11 +352,10 @@ download_script() {
         case "$http_status" in
             200)
                 # Validate that we got a script, not an error page.
-                # Stricter than the previous first-ten-lines shebang grep, which
-                # accepted a shebang on ANY of the first 10 lines - so an HTML 4xx
-                # page that merely quotes a shebang in a code snippet no longer
-                # passes. Also reject CRLF - `exec` would fail with `bash\r: not
-                # found`, after the file has already replaced the original on disk.
+                # Only line 1 may carry the shebang: an HTML error page that
+                # quotes one further down is not a script. Also reject CRLF - `exec`
+                # would fail with `bash\r: not found`, after the file has already
+                # replaced the original on disk.
                 # `|| true` lets an empty file reach the explicit checks below rather
                 # than blowing up under set -e.
                 local first_line
