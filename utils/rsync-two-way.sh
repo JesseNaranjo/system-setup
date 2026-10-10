@@ -140,8 +140,9 @@ validate_sync_args() {
 
     # An rsync:// URL addresses an rsync daemon, not an ssh destination, and the
     # format check below would read its scheme as the host, so the real host
-    # after '//' would never be checked.
-    if [[ "$remote_spec" == rsync://* ]]; then
+    # after '//' would never be checked. rsync matches the scheme in any letter
+    # case, so the bracket classes do too (no locale case folding involved).
+    if [[ "$remote_spec" == [Rr][Ss][Yy][Nn][Cc]://* ]]; then
         print_error "✖ Refusing an rsync:// daemon spec: only [user@]host:/path is supported"
         return 1
     fi

@@ -173,6 +173,11 @@ assert_eq 1 "$(rc validate_sync_args "$sandbox" 'rsync://-oProxyCommand=x/mod')"
     "rsync:// daemon spec rejected"
 assert_contains "$(_stderr validate_sync_args "$sandbox" 'rsync://-oProxyCommand=x/mod')" \
     'Refusing an rsync:// daemon spec' "rsync:// rejection names the reason"
+# rsync matches the scheme in any letter case.
+assert_eq 1 "$(rc validate_sync_args "$sandbox" 'RSYNC://-oProxyCommand=x/mod')" \
+    "RSYNC:// daemon spec rejected"
+assert_contains "$(_stderr validate_sync_args "$sandbox" 'RSYNC://-oProxyCommand=x/mod')" \
+    'Refusing an rsync:// daemon spec' "RSYNC:// rejection names the reason"
 
 echo "== validate_sync_args: local option-injection guard =="
 assert_eq 1 "$(cd "$sandbox" && rc validate_sync_args '--rsh=touch pwned' 'host:/p')" \
