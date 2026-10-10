@@ -212,19 +212,29 @@ configure_container_ssh() {
         return 1
     fi
 
-    # Find the user's home directory in the container
-    local container_home="${rootfs}/home/${TARGET_USER}"
-
-    # Check if user exists in container
-    if [[ ! -d "$container_home" ]]; then
-        print_warning "⚠ User $TARGET_USER home directory not found in container $container"
+    # The container's root and the target user can write this tree, and this
+    # script runs as root, which follows every symlink in it: a link at the
+    # home, .ssh or authorized_keys would send the writes below to a host file
+    # (e.g. /root/.ssh/authorized_keys). So the home must resolve inside the
+    # rootfs, and .ssh and authorized_keys must not be links at all.
+    local rootfs_real container_home
+    rootfs_real=$(realpath -e -- "$rootfs")
+    if ! container_home=$(realpath -e -- "${rootfs}/home/${TARGET_USER}") || [[ "$container_home" != "${rootfs_real}/"* || ! -d "$container_home" ]]; then
+        print_warning "⚠ User $TARGET_USER home is missing or leaves the rootfs in container $container: ${rootfs}/home/${TARGET_USER} - skipping"
         print_info "Create user in container: adduser $TARGET_USER"
         ((CONTAINERS_SKIPPED++)) || true
         return 1
     fi
 
-    # Create .ssh directory in container
     local container_ssh_dir="${container_home}/.ssh"
+    local authorized_keys="${container_ssh_dir}/authorized_keys"
+    if [[ -L "$container_ssh_dir" || -L "$authorized_keys" ]]; then
+        print_warning "⚠ Refusing a symlinked .ssh or authorized_keys in container $container: $container_ssh_dir - skipping"
+        ((CONTAINERS_SKIPPED++)) || true
+        return 1
+    fi
+
+    # Create .ssh directory in container
     if [[ ! -d "$container_ssh_dir" ]]; then
         print_info "Creating .ssh directory in container: $container_ssh_dir"
         mkdir -p "$container_ssh_dir"
@@ -240,9 +250,6 @@ configure_container_ssh() {
         ((CONTAINERS_SKIPPED++)) || true
         return 1
     fi
-
-    # Setup authorized_keys file
-    local authorized_keys="${container_ssh_dir}/authorized_keys"
 
     local is_new=false
 
@@ -349,6 +356,7 @@ configure_ssh_config() {
 
 # Main function
 main() {
+    sweep_stale_temps '~*.tmp.??????'
     check_for_updates "${BASH_SOURCE[0]}" "$@"
 
     echo ""

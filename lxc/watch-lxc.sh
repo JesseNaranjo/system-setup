@@ -107,6 +107,7 @@ watch_loop() {
 }
 
 main() {
+    sweep_stale_temps '~*.tmp.??????'
     check_for_updates "${BASH_SOURCE[0]}" "$@"
 
     if (( $# > 0 )); then

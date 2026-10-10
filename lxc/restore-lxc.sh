@@ -73,9 +73,8 @@ check_required_tools() {
 # ============================================================================
 
 main() {
+    sweep_stale_temps '~*.tmp.??????'
     check_for_updates "${BASH_SOURCE[0]}" "$@"
-
-    check_required_tools
 
     # Parse arguments
     local BACKUP_FILE=""
@@ -118,6 +117,10 @@ main() {
 
     # Resolve backup file to absolute path
     BACKUP_FILE="$(cd "$(dirname "$BACKUP_FILE")" && pwd)/$(basename "$BACKUP_FILE")"
+
+    # After every check that needs no tool, so --help and a bad argument answer
+    # on a host without 7z; before the archive is read, which needs 7z and tar.
+    check_required_tools
 
     # ========================================================================
     # Path Configuration

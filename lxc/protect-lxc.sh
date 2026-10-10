@@ -112,6 +112,7 @@ print_protection_status() {
 }
 
 main() {
+    sweep_stale_temps '~*.tmp.??????'
     check_for_updates "${BASH_SOURCE[0]}" "$@"
 
     local STATUS_ONLY=false

@@ -49,6 +49,7 @@ show_usage() {
 }
 
 main() {
+    sweep_stale_temps '~*.tmp.??????'
     check_for_updates "${BASH_SOURCE[0]}" "$@"
 
     local CONTAINER_NAME=""

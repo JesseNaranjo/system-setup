@@ -94,9 +94,8 @@ check_required_tools() {
 # ============================================================================
 
 main() {
+    sweep_stale_temps '~*.tmp.??????'
     check_for_updates "${BASH_SOURCE[0]}" "$@"
-
-    check_required_tools
 
     # Parse arguments
     local CONTAINER_NAME=""
@@ -178,6 +177,10 @@ main() {
         print_error "✖ Container '${CONTAINER_NAME}' not found at ${CONTAINER_PATH}"
         exit 66  # EX_NOINPUT
     fi
+
+    # After every check that needs no tool, so --help and a bad argument answer
+    # on a host without 7z; before the backup directory is created.
+    check_required_tools
 
     # Verify backup directory exists or create it
     if [[ ! -d "$BACKUP_DIR" ]]; then

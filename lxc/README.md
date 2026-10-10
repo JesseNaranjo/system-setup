@@ -113,6 +113,12 @@ sudo ./start-lxc.sh mycontainer
 
 ## Script Details
 
+Container names must match `[A-Za-z0-9][A-Za-z0-9._-]*` (letters, digits, `.`,
+`_` and `-`, the first character a letter or digit): `create-lxc.sh`,
+`backup-lxc.sh`, `restore-lxc.sh` and `destroy-lxc.sh` refuse any other name
+with exit 64 (`restore-lxc.sh`: 65 when the name comes from the archive), and
+`protect-lxc.sh` and `unprotect-lxc.sh` report it as a failed container (exit 1).
+
 ### setup-lxc.sh
 
 Configures the host system for LXC containers.
@@ -428,6 +434,9 @@ Configures SSH key-based authentication for containers:
 - Deploys public key to all containers
 - Configures `~/.ssh/config` for easy access
 - Works with stopped containers (direct rootfs access)
+- Skips a container whose user home resolves outside its rootfs, or whose
+  `.ssh` or `authorized_keys` is a symlink: the script runs as root, and a
+  link the container planted would send the key to a host file
 - With `--privileged`, targets containers at `/var/lib/lxc/`
 
 ```bash

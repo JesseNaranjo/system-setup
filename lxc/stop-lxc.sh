@@ -42,6 +42,7 @@ source "${SCRIPT_DIR}/utils-lxc.sh"
 # ============================================================================
 
 main() {
+    sweep_stale_temps '~*.tmp.??????'
     check_for_updates "${BASH_SOURCE[0]}" "$@"
 
     local CONTAINERS=()
