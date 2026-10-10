@@ -29,10 +29,10 @@ _test_cleanup() {
 }
 trap _test_cleanup EXIT
 
-# assert_eq / assert_contains / assert_not_contains: one of four copies of the
-# trio — utils/tests/test-rsync-over-tunnel.sh, utils/tests/test-rsync-two-way.sh
-# and lxc/tests/test-protect-lxc.sh carry the other three. All four are
-# development-only; change them together.
+# assert_eq / assert_contains / assert_not_contains: one of five copies of the
+# trio — utils/tests/test-rsync-over-tunnel.sh, utils/tests/test-rsync-two-way.sh,
+# lxc/tests/test-protect-lxc.sh and github/tests/test-gh-org.sh carry the other
+# four. All five are development-only; change them together.
 assert_eq() {
     local expected="$1" actual="$2" label="$3"
     ((TESTS_RUN++)) || true
@@ -687,7 +687,7 @@ echo "== execution guard: no distributed script ends in the && form =="
 # `set -e` exits; the if form returns 0, which is what lets the sections above
 # source a script bare. The pattern is the guard's test followed by &&, whatever
 # comes after it (main, main_<name>, a brace group) and however the operands are
-# spelled; the three tests/ directories are excluded because they are
+# spelled; the tests/ directories are excluded because they are
 # development-only and never distributed.
 guard_rc=0
 guard_offenders=$(git -C "$REPO_DIR" grep -lE 'BASH_SOURCE.*\]\][[:space:]]*&&' -- '*.sh' ':!tests/*' ':!*/tests/*') || guard_rc=$?

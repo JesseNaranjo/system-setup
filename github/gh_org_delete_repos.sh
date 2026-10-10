@@ -52,10 +52,10 @@ print_warning() { printf '%b[ WARNING ]%b %s\n' "$YELLOW" "$NC" "$1"; }
 
 print_dry_run() { printf '%b[ DRY-RUN ]%b %s\n' "$CYAN" "$NC" "$1"; }
 
-# Display help message
+# Display help message and exit with $1: 0 for --help, 64 (EX_USAGE) for a usage error
 show_help() {
     sed -n '3,36p' "$0" | sed 's/^# //' | sed 's/^#//'
-    exit 0
+    exit "${1:-0}"
 }
 
 # Default configuration (parse_arguments fills it from the command line)
@@ -115,7 +115,7 @@ parse_arguments() {
             --*)
                 print_error "✖ Unknown argument: $1"
                 echo ""
-                show_help
+                show_help 64
                 ;;
             *)
                 # Non-option argument is a repository name
@@ -129,13 +129,13 @@ parse_arguments() {
     if [[ $DELETE_ALL -eq 0 && ${#REPO_LIST[@]} -eq 0 ]]; then
         print_error "✖ Must specify either --all or provide repository names"
         echo ""
-        show_help
+        show_help 64
     fi
 
     if [[ $DELETE_ALL -eq 1 && ${#REPO_LIST[@]} -gt 0 ]]; then
         print_error "✖ Cannot use --all with specific repository names"
         echo ""
-        show_help
+        show_help 64
     fi
 }
 
@@ -482,7 +482,7 @@ delete_repository() {
     fi
 
     # Attempt to delete the repository
-    if gh repo delete "$repo_name" --yes 2>/dev/null; then
+    if gh repo delete "$repo_name" --yes; then
         print_success "✓ Repository deleted"
         ((TOTAL_REPOS_DELETED++)) || true
     else
@@ -586,7 +586,7 @@ main() {
 
             # Check if repository exists and get details
             local repo_json
-            repo_json=$(gh repo view "$full_repo_name" --json nameWithOwner,isArchived,visibility 2>/dev/null || echo "")
+            repo_json=$(gh repo view "$full_repo_name" --json nameWithOwner,isArchived,visibility || echo "")
 
             if [[ -z "$repo_json" ]]; then
                 echo ""

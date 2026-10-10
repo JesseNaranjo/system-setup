@@ -9,6 +9,7 @@ This directory contains scripts for bulk operations on GitHub organizations. The
 | `gh_org_copy.sh` | Copy organization repositories without forking | Self-update |
 | `gh_org_delete_issues.sh` | Bulk close/lock/delete issues across repos | Dry-run default |
 | `gh_org_delete_repos.sh` | Bulk delete repositories | Dry-run default |
+| `tests/` | Unit tests for the three scripts (see [tests/README.md](tests/README.md)) | Development-only |
 
 ## Quick Start
 
@@ -72,7 +73,7 @@ SRC_ORG="OldOrg" DST_ORG="NewOrg" ./gh_org_copy.sh
 |----------|-------------|---------|
 | `SRC_ORG` | Source organization name | Required |
 | `DST_ORG` | Destination organization name | Required |
-| `WORKDIR` | Working directory for clones | `/tmp/org-copy-...` |
+| `WORKDIR` | Working directory for clones; a directory you name must be your own, or the script exits 77 | A new `mktemp -d` directory under `$TMPDIR` (else `/tmp`) |
 | `THROTTLE` | Seconds between API calls | `1.5` |
 | `LABEL_ARCHIVED_PR` | Label for archived PRs | `archived-pr` |
 

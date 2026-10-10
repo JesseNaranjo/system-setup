@@ -486,7 +486,7 @@ done
 
 ### Helper Library Duplication (Intentional)
 
-These helper functions are **deliberately duplicated**. The roster is exhaustive for distributed code — if a function is not listed here, the all-copies rule does not cover it, so ADD IT to this table when you duplicate anything new. Development-only files that are never distributed (`test-all.sh`, `tests/`, `utils/tests/`, `lxc/tests/`) are outside the roster; the assertion trio their unit-test suites share is tracked in `tests/README.md` instead:
+These helper functions are **deliberately duplicated**. The roster is exhaustive for distributed code — if a function is not listed here, the all-copies rule does not cover it, so ADD IT to this table when you duplicate anything new. Development-only files that are never distributed (`test-all.sh`, `tests/`, `utils/tests/`, `lxc/tests/`, `github/tests/`) are outside the roster; the assertion trio their unit-test suites share is tracked in `tests/README.md` instead:
 
 | Helper | Copies | Where |
 |--------|--------|-------|
@@ -2991,6 +2991,7 @@ Each significant folder contains a `README.md` that documents its contents, patt
 | `utils/README.md` | Cross-platform utilities | ✅ |
 | `utils/tests/README.md` | Unit tests for the pure functions in `utils/` | ✅ |
 | `lxc/tests/README.md` | Unit tests for the `lxc/` suite: container-protection helpers and launcher behaviour | ✅ |
+| `github/tests/README.md` | Unit tests for the three `github/gh_org_*.sh` standalones | ✅ |
 | `tests/README.md` | Repo-wide tests: the self-update mechanism and the shellcheck gate | ✅ |
 
 #### Documentation Folders

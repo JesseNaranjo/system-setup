@@ -1,6 +1,6 @@
 # tests/
 
-Repo-wide tests: behaviour that spans several suites and so has no single folder to live in. Suite-local tests stay beside their suite (`utils/tests/`, `lxc/tests/`).
+Repo-wide tests: behaviour that spans several suites and so has no single folder to live in. Suite-local tests stay beside their suite (`utils/tests/`, `lxc/tests/`, `github/tests/`).
 
 ## Tests
 
@@ -23,7 +23,7 @@ No network, no root, no test framework — just bash 5+. `test-self-update.sh` c
 ## Adding Tests
 
 1. One file per mechanism; sandbox anything that writes, and shim anything that reaches the network.
-2. For assertions, use `assert_eq` / `assert_contains` / `assert_not_contains` (`test-shellcheck.sh` reports per file and carries no copy). `test-self-update.sh` holds one of four copies of the trio — `utils/tests/test-rsync-over-tunnel.sh`, `utils/tests/test-rsync-two-way.sh`, and `lxc/tests/test-protect-lxc.sh` carry the other three; change all four files together.
+2. For assertions, use `assert_eq` / `assert_contains` / `assert_not_contains` (`test-shellcheck.sh` reports per file and carries no copy). `test-self-update.sh` holds one of five copies of the trio — `utils/tests/test-rsync-over-tunnel.sh`, `utils/tests/test-rsync-two-way.sh`, `lxc/tests/test-protect-lxc.sh`, and `github/tests/test-gh-org.sh` carry the other four; change all five files together.
 3. Source a script under test bare — `source "$f"`, never `source "$f" || true`. Every distributed script with a `main` (or `main_<module>`) entry point ends in the if-form execution guard (AGENTS.md §Important Implementation Notes #1), which returns 0 when sourced; `|| true` would suspend `set -e` for the whole sourced file and hide any failure in it, including a guard that returns 1.
 4. Disarm a sourced library's own EXIT trap (`trap - EXIT`) before asserting that no temp file was left behind. That trap is Layer 2 of AGENTS.md §Defense-in-depth Cleanup and reaps everything when the child exits, so the assertion would otherwise pass with Layer 1's per-branch `rm -f` deleted.
 5. Nothing in `tests/` is listed in any `get_script_list()`: development-only, never distributed to target hosts. These files carry no `main`/execution guard for the same reason — nothing sources them.

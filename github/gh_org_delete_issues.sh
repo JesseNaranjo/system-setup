@@ -52,10 +52,10 @@ print_warning() { printf '%b[ WARNING ]%b %s\n' "$YELLOW" "$NC" "$1"; }
 
 print_dry_run() { printf '%b[ DRY-RUN ]%b %s\n' "$CYAN" "$NC" "$1"; }
 
-# Display help message
+# Display help message and exit with $1: 0 for --help, 64 (EX_USAGE) for a usage error
 show_help() {
     sed -n '3,34p' "$0" | sed 's/^# //' | sed 's/^#//'
-    exit 0
+    exit "${1:-0}"
 }
 
 # Default configuration (parse_arguments fills it from the command line)
@@ -237,7 +237,7 @@ parse_arguments() {
             *)
                 print_error "✖ Unknown argument: $1"
                 echo ""
-                show_help
+                show_help 64
                 ;;
         esac
         shift
@@ -475,6 +475,7 @@ process_repository() {
         ((TOTAL_REPOS_SKIPPED++)) || true
         return 0
     fi
+    ((TOTAL_REPOS_PROCESSED++)) || true
 
     if [[ -z "$issues" || "$issues" == "null" ]]; then
         print_info "No issues found"
@@ -546,8 +547,8 @@ attempt_delete_issue() {
                 issue(number:$number) { id }
             }
         }' \
-        -F owner="$owner" \
-        -F name="$name" \
+        -f owner="$owner" \
+        -f name="$name" \
         -F number="$num" \
         --jq '.data.repository.issue.id' 2>/dev/null || echo "")
 
@@ -580,13 +581,12 @@ close_issue() {
     local num="$2"
     local close_reason="not_planned"  # other option: completed
 
-    if gh issue close "$num" -R "$repo_name" --reason "$close_reason" -c "Bulk cleanup $(timestamp)" 2>/dev/null; then
+    if gh issue close "$num" -R "$repo_name" --reason "$close_reason" -c "Bulk cleanup $(timestamp)"; then
         print_success "✓ Closed"
         ((TOTAL_ISSUES_CLOSED++)) || true
     else
         print_error "✖ Close failed"
         ((TOTAL_ISSUES_FAILED++)) || true
-        return 1
     fi
 }
 
@@ -676,7 +676,6 @@ main() {
         fi
 
         ((num_repos++)) || true
-        ((TOTAL_REPOS_PROCESSED++)) || true
 
         process_repository "$repo_name" "$visibility" "$state_arg"
     done <<< "$repos"

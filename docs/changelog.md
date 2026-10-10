@@ -4,6 +4,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), date-based, ne
 This changelog begins 2026-07-06. Entries below capture the project's major
 features as of that date; earlier history is not individually recorded.
 
+## [2026-10-09]
+
+### Fixed
+
+- **The `github/` scripts find milestones on every page, keep a bulk run going after a failure, exit 64 on a usage error and show `gh`'s own errors, and a new suite pins it.** `gh_org_copy.sh` looks a destination milestone up through one helper, `dest_milestone_number_by_title`, which reads every page (`--paginate`) and hands the title to `jq` as data. The old lookup could never return a number (`gh`'s `--jq` takes no variables, and its `--raw-field` turned the request into a POST), so every copied issue lost its milestone; and the existence check in `copy_labels_and_milestones` read only the first 100 milestones and broke on a title containing `"`, so such a milestone was created again on every run. `create_issue_in_dest` accepts the new issue's number only when the POST returned one: a failed POST is reported on stderr with the response and skipped, instead of being commented on and closed as `/issues/null`, and its "Issue already exists" message goes to stderr, outside the number its callers capture. Archived PR comments, review comments and reviews by a deleted account are attributed to `@unknown` instead of `@null`, and the review-comment filter is parenthesised so plain `jq` parses it the way `gh`'s gojq does. `gh_org_delete_issues.sh` counts a failed close and goes on to the remaining issues and repositories, where it used to exit 1 before the Summary; counts a repository whose issues cannot be listed as skipped only, no longer also as processed; and sends the owner and repository name of the `--really-delete` node-id lookup as strings (`-f`), so a repository named `2024` or `true` is deleted instead of closed. An unknown option in either delete script, and `gh_org_delete_repos.sh`'s missing-target and `--all`-with-names errors, exit 64 (`EX_USAGE`) instead of 0, while `--help` exits 0; `gh repo delete`, `gh repo view` and `gh issue close` show their own error message beside the script's. `copy_labels_and_milestones` declares its loop variables and `args` array `local`, and the duration `printf` quotes its arguments. `github/tests/test-gh-org.sh` covers each behaviour with `gh` shimmed, so `./test-all.sh` runs six suites; `github/tests/README.md` documents it, and the READMEs of the other suites count the assertion trio's five copies.
+
+### Security
+
+- **`gh_org_copy.sh` works in a directory only the operator owns.** The default `WORKDIR` was the predictable `/tmp/org-copy-<src>-to-<dst>`, and `mkdir -p` accepted one that another local user had created first, who could then plant or symlink the PR-conversation JSON files written there: the operator's own files overwritten, or planted content posted under the operator's token. `prepare_workdir` now creates a fresh `mktemp -d` directory under `$TMPDIR` (else `/tmp`) by default, and a `WORKDIR` the caller names must be the caller's own, or the script exits 77 (`EX_NOPERM`). The configuration screen shows "a new directory under …" until the directory exists.
+
 ## [2026-10-02]
 
 ### Fixed

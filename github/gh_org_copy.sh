@@ -28,7 +28,9 @@
 # Environment Variables:
 #   SRC_ORG            - Source organization name (required)
 #   DST_ORG            - Destination organization name (required)
-#   WORKDIR            - Working directory for temporary clones (default: /tmp/org-copy-...)
+#   WORKDIR            - Working directory for temporary clones (default: a new
+#                        mktemp -d directory under $TMPDIR, else /tmp; a directory
+#                        you name must be your own, or the script exits 77)
 #   THROTTLE           - Time (in seconds) to sleep between API calls (default: 1.5)
 #   LABEL_ARCHIVED_PR  - Label name for archived PRs (default: archived-pr)
 #
@@ -49,7 +51,8 @@ readonly NC='\033[0m' # No Color
 # Configuration variables
 readonly SRC_ORG="${SRC_ORG:-}"
 readonly DST_ORG="${DST_ORG:-}"
-readonly WORKDIR="${WORKDIR:-${TMPDIR:-/tmp}/org-copy-${SRC_ORG}-to-${DST_ORG}}"
+# Empty means "create one": prepare_workdir fills it in and marks it readonly.
+WORKDIR="${WORKDIR:-}"
 readonly THROTTLE="${THROTTLE:-1.5}"
 readonly LABEL_ARCHIVED_PR="${LABEL_ARCHIVED_PR:-archived-pr}"
 # A real line break for the issue, comment and discussion bodies built below:
@@ -427,7 +430,7 @@ validate_config() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Source organization:   ${SRC_ORG}"
     echo "Destination org:       ${DST_ORG}"
-    echo "Working directory:     ${WORKDIR}"
+    echo "Working directory:     ${WORKDIR:-a new directory under ${TMPDIR:-/tmp}}"
     echo "API throttle:          ${THROTTLE}s"
     echo "Archived PR label:     ${LABEL_ARCHIVED_PR}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -497,6 +500,23 @@ verify_auth() {
     export GH_TOKEN
 
     print_success "✓ GitHub CLI authenticated"
+}
+
+# Create the working directory, or vet the one the caller named, then freeze
+# WORKDIR. The default is a fresh `mktemp -d` (mode 700). A caller's directory
+# must be the caller's own: on a shared host another local user could create a
+# predictable path first and plant or symlink the JSON files written there.
+prepare_workdir() {
+    if [[ -z "$WORKDIR" ]]; then
+        WORKDIR=$(mktemp -d "${TMPDIR:-/tmp}/org-copy-XXXXXX")
+    else
+        mkdir -p "$WORKDIR"
+        if [[ ! -O "$WORKDIR" ]]; then
+            print_error "✖ WORKDIR is not owned by you: $WORKDIR"
+            exit 77  # EX_NOPERM
+        fi
+    fi
+    readonly WORKDIR
 }
 
 # ============================================================================
@@ -622,6 +642,7 @@ ensure_label() {
 # Copy labels and milestones from source to destination
 copy_labels_and_milestones() {
     local name="$1"
+    local LNAME LCOLOR LDESC row args
 
     print_step "Copying labels for ${name}"
     while IFS=$'\t' read -r LNAME LCOLOR LDESC; do
@@ -640,8 +661,7 @@ copy_labels_and_milestones() {
         DUE=$(_j '.due_on // empty')
 
         # Check if milestone already exists
-        if ! gh_api "/repos/${DST_ORG}/${name}/milestones?state=all&per_page=100" \
-            --jq ".[] | select(.title==\"$TITLE\") | .number" | grep -q .; then
+        if [[ -z "$(dest_milestone_number_by_title "$name" "$TITLE")" ]]; then
             # Create milestone
             args=(-X POST "/repos/${DST_ORG}/${name}/milestones" -f title="$TITLE" -f state="$STATE")
             [[ -n "$DESC" ]] && args+=(-f description="$DESC")
@@ -658,12 +678,13 @@ copy_labels_and_milestones() {
 # Issue Management Functions
 # ============================================================================
 
-# Helper: find destination milestone number by title
+# Helper: find destination milestone number by title, or "" if none. Reads every
+# page, and hands the title to jq as data (--arg), so any character in it is safe.
 dest_milestone_number_by_title() {
     local name="$1"
     local title="$2"
-    gh_api "/repos/${DST_ORG}/${name}/milestones?state=all&per_page=100" \
-        --jq -- "map(select(.title == \$t) | .number) | first" --raw-field t="$title"
+    gh_api --paginate "/repos/${DST_ORG}/${name}/milestones?state=all&per_page=100" \
+    | jq -r --arg t "$title" '.[]? | select(.title == $t) | .number' | head -n1
 }
 
 # Return the number of an existing issue (not PR) with the exact title in destination,
@@ -688,7 +709,8 @@ exists_issue_number_by_title() {
 
 # Create issue in destination; echoes NEW_ISSUE_NUMBER
 # Implements idempotency by checking for duplicate titles with same creation date
-# Returns empty string if issue already exists (skips creation)
+# Returns empty string if issue already exists (skips creation) or the POST fails;
+# every message goes to stderr, because both callers capture stdout as the number
 create_issue_in_dest() {
     local name="$1"
     local title="$2"
@@ -702,7 +724,7 @@ create_issue_in_dest() {
     local existing
     existing="$(exists_issue_number_by_title "$name" "$title" "$created" || true)"
     if [[ -n "$existing" ]]; then
-        print_info "Issue already exists in ${DST_ORG}/${name} with same title, skipping (#${existing})"
+        print_info "Issue already exists in ${DST_ORG}/${name} with same title, skipping (#${existing})" >&2
         ((TOTAL_ISSUES_SKIPPED++)) || true
         echo "" # Signal "skipped" to caller
         return 0
@@ -736,6 +758,13 @@ create_issue_in_dest() {
 
     local newnum
     newnum="$(printf '%s' "$resp" | jq -r '.number')"
+    # A failed POST answers with an error body (`.number` is null) or nothing;
+    # report it and print nothing, the "skipped" signal the callers test for.
+    if [[ ! "$newnum" =~ ^[0-9]+$ ]]; then
+        print_error "✖ Issue POST failed for ${DST_ORG}/${name}: ${resp}"
+        echo ""
+        return 0
+    fi
     ((TOTAL_ISSUES_COPIED++)) || true
 
     # Close it if source was closed
@@ -866,11 +895,11 @@ copy_prs_as_archival_issues() {
         # Collect PR conversation pieces:
         # 1) PR issue-comments
         gh_api --paginate "/repos/${SRC_ORG}/${name}/issues/${PRNUM}/comments?per_page=100" \
-            --jq '.[] | {kind:"issue_comment",author:.user.login,created_at,body}' >"${WORKDIR}/ic.json"
+            --jq '.[] | {kind:"issue_comment",author:(.user.login // "unknown"),created_at,body}' >"${WORKDIR}/ic.json"
 
         # 2) Review comments (diff comments)
         gh_api --paginate "/repos/${SRC_ORG}/${name}/pulls/${PRNUM}/comments?per_page=100" \
-            --jq '.[] | {kind:"review_comment",author:.user.login,created_at,body:(.body//"") + "\n\n(File: \(.path), Line: \(.original_line // .line // 0))"}' >"${WORKDIR}/rc.json"
+            --jq '.[] | {kind:"review_comment",author:(.user.login // "unknown"),created_at,body:((.body//"") + "\n\n(File: \(.path), Line: \(.original_line // .line // 0))")}' >"${WORKDIR}/rc.json"
 
         # 3) Reviews. A review object carries submitted_at, never created_at, so
         #    map it onto the key the merge below sorts and dates by. Two kinds are
@@ -879,7 +908,7 @@ copy_prs_as_archival_issues() {
         #    body, which would post a bare header: its inline comments arrive
         #    through the review-comment stream above.
         gh_api --paginate "/repos/${SRC_ORG}/${name}/pulls/${PRNUM}/reviews?per_page=100" \
-            --jq '.[] | select(.state != "PENDING" and (.state != "COMMENTED" or (.body // "") != "")) | {kind:"review",author:.user.login,created_at:.submitted_at,body:("[Review state: " + .state + "]\n\n" + (.body//""))}' >"${WORKDIR}/rv.json"
+            --jq '.[] | select(.state != "PENDING" and (.state != "COMMENTED" or (.body // "") != "")) | {kind:"review",author:(.user.login // "unknown"),created_at:.submitted_at,body:("[Review state: " + .state + "]\n\n" + (.body//""))}' >"${WORKDIR}/rv.json"
 
         # Merge and sort chronologically
         while read -r c; do
@@ -1099,8 +1128,7 @@ main() {
     check_dependencies
     verify_auth
 
-    # Create working directory
-    mkdir -p "$WORKDIR"
+    prepare_workdir
     print_success "✓ Working directory created: ${WORKDIR}"
     echo ""
 
@@ -1121,7 +1149,7 @@ main() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Start time:                    ${start_display}"
     echo "End time:                      ${end_display}"
-    printf "Total duration:                %02d:%02d:%02d\n" $hours $minutes $seconds
+    printf "Total duration:                %02d:%02d:%02d\n" "$hours" "$minutes" "$seconds"
     echo ""
     echo "Repositories processed:        ${TOTAL_REPOS_PROCESSED}"
     echo "Repositories created:          ${TOTAL_REPOS_CREATED}"
