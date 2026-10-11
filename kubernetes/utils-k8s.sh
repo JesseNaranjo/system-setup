@@ -209,14 +209,13 @@ print_warning_box() {
     echo -e "            ${YELLOW}╔$(printf '═%.0s' $(seq 1 $box_width))╗${NC}"
     echo -e "            ${YELLOW}║$(printf ' %.0s' $(seq 1 $box_width))║${NC}"
 
-    # Pad on CHARACTER count, not printf's "%-Ns", which pads by BYTES. Box
-    # content carries multi-byte glyphs (•, —, ✓), so byte padding rendered
-    # those rows narrower than the border — measured at 89 columns against a
-    # 91-column border. ${#line} counts characters and ${line:0:N} cuts on
-    # character boundaries in a UTF-8 locale, so an over-long line is truncated
-    # without splitting a glyph into invalid UTF-8; the slice is a no-op on a
-    # line that already fits. Under a non-UTF-8 locale both fall back to bytes,
-    # which is the previous behaviour and no worse.
+    # Pad on CHARACTER count, not printf's "%-Ns", which pads by BYTES: box
+    # content carries multi-byte glyphs (•, —, ✓), and byte padding renders
+    # those rows narrower than the border. ${#line} counts characters and
+    # ${line:0:N} cuts on character boundaries in a UTF-8 locale, so an
+    # over-long line is truncated without splitting a glyph into invalid
+    # UTF-8; the slice is a no-op on a line that already fits. Under a
+    # non-UTF-8 locale both fall back to bytes.
     # %b for the colour constants (they are literal '\033…' in most copies),
     # %s for the caller's text so a backslash escape in it stays literal.
     local line pad

@@ -4,6 +4,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), date-based, ne
 This changelog begins 2026-07-06. Entries below capture the project's major
 features as of that date; earlier history is not individually recorded.
 
+## [2026-10-11]
+
+### Changed
+
+- **`print_warning_box`'s padding comment states the rule without its history.** The eight copies and the `AGENTS.md` snippet keep why rows are padded on character count and drop the measurement and the previous-behaviour remark; the private repository's copy and snippet change the same way.
+
 ## [2026-10-10]
 
 ### Changed
